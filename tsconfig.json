@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+      "moduleResolution": "node",
+      "types": ["vite/client","ramda"],
+      "module": "esnext",
+      "lib": ["es2023", "dom"],
+      "esModuleInterop": true,
+
+      "skipLibCheck": true
+    }
+  }
