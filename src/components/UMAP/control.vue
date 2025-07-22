@@ -74,11 +74,11 @@ const emit = defineEmits([
 ]);
 
 // Local state for two-way binding
-const localPointCount = ref(props.pointCount);
-const localColorMode = ref(props.colorMode);
-const localStartColor = ref(props.startColor);
-const localEndColor = ref(props.endColor);
-const localSingleColor = ref(props.singleColor);
+const localPointCount = ref<any>(props.pointCount);
+const localColorMode = ref<any>(props.colorMode);
+const localStartColor = ref<any>(props.startColor);
+const localEndColor = ref<any>(props.endColor);
+const localSingleColor = ref<any>(props.singleColor);
 
 
 // Helper to convert RGB array to hex color

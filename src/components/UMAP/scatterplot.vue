@@ -228,7 +228,7 @@ function findNearestPoint(data:any, mouseX:number, mouseY:number, transform:any,
 
   // Find the nearest point in data space
   let minDist = Infinity;
-  let nearestPoint = null;
+  let nearestPoint:any = null;
 
   for (const point of data) {
     const dx = point.x - dataPoint.x;
@@ -256,7 +256,7 @@ function findNearestPoint(data:any, mouseX:number, mouseY:number, transform:any,
 function generateData(count:number, colorMode:any, startColor:string, endColor:string, singleColor:string) {
   console.log(`Generating ${count} data points with color mode: ${colorMode}`);
 
-  const data = [];
+  const data:any = [];
 
   // Convert hex colors to RGB arrays
   const startRGB = hexToRgb(startColor);
@@ -385,7 +385,7 @@ function initWebGL(canvas:any) {
   };
 
   // Try to get context with various names (for older browsers)
-  let gl = null;
+  let gl:any = null;
   try {
     // Try standard WebGL context first
     gl = canvas.getContext('webgl', contextAttributes) ||
