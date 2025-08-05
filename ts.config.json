@@ -1,20 +1,12 @@
 {
-    "compilerOptions": {
-      "target": "ES2020",
-      "module": "ESNext",
-      "lib": ["ES2020", "DOM"],
-      "moduleResolution": "Node",
-      "esModuleInterop": true,
-      "skipLibCheck": true,
-      "allowJs": true,
-      "resolveJsonModule": true,
-      "baseUrl": ".",
-      "paths": {
-        "@/*": ["src/*"]
-      }
+  "extends": "@vue/tsconfig/tsconfig.web.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
     },
-    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"],
-    "references": [],
-    "exclude": ["node_modules"]
-  }
-  
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*", "env.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}
