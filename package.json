@@ -1,8 +1,17 @@
 {
   "name": "pennsieve-visualization",
-  "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "./dist/pennsieve-visualization.umd.js",
+  "module": "./dist/pennsieve-visualization.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/pennsieve-visualization.es.js",
+      "require": "./dist/pennsieve-visualization.umd.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -11,12 +20,10 @@
   },
   "dependencies": {
     "@types/ramda": "^0.30.2",
-    "aws-amplify": "^6.8.0",
     "core-js": "^3.8.3",
     "d3": "^7.9.0",
     "hyparquet": "^1.12.1",
-    "ramda": "^0.31.3",
-    "vue": "^3.5.17"
+    "ramda": "^0.31.3"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",
@@ -24,7 +31,9 @@
     "@vue/tsconfig": "^0.7.0",
     "typescript": "^5.8.3",
     "vite": "^7.0.4",
-    "vue-tsc": "^3.0.3"
+    "vue-tsc": "^3.0.3",
+    "aws-amplify": "^6.8.0",
+    "vue": "^3.5.17"
   },
   "engines": {
     "node": ">=20.19.0"
