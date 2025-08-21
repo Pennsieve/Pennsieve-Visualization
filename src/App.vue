@@ -1,14 +1,15 @@
 <template>
     <UMAPViewer></UMAPViewer>
-    <DataExplorer :src="pkg"></DataExplorer>
+    <DataExplorer :apiUrl="apiUrl" :src="pkg"></DataExplorer>
 </template>
 <script setup lang="ts">
 import {default as UMAPViewer} from './components/UMAP/wrapper.vue';
 import {DataExplorer} from './index'
-import { onBeforeMount } from 'vue';
+import { onBeforeMount, ref } from 'vue';
 onBeforeMount(async()=>{
    // const text = await fetch('/src/local/test.csv').then(r => r.text())
 })
+const apiUrl = ref("string");
 const pkg = {
     content:{
         createdAt: "2025-08-10T02:52:17.165166Z",

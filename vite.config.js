@@ -20,11 +20,16 @@ export default defineConfig({
     },
     rollupOptions: {
       //external dependencies 
-      external: ['vue', 'aws-amplify/auth'],
+      external: [
+        'vue',
+        '@aws-amplify/auth',
+        'pinia'],
       output: {
+        assetFileNames: (a) => a.name?.endsWith('.css') ? 'style.css' : 'assets/[name][extname]',
         globals: {
           vue: 'Vue',
-          'aws-amplify/auth': 'Amplify.Auth',
+          pinia: 'Pinia', 
+          '@aws-amplify/auth': 'aws_amplify_auth'
         },
       },
     },
