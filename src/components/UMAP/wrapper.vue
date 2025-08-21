@@ -33,12 +33,14 @@ import {defineProps, onMounted, ref, watch} from 'vue';
 import WebGLScatterplot from './scatterplot.vue';
 import ControlPanel from './control.vue';
 import {pathOr} from "ramda";
-import {useGetToken} from "@/composables/useGetToken";
-import {asyncBufferFromUrl, parquetMetadata, parquetRead} from "hyparquet";
-import * as siteConfig from '@/site-config/site.json'
-
+import {useGetToken} from '../../composables/useGetToken'
+import {asyncBufferFromUrl, parquetMetadata, parquetRead} from "hyparquet"
 
 const props = defineProps({
+  apiUrl:{
+    type:String,
+    default:""
+  },
   pkg: {
     type: Object,
     default: {}
@@ -56,7 +58,7 @@ const forceRegenerate = ref(false);
 const componentKey = ref(0);
 const colorMapType = ref("")
 
-const viewAssets = ref([])
+const viewAssets = ref<any>()
 
 const pointData = ref();
 const metaData = ref();
@@ -72,6 +74,7 @@ watch( () => pointData.value, () => {
 onMounted(async () => {
   try {
     // get Viewer Assets
+    
     await getViewerAssets()
     let presignedUrl = await getFileUrl(viewAssets.value[0].content.id)
     const res = await fetch(presignedUrl)
@@ -96,7 +99,8 @@ onMounted(async () => {
 async function getViewerAssets() {
   const pkgId = pathOr('', ['content', 'id'], props.pkg)
   const token = await useGetToken()
-  const url = `${siteConfig.apiUrl}/packages/${pkgId}/view?api_key=${token}`
+  const preUrl = props.apiUrl? props.apiUrl: "https://api.pennsieve.net";
+  const url = `${preUrl}/packages/${pkgId}/view?api_key=${token}`
   try {
     const response = await fetch(url, {
       method: 'GET',
@@ -122,7 +126,8 @@ async function getViewerAssets() {
 async function getFileUrl(fileId) {
   const pkgId = pathOr('', ['content', 'id'], props.pkg)
   const token = await useGetToken()
-  const url = `${siteConfig.apiUrl}/packages/${pkgId}/files/${fileId}?api_key=${token}`
+  const preUrl = props.apiUrl? props.apiUrl: "https://api.pennsieve.net";
+  const url = `${preUrl}/packages/${pkgId}/files/${fileId}?api_key=${token}`
 
   try {
     const response = await fetch(url, {
@@ -212,13 +217,13 @@ function generateColorMaps() {
 
 }
 
-function updateColorMap(data:any) {
+function updateColorMap(data) {
   colorMapType.value = data[0]
   colorMap.value = data[1]
 }
 </script>
 
-<style>
+<style scoped>
   .app-container {
     height: 90vh;
     position: relative;
