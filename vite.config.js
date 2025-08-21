@@ -1,10 +1,18 @@
-// vite.config.js
+
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { fileURLToPath, URL } from "node:url";
+
 
 export default defineConfig({
   plugins: [vue()],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   build: {
+    cssCodeSplit: false,
     lib: {
       entry: './src/index.ts', 
       name: 'PennsieveVisualization',
@@ -12,11 +20,11 @@ export default defineConfig({
     },
     rollupOptions: {
       //external dependencies 
-      external: ['vue', 'aws-amplify'],
+      external: ['vue', 'aws-amplify/auth'],
       output: {
         globals: {
           vue: 'Vue',
-          'aws-amplify': 'Amplify',
+          'aws-amplify/auth': 'Amplify.Auth',
         },
       },
     },

@@ -9,7 +9,7 @@
 
 <script setup lang="ts" >
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, defineEmits } from 'vue';
-import * as d3 from 'd3'
+import * as d3 from 'd3';
 
 const emit = defineEmits([
   'updateColorMap'
@@ -24,7 +24,7 @@ const props = defineProps({
   colorMode: {
     type: String,
     default: 'random',
-    validator: (value:any) => ['random', 'gradient', 'single', 'species', 'sex'].includes(value)
+    validator: (value) => ['random', 'gradient', 'single', 'species', 'sex'].includes(value)
   },
   startColor: {
     type: String,
@@ -43,7 +43,7 @@ const props = defineProps({
     default: false
   },
   data: {
-    type: Array<any>,
+    type: Array,
     default: []
   },
   metaData: {
@@ -51,7 +51,7 @@ const props = defineProps({
     default: {}
   },
   colorMap: {
-    type: Map<string,any>,
+    type: Map,
     default: new Map()
   }
 });
@@ -131,28 +131,24 @@ onBeforeUnmount(() => {
 });
 
 // Template refs
-const containerRef = ref<HTMLElement|null>(null)
-const canvasRef = ref<any>(null);
-const tooltipRef = ref<HTMLElement|null>(null);
-const debugRef = ref<HTMLElement|null>(null);
+const containerRef = ref(null);
+const canvasRef = ref(null);
+const tooltipRef = ref(null);
+const debugRef = ref(null);
 
 // State variables
-let gl:any= null;
-let program:any = null;
-let data:any[] = [];
-let programInfo: {
-  colorBuffer: any;
-  positionBuffer:any;
-} | null = null;
-
-let transform:any =null;
-let zoom:any = null;
-let highlightedPoint:number|null = null;
-let width:number = 0;
-let height:number = 0;
+let gl = null;
+let program = null;
+let data = [];
+let programInfo = null;
+let transform = null;
+let zoom = null;
+let highlightedPoint = null;
+let width = 0;
+let height = 0;
 
 // Helper function to convert hex to RGB
-function hexToRgb(hex:string) {
+function hexToRgb(hex) {
   try {
     // Ensure the hex string is properly formatted
     if (!hex || hex.length < 7) {
@@ -179,14 +175,14 @@ function hexToRgb(hex:string) {
 }
 
 // Linear interpolation between two values
-function lerp(a:number, b:number, t:number) {
+function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
 // Utility functions //
 
 // Helper function to convert screen coordinates to data coordinates
-function screenToData(screenX:number, screenY:number, transform:any, width:number, height:number) {
+function screenToData(screenX, screenY, transform, width, height) {
 
   if (!transform) return { x: 0, y: 0 };
 
@@ -210,7 +206,7 @@ function screenToData(screenX:number, screenY:number, transform:any, width:numbe
 }
 
 // Find nearest point to the mouse cursor
-function findNearestPoint(data:any, mouseX:number, mouseY:number, transform:any, width:number, height:number) {
+function findNearestPoint(data, mouseX, mouseY, transform, width, height) {
   if (!data.length || !transform) return null;
 
   const debugEl = debugRef.value;
@@ -228,7 +224,7 @@ function findNearestPoint(data:any, mouseX:number, mouseY:number, transform:any,
 
   // Find the nearest point in data space
   let minDist = Infinity;
-  let nearestPoint:any = null;
+  let nearestPoint = null;
 
   for (const point of data) {
     const dx = point.x - dataPoint.x;
@@ -253,10 +249,10 @@ function findNearestPoint(data:any, mouseX:number, mouseY:number, transform:any,
   return nearestPoint;
 }
 
-function generateData(count:number, colorMode:any, startColor:string, endColor:string, singleColor:string) {
+function generateData(count, colorMode, startColor, endColor, singleColor) {
   console.log(`Generating ${count} data points with color mode: ${colorMode}`);
 
-  const data:any = [];
+  const data = [];
 
   // Convert hex colors to RGB arrays
   const startRGB = hexToRgb(startColor);
@@ -371,7 +367,7 @@ function generateData(count:number, colorMode:any, startColor:string, endColor:s
 // WebGL setup and rendering functions //
 
 // Initialize WebGL context
-function initWebGL(canvas:any) {
+function initWebGL(canvas) {
   if (!canvas) {
     console.error('Canvas element not provided to initWebGL');
     return null;
@@ -385,7 +381,7 @@ function initWebGL(canvas:any) {
   };
 
   // Try to get context with various names (for older browsers)
-  let gl:any = null;
+  let gl = null;
   try {
     // Try standard WebGL context first
     gl = canvas.getContext('webgl', contextAttributes) ||
@@ -412,7 +408,7 @@ function initWebGL(canvas:any) {
 }
 
 // Create shader program
-function createShaderProgram(gl:any, vsSource:any, fsSource:any) {
+function createShaderProgram(gl, vsSource, fsSource) {
   if (!gl) return null;
 
   try {
@@ -462,7 +458,7 @@ function createShaderProgram(gl:any, vsSource:any, fsSource:any) {
 }
 
 // Prepare buffer data
-function prepareBuffers(gl:any, program:any, data:any) {
+function prepareBuffers(gl, program, data) {
   if (!gl || !program || !data.length) {
     console.error('Missing required parameters for buffer preparation');
     return null;
@@ -524,7 +520,7 @@ function prepareBuffers(gl:any, program:any, data:any) {
 }
 
 // Draw the scatterplot
-function drawScatterplot(gl:any, programInfo:any, transform:any, pointSize:number, highlightedPoint:any = null) {
+function drawScatterplot(gl, programInfo, transform, pointSize, highlightedPoint = null) {
   if (!gl || !programInfo || !transform) {
     console.warn('Missing required parameters for drawing', { gl, programInfo, transform });
     return;
@@ -630,10 +626,10 @@ function drawScatterplot(gl:any, programInfo:any, transform:any, pointSize:numbe
 function updateColors() {
   if (!gl || !programInfo || !data.length) return;
 
-  let valueIndex:any = 0
+  let valueIndex = 0
   for (let i in props.metaData.schema) {
     if (props.metaData.schema[i].name === props.colorMode) {
-      valueIndex = Number(i) - 1
+      valueIndex = i - 1
     }
   }
 
@@ -645,7 +641,7 @@ function updateColors() {
 
   // Update buffer
   gl.deleteBuffer(programInfo.colorBuffer);
-  const colorBuffer:any = gl.createBuffer();
+  const colorBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
 
@@ -821,7 +817,7 @@ function handleMouseMove(event) {
     const tooltip = tooltipRef.value;
     tooltip.style.left = (event.clientX + 15) + 'px';
     tooltip.style.top = (event.clientY - 15) + 'px';
-    tooltip.style.opacity = "1";
+    tooltip.style.opacity = 1;
     tooltip.innerHTML = `
       <strong>${point.label}</strong><br>
       Species: ${point.species}<br>
@@ -835,7 +831,7 @@ function handleMouseMove(event) {
   } else {
     // Hide tooltip
     if (tooltipRef.value) {
-      tooltipRef.value.style.opacity = "0";
+      tooltipRef.value.style.opacity = 0;
     }
 
     // Clear highlighted point if there was one
@@ -851,7 +847,7 @@ function handleMouseLeave() {
   if (!tooltipRef.value) return;
 
   // Hide tooltip
-  tooltipRef.value.style.opacity = "0";
+  tooltipRef.value.style.opacity = 0;
 
   // Clear highlighted point when mouse leaves canvas
   if (highlightedPoint !== null) {

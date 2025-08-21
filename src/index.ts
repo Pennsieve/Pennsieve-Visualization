@@ -1,6 +1,4 @@
-// src/index.ts
-import UMAP from './components/UMAP/wrapper.vue'
-// export any composables too
-export * from './composables/useGetToken'
+// export * from './composables/useGetToken'
 
-export default UMAP
+export { default as DataExplorer} from './components/DataExplorer/DataExplorer.vue'
+export { default as UMAP } from './components/UMAP/wrapper.vue'

@@ -57,7 +57,7 @@ const props = defineProps({
     default: new Map()
   },
   colorMapMap: {
-    type: Map<string,any>,
+    type: Map,
     default: new Map()
   }
 });
@@ -66,7 +66,6 @@ const props = defineProps({
 const emit = defineEmits([
   'update:pointCount',
   'update:colorMode',
-  'updateColorMap',
   'update:startColor',
   'update:endColor',
   'update:singleColor',
@@ -74,15 +73,15 @@ const emit = defineEmits([
 ]);
 
 // Local state for two-way binding
-const localPointCount = ref<any>(props.pointCount);
-const localColorMode = ref<any>(props.colorMode);
-const localStartColor = ref<any>(props.startColor);
-const localEndColor = ref<any>(props.endColor);
-const localSingleColor = ref<any>(props.singleColor);
+const localPointCount = ref(props.pointCount);
+const localColorMode = ref(props.colorMode);
+const localStartColor = ref(props.startColor);
+const localEndColor = ref(props.endColor);
+const localSingleColor = ref(props.singleColor);
 
 
 // Helper to convert RGB array to hex color
-function rgbToHex(rgbArray:any) {
+function rgbToHex(rgbArray) {
   const r = Math.round(rgbArray[0] * 255);
   const g = Math.round(rgbArray[1] * 255);
   const b = Math.round(rgbArray[2] * 255);

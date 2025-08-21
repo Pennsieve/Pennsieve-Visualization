@@ -74,6 +74,7 @@ watch( () => pointData.value, () => {
 onMounted(async () => {
   try {
     // get Viewer Assets
+    
     await getViewerAssets()
     let presignedUrl = await getFileUrl(viewAssets.value[0].content.id)
     const res = await fetch(presignedUrl)
@@ -222,7 +223,7 @@ function updateColorMap(data) {
 }
 </script>
 
-<style>
+<style scoped>
   .app-container {
     height: 90vh;
     position: relative;
