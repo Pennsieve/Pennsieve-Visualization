@@ -1,10 +1,14 @@
 <template>
-    <UMAPViewer></UMAPViewer>
-    <DataExplorer :apiUrl="apiUrl" :src="pkg"></DataExplorer>
+    <UMAPViewer src-url="https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"></UMAPViewer>
+    <DataExplorer src-url="https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"></DataExplorer>
+    <div style="height: 600px;width:600px;">
+        <ProportionPlot src-url="https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"></ProportionPlot>
+    </div>
+
 </template>
 <script setup lang="ts">
-import {default as UMAPViewer} from './components/UMAP/wrapper.vue';
-import {DataExplorer} from './index'
+
+import {DataExplorer, UMAP as UMAPViewer, ProportionPlot} from './index'
 import { onBeforeMount, ref } from 'vue';
 onBeforeMount(async()=>{
    // const text = await fetch('/src/local/test.csv').then(r => r.text())
@@ -26,7 +30,10 @@ const pkg = {
         updatedAt: "2025-08-10T02:52:17.165166Z"
     }
 }
-
+const mapRows = ref([])
+function logResults(s){
+    mapRows.value = s.results
+}
 </script>
 <style lang="scss">
 

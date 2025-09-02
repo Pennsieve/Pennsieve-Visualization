@@ -1,4 +1,4 @@
-// store/duckdbStore.js - Updated with stable file ID support
+
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
@@ -8,13 +8,15 @@ export const useDuckDBStore = defineStore('duckdb', () => {
     const isInitialized = ref(false)
     const isInitializing = ref(false)
     const initError = ref('')
-    const loadedFiles = ref(new Map()) // Map<fileId, { tableName, fileType, isLoading, error, fileUrl }>
-    const connections = ref(new Map()) // Map<connectionId, { connection, viewerId, createdAt }>
-    const fileUsage = ref(new Map()) // Map<fileId, Set<viewerId>> - track which viewers use which files
+    const loadedFiles = ref(new Map()) 
+    const connections = ref(new Map()) 
+    const fileUsage = ref(new Map()) 
+
+    let initPromise = null
 
     // Getters
     const isReady = computed(() => isInitialized.value && !initError.value)
-    const getLoadedFile = computed(() => (fileId) => loadedFiles.value.get(fileId))
+    const getLoadedFile = computed(() => (fileId) => {console.log(fileId); return loadedFiles.value.get(fileId)})
     const isFileLoaded = computed(() => (fileId) => {
         const file = loadedFiles.value.get(fileId)
         return file && !file.isLoading && !file.error
@@ -23,73 +25,90 @@ export const useDuckDBStore = defineStore('duckdb', () => {
     const hasActiveConnections = computed(() => connections.value.size > 0)
 
     // Actions
-    const initDuckDB = async () => {
-        if (isInitialized.value || isInitializing.value) {
-            return db.value
-        }
 
-        isInitializing.value = true
-        initError.value = ''
-
-        try {
-            // Import DuckDB-WASM
-            const duckdb = await import('@duckdb/duckdb-wasm')
-
-            const bundles = {
-                mvp: {
-                    mainModule: '/static/duckdb/duckdb-mvp.wasm',
-                    mainWorker: '/static/duckdb/duckdb-browser-mvp.worker.js',
-                },
-                eh: {
-                    mainModule: '/static/duckdb/duckdb-eh.wasm',
-                    mainWorker: '/static/duckdb/duckdb-browser-eh.worker.js',
-                },
-            }
-
-            const bundle = await duckdb.selectBundle(bundles)
-            const worker = new Worker(bundle.mainWorker)
-            const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING)
-
-            db.value = new duckdb.AsyncDuckDB(logger, worker)
-            await db.value.instantiate(bundle.mainModule)
-
-            isInitialized.value = true
-            console.log('DuckDB initialized successfully in store')
-
-            return db.value
-        } catch (err) {
-            console.error('Failed to initialize DuckDB:', err)
-            initError.value = `Failed to initialize DuckDB: ${err.message}`
-            throw err
-        } finally {
-            isInitializing.value = false
-        }
+const initDuckDB = async () => {
+    // SSR / non-browser guard
+    if (typeof window === 'undefined' || typeof Worker === 'undefined') {
+      const msg = 'DuckDB can only be initialized in the browser.'
+      initError.value = msg
+      throw new Error(msg)
     }
-
-    const createConnection = async (viewerId = null) => {
-        if (!isReady.value) {
-            await initDuckDB()
-        }
-
-        const conn = await db.value.connect()
-        const id = viewerId || `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
-        connections.value.set(id, {
-            connection: conn,
-            viewerId: id,
-            createdAt: new Date()
-        })
-
-        console.log(`Created connection for viewer: ${id}`)
-        return { connection: conn, connectionId: id }
+  
+    // Already initialized
+    if (db.value) return db.value
+  
+    // Another caller already kicked off initialization → wait for it
+    if (initPromise) {
+      await initPromise
+      return db.value
     }
+  
+    // First caller: perform initialization
+    isInitializing.value = true
+    initError.value = ''
+    initPromise = (async () => {
+      try {
+        const duckdb = await import('@duckdb/duckdb-wasm')
+  
+        const bundles = {
+          mvp: {
+            mainModule: '/static/duckdb/duckdb-mvp.wasm',
+            mainWorker: '/static/duckdb/duckdb-browser-mvp.worker.js',
+          },
+          eh: {
+            mainModule: '/static/duckdb/duckdb-eh.wasm',
+            mainWorker: '/static/duckdb/duckdb-browser-eh.worker.js',
+          },
+        }
+  
+        const bundle = await duckdb.selectBundle(bundles)
+        const worker = new Worker(bundle.mainWorker)
+        const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING)
+  
+        db.value = new duckdb.AsyncDuckDB(logger, worker)
+        await db.value.instantiate(bundle.mainModule)
+  
+        isInitialized.value = true
+        return db.value
+      } catch (err) {
+        initError.value = `Failed to initialize DuckDB: ${err?.message || err}`
+        db.value = null
+        throw err
+      } finally {
+        isInitializing.value = false
+        initPromise = null
+      }
+    })()
+  
+    await initPromise
+    return db.value
+  }
+  
+
+const createConnection = async (viewerId) => {
+    // Ensure a single, completed init (handles concurrency)
+    if (!db.value) await initDuckDB()
+  
+    const conn = await db.value.connect()
+    const id =
+      viewerId || `conn_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+  
+    connections.value.set(id, {
+      connection: conn,
+      viewerId: id,
+      createdAt: new Date(),
+    })
+  
+    return { connection: conn, connectionId: id }
+  }
+  
 
     const closeConnection = async (connectionId) => {
         const connData = connections.value.get(connectionId)
         if (connData) {
             await connData.connection.close()
             connections.value.delete(connectionId)
-            console.log(`Closed connection for viewer: ${connectionId}`)
+            // console.log(`Closed connection for viewer: ${connectionId}`)
 
             // Clean up file usage for this viewer
             cleanupViewerFileUsage(connectionId)
@@ -121,7 +140,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
             fileUsage.value.set(fileId, new Set())
         }
         fileUsage.value.get(fileId).add(viewerId)
-        console.log(`Tracking file usage: ${fileId} by viewer ${viewerId}`)
+        // console.log(`Tracking file usage: ${fileId} by viewer ${viewerId}`)
     }
 
     const unloadFile = async (fileId) => {
@@ -132,7 +151,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
                 const tempConn = await db.value.connect()
                 await tempConn.query(`DROP TABLE IF EXISTS ${file.tableName};`)
                 await tempConn.close()
-                console.log(`Dropped table: ${file.tableName}`)
+                // console.log(`Dropped table: ${file.tableName}`)
             } catch (err) {
                 console.warn(`Failed to drop table ${file.tableName}:`, err)
             }
@@ -140,18 +159,20 @@ export const useDuckDBStore = defineStore('duckdb', () => {
 
         loadedFiles.value.delete(fileId)
         fileUsage.value.delete(fileId)
-        console.log(`Unloaded file: ${fileId}`)
+        // console.log(`Unloaded file: ${fileId}`)
     }
 
     // Updated loadFile function with stable fileId parameter
     const loadFile = async (fileUrl, fileType, tableName = 'my_data', csvOptions = {}, viewerId = null, fileId = null) => {
+        //console.log("fileurl: "+fileUrl,"fileType: "+fileType,"tableName: "+tableName,"csvOptions: "+csvOptions,"viewerId: "+viewerId,"fileId: "+fileId)
         // Use fileId as the stable key, fallback to fileUrl if not provided (for backward compatibility)
         const stableKey = fileId || fileUrl
 
         // Check if file is already loaded using stable key
         const existingFile = loadedFiles.value.get(stableKey)
+        console.log(loadedFiles.value)
         if (existingFile && !existingFile.isLoading && !existingFile.error) {
-            console.log(`File already loaded using stable key ${stableKey}, reusing table: ${existingFile.tableName}`)
+             console.log(`File already loaded using stable key ${stableKey}, reusing table: ${existingFile.tableName}`)
             // Track usage by this viewer
             if (viewerId) {
                 trackFileUsage(stableKey, viewerId)
@@ -174,7 +195,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
         })
 
         try {
-            console.log(`Loading ${fileType} file from: ${fileUrl} with stable key: ${stableKey}`)
+            // console.log(`Loading ${fileType} file from: ${fileUrl} with stable key: ${stableKey}`)
 
             // Download file once
             const response = await fetch(fileUrl)
@@ -213,6 +234,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
             SELECT * FROM read_csv('${fileName}', header=${options.header}, delim='${options.delimiter}');
           `
                 } else if (fileType === 'parquet') {
+         
                     createTableQuery = `
             CREATE OR REPLACE TABLE ${tableName} AS
             SELECT * FROM read_parquet('${fileName}');
@@ -243,7 +265,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
                     trackFileUsage(stableKey, viewerId)
                 }
 
-                console.log(`Successfully loaded ${rowCount} rows from ${fileType} file into table: ${tableName} (stable key: ${stableKey})`)
+                // console.log(`Successfully loaded ${rowCount} rows from ${fileType} file into table: ${tableName} (stable key: ${stableKey})`)
                 return tableName
 
             } finally {
@@ -251,7 +273,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
             }
 
         } catch (err) {
-            console.error(`Failed to load ${fileType} file:`, err)
+            // console.error(`Failed to load ${fileType} file:`, err)
             loadedFiles.value.set(stableKey, {
                 tableName,
                 fileType,
@@ -280,7 +302,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
     }
 
     const performGlobalCleanup = async () => {
-        console.log('Performing global DuckDB cleanup...')
+        // console.log('Performing global DuckDB cleanup...')
 
         // Close all remaining connections
         for (const [id, connData] of connections.value) {
@@ -297,7 +319,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
         if (db.value) {
             try {
                 await db.value.terminate()
-                console.log('DuckDB instance terminated')
+                // console.log('DuckDB instance terminated')
             } catch (err) {
                 console.warn('Error terminating DuckDB:', err)
             }
@@ -348,6 +370,35 @@ export const useDuckDBStore = defineStore('duckdb', () => {
         return info
     }
 
+    const sharedResultName = ref(null)
+    const sharedVersion = ref(0)
+
+    function quoteIdent(name) {
+    return `"${String(name).replace(/"/g, '""')}"`
+    }
+
+    // publish the user’s query as a DB-wide VIEW (lightweight, auto-updates from base tables)
+    const publishViewFromQuery = async (name, sql, connectionId) => {
+        const c = connections.value.get(connectionId)?.connection
+        if (!c) throw new Error(`Connection not found: ${connectionId}`)
+        // make it visible to all connections (NOT TEMP)
+        await c.query(`CREATE OR REPLACE VIEW ${quoteIdent(name)} AS ${sql}`)
+        sharedResultName.value = name
+        sharedVersion.value++
+    }
+
+    // or publish as a TABLE (materialized snapshot). Slightly heavier, but isolates from base table changes.
+    const publishTableFromQuery = async (name, sql, connectionId) => {
+        const c = connections.value.get(connectionId)?.connection
+        if (!c) throw new Error(`Connection not found: ${connectionId}`)
+        await c.query(`CREATE OR REPLACE TABLE ${quoteIdent(name)} AS ${sql}`)
+        sharedResultName.value = name
+        sharedVersion.value++
+    }
+    const formatIdFromUrl = (srUrl)=>{
+        console.log(srUrl)
+        return ('url_' + btoa(srUrl).replace(/=+$/,'').replace(/[+/]/g,'_'))
+    }
     return {
         // State
         db,
@@ -357,6 +408,8 @@ export const useDuckDBStore = defineStore('duckdb', () => {
         loadedFiles,
         connections,
         fileUsage,
+        sharedResultName,
+        sharedVersion,
 
         // Getters
         isReady,
@@ -377,6 +430,9 @@ export const useDuckDBStore = defineStore('duckdb', () => {
         cleanup,
         performGlobalCleanup,
         getConnectionInfo,
-        getFileUsageInfo
+        getFileUsageInfo,
+        publishViewFromQuery,
+        publishTableFromQuery,
+        formatIdFromUrl
     }
 })

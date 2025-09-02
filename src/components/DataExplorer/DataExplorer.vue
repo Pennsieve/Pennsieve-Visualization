@@ -32,6 +32,7 @@
             rows="4"
           ></textarea>
           <bf-button
+            class="execute-query-button"
             @click="executeQuery"
             :disabled="isQueryRunning || !sqlQuery"
           >
@@ -135,7 +136,8 @@
       default: null, // Stable file identifier for reuse
     },
   });
-  
+  //define emits
+  const emit = defineEmits(["query-results"])
   // Use DuckDB store
   const duckDBStore = useDuckDBStore();
   
@@ -161,21 +163,26 @@
   
   // Watch for URL changes
   watch(
-    () => props.url,
-    (newValue) => {
-      s3Url.value = newValue;
-      if (newValue) {
-        loadFile();
-        executeQuery();
+  () => props.url,
+  async (newValue) => {
+    s3Url.value = newValue
+    if (newValue) {
+      try {
+        await loadFile()
+        //await executeQuery()
+      } catch (e) {
+        console.error("file can not be loaded")
       }
     }
-  );
+  },{immediate:true}
+)
+
   
   // Computed properties
   const isConnected = computed(() => {
     return duckDBStore.isReady && connectionId.value && !isLoading.value;
   });
-  
+  const stableId =  computed(()=> duckDBStore.formatIdFromUrl(props.url))
   const statusText = computed(() => {
     if (isLoading.value) return "Loading...";
     if (duckDBStore.isInitializing) return "Initializing...";
@@ -236,23 +243,20 @@
     activeConnections: duckDBStore.activeConnectionCount,
     hasActiveConnections: duckDBStore.hasActiveConnections,
   }));
-  
+  async function ensureConnection() {
+  if (connectionId.value) return
+  const { connectionId: cid } = await duckDBStore.createConnection(props.viewerId)
+  connectionId.value = cid
+}
   // Initialize connection and load file
   const initialize = async () => {
     try {
-      // Create a connection for this viewer instance
-      const { connection, connectionId: connId } =
-        await duckDBStore.createConnection(props.viewerId);
-      connectionId.value = connId;
-  
-      console.log(
-        `Viewer ${props.viewerId} connected with connection ID: ${connId}`
-      );
+      if (!connectionId.value) await ensureConnection()
   
       // Load file if URL is provided
       if (s3Url.value) {
         await loadFile();
-        executeQuery();
+        //executeQuery();
       }
     } catch (err) {
       console.error("Failed to initialize viewer:", err);
@@ -264,21 +268,6 @@
   const loadFile = async () => {
     if (!s3Url.value) {
       error.value = "Please provide a valid S3 URL";
-      return;
-    }
-  
-    console.log("Loading file:", s3Url.value);
-    console.log("Using stable file ID:", props.fileId);
-  
-    // Check if file is already loaded using stable ID
-    const stableKey = props.fileId || s3Url.value;
-    const existingFile = duckDBStore.getLoadedFile(stableKey);
-    if (existingFile && !existingFile.isLoading && !existingFile.error) {
-      tableName.value = existingFile.tableName;
-      console.log(
-        `File already loaded using stable key, reusing table: ${tableName.value}`
-      );
-      setQuery(`SELECT * FROM data LIMIT 10;`);
       return;
     }
   
@@ -298,17 +287,17 @@
         tableId, // Stable table name
         csvOptions.value,
         props.viewerId, // Pass viewer ID for tracking
-        props.fileId // Pass stable file ID
+        stableId.value
       );
   
       tableName.value = loadedTableName;
-      console.log(`File loaded as table: ${tableName.value}`);
+      // console.log(`File loaded as table: ${tableName.value}`);
   
       // Auto-execute a sample query using "data"
-      setQuery(`SELECT * FROM data LIMIT 10;`);
+      setQuery(`SELECT * FROM data LIMIT 100;`);
     } catch (err) {
-      console.error("Failed to load file:", err);
-      error.value = `Failed to load ${props.fileType} file: ${err.message}`;
+      // console.error("Failed to load file:", err);
+      // error.value = `Failed to load ${props.fileType} file: ${err.message}`;
     } finally {
       isLoading.value = false;
     }
@@ -318,7 +307,7 @@
   const interceptQuery = (query) => {
     if (!tableName.value || !query) return query;
   
-    console.log("Original query:", query);
+    // console.log("Original query:", query);
   
     // Replace "data" table references with actual table name
     // This handles various SQL patterns:
@@ -341,8 +330,8 @@
       );
   
     if (interceptedQuery !== query) {
-      console.log("Intercepted query:", interceptedQuery);
-      console.log(`Replaced "data" references with "${tableName.value}"`);
+      // console.log("Intercepted query:", interceptedQuery);
+      // console.log(`Replaced "data" references with "${tableName.value}"`);
     }
   
     return interceptedQuery;
@@ -368,14 +357,20 @@
       // Intercept and transform the query
       const transformedQuery = interceptQuery(sqlQuery.value.trim());
   
-      console.log("Executing transformed query:", transformedQuery);
+      // console.log("Executing transformed query:", transformedQuery);
       queryResults.value = await duckDBStore.executeQuery(
         transformedQuery,
         connectionId.value
       );
-      console.log(
-        `Query executed successfully, returned ${queryResults.value.length} rows`
-      );
+      await duckDBStore.publishViewFromQuery('umap_result', transformedQuery, connectionId.value)
+
+      emit('query-results', {
+        results: queryResults.value,
+        query: transformedQuery,
+      });
+      // console.log(
+      //   `Query executed successfully, returned ${queryResults.value.length} rows`
+      // );
     } catch (err) {
       console.error("Query execution failed:", err);
       error.value = `Query execution failed: ${err.message}`;
@@ -387,12 +382,12 @@
   
   // Pagination event handlers for Element Plus
   const handlePageChange = (page) => {
-    console.log("Page changed to:", page);
+    // console.log("Page changed to:", page);
     currentPage.value = page;
   };
   
   const handleSizeChange = (newSize) => {
-    console.log("Page size changed to:", newSize);
+    // console.log("Page size changed to:", newSize);
     itemsPerPage.value = newSize;
     currentPage.value = 1; // Reset to first page when changing size
   };
@@ -462,7 +457,7 @@
   onUnmounted(async () => {
     // Clean up this viewer's connection
     if (connectionId.value) {
-      console.log(`Cleaning up viewer ${props.viewerId}...`);
+      // console.log(`Cleaning up viewer ${props.viewerId}...`);
   
       const beforeCleanup = {
         activeConnections: duckDBStore.activeConnectionCount,
@@ -475,18 +470,7 @@
         activeConnections: duckDBStore.activeConnectionCount,
         loadedFiles: duckDBStore.loadedFiles.size,
       };
-  
-      console.log(`Viewer ${props.viewerId} cleanup complete:`, {
-        beforeCleanup,
-        afterCleanup,
-        hasActiveConnections: duckDBStore.hasActiveConnections,
-      });
-  
-      // If this was the last viewer and you want automatic global cleanup:
-      // if (!duckDBStore.hasActiveConnections) {
-      //   console.log('Last viewer closed, performing global cleanup...')
-      //   await duckDBStore.performGlobalCleanup()
-      // }
+
     }
   });
   </script>
@@ -574,7 +558,7 @@
   .pagination-wrapper {
     display: flex;
     flex-direction: row;
-    justify-content: end;
+    justify-content: flex-end;
   }
   
   .query-info .info-text code {
@@ -777,61 +761,12 @@
   .clear-error-btn:hover {
     background: #d32f2f;
   }
-  
-  //// Element Plus pagination customization
-  //:deep(.el-pagination) {
-  //  --el-color-primary: #2196f3;
-  //  --el-color-primary-light-3: rgba(33, 150, 243, 0.3);
-  //
-  //  .el-pagination__total {
-  //    color: #666;
-  //    font-weight: 500;
-  //  }
-  //
-  //  .el-pagination__sizes .el-select .el-input__inner {
-  //    border-color: #ddd;
-  //    font-size: 14px;
-  //  }
-  //
-  //  .el-pager li {
-  //    background-color: #f8f9fa;
-  //    border: 1px solid #ddd;
-  //    color: #333;
-  //
-  //    &:hover {
-  //      background-color: #e0e0e0;
-  //    }
-  //
-  //    &.is-active {
-  //      background-color: #2196f3;
-  //      border-color: #2196f3;
-  //      color: white;
-  //    }
-  //  }
-  //
-  //  .btn-prev, .btn-next {
-  //    background-color: #f8f9fa;
-  //    border: 1px solid #ddd;
-  //    color: #333;
-  //
-  //    &:hover:not(:disabled) {
-  //      background-color: #e0e0e0;
-  //    }
-  //
-  //    &:disabled {
-  //      background-color: #f5f5f5;
-  //      border-color: #e9ecef;
-  //      color: #ccc;
-  //    }
-  //  }
-  //
-  //  .el-pagination__jump {
-  //    color: #666;
-  //
-  //    .el-input__inner {
-  //      border-color: #ddd;
-  //      text-align: center;
-  //    }
-  //  }
-  //}
+  .execute-query-button{
+    cursor: pointer;
+    background: #f5f5f5;
+    color: #333;
+    padding: 6px 12px;
+    border: solid 1px #cbcbcb;
+  }
+
   </style>

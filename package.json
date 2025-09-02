@@ -1,19 +1,22 @@
 {
   "name": "pennsieve-visualization",
-  "version": "0.1.6",
+  "version": "0.4.5",
   "main": "./dist/pennsieve-visualization.umd.js",
   "module": "./dist/pennsieve-visualization.es.js",
   "style": "dist/style.css",
-  "files": ["dist/"],
+  "files": [
+    "dist/"
+  ],
   "exports": {
     ".": {
       "import": "./dist/pennsieve-visualization.es.js",
       "require": "./dist/pennsieve-visualization.umd.js"
     },
     "./style.css": "./dist/style.css"
-
   },
-  "sideEffects": ["*.css"],
+  "sideEffects": [
+    "*.css"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -21,33 +24,33 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.29.1-dev132.0",
     "@types/ramda": "^0.30.2",
     "core-js": "^3.8.3",
     "d3": "^7.9.0",
     "hyparquet": "^1.12.1",
-    "node": "^24.6.0",
-    "ramda": "^0.31.3",
-    "@duckdb/duckdb-wasm": "^1.29.1-dev132.0"
+    "plotly.js-dist-min": "^3.1.0",
+    "ramda": "^0.31.3"
   },
   "devDependencies": {
-    "@aws-amplify/auth": "^6.15.0",
     "@types/d3": "^7.4.3",
-    "@vitejs/plugin-vue": "^6.0.0",
+    "@vitejs/plugin-vue": "^5.1.4",
     "@vue/tsconfig": "^0.7.0",
+    "pinia": "^3.0.3",
     "sass-embedded": "^1.90.0",
     "typescript": "^5.8.3",
-    "vite": "^7.0.4",
+    "vite": "^6.0.0-alpha.24",
     "vue": "^3.5.17",
-    "vue-tsc": "^3.0.3",
-    "pinia": "^3.0.3"
+    "vue-tsc": "^3.0.3"
   },
   "peerDependencies": {
-    "pinia": "^3.0.3",
     "@aws-amplify/auth": "^6.5.4",
+    "pinia": "^3.0.3",
     "vue": "^3.2.0"
   },
-  "engines": {
-    "node": ">=20.19.0"
+  "peerDependenciesMeta": {
+    "@aws-amplify/auth": {
+      "optional": true
+    }
   }
-
 }

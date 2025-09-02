@@ -1,7 +1,5 @@
-// App.vue - Main Application Component
 <template>
   <div class="app-container">
-
     <WebGLScatterplot
       :data="pointData"
       :metaData="metaData"
@@ -11,6 +9,7 @@
       :startColor="startColor"
       :endColor="endColor"
       :singleColor="singleColor"
+      :selectedMapEntries="Array.from(colorMap)"
       :forceRegenerate="forceRegenerate"
       :key="componentKey"
     />
@@ -29,203 +28,262 @@
 </template>
 
 <script setup lang="ts">
-import {defineProps, onMounted, ref, watch} from 'vue';
-import WebGLScatterplot from './scatterplot.vue';
-import ControlPanel from './control.vue';
-import {pathOr} from "ramda";
-import {useGetToken} from '../../composables/useGetToken'
-import {asyncBufferFromUrl, parquetMetadata, parquetRead} from "hyparquet"
+import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
+import WebGLScatterplot from './scatterplot.vue'
+import ControlPanel from './control.vue'
+import { useDuckDBStore } from '@/store/duckdbStore'
 
-const props = defineProps({
-  apiUrl:{
-    type:String,
-    default:""
+const props = defineProps<{
+  apiUrl?: string
+  pkg?: { content?: { id?: string; packageType?: string } } | null
+  srcUrl?: string
+  srcFileType?: 'csv' | 'parquet'
+  srcFileId?: string
+}>()
+
+// ----------------- Reactive state -----------------
+const pointCount = ref(5000)
+const colorMode = ref('random')
+const startColor = ref('#ff0000')
+const endColor = ref('#0000ff')
+const singleColor = ref('#4285f4')
+const forceRegenerate = ref(false)
+const componentKey = ref(0)
+
+const pointData = ref<any[]>([])
+const metaData = ref<any>(null)
+
+const colorMap = ref<Map<any, any>>(new Map())
+const colorMapMap = ref<Map<string, Map<any, number[]>>>(new Map())
+
+const viewAssets = ref<any[]>([])
+
+// duckdb wiring
+const duck = useDuckDBStore()
+const connectionId = ref<string | null>(null)
+const tableName = ref<string | null>(null)
+
+// default axes
+const defaultX = 'UMAP_1'
+const defaultY = 'UMAP_2'
+
+// ----------------- Orchestrator -----------------
+const stableId =  computed(()=> duck.formatIdFromUrl(props.srcUrl))
+watch(
+  () => ({
+    srcUrl: props.srcUrl,
+    srcFileType: props.srcFileType,
+    srcFileId: props.srcFileId,
+    pkgId: props.pkg?.content?.id || '',
+    pkgType: props.pkg?.content?.packageType || '',
+    apiUrl: props.apiUrl || ''
+  }),
+  async ({ srcUrl, srcFileType, srcFileId, pkgId, pkgType, apiUrl }) => {
+    try {
+      pointData.value = []
+      metaData.value = null
+      await ensureConnection()
+
+      if (srcUrl) {
+        const ft = srcFileType ?? (srcUrl.toLowerCase().endsWith('.csv') ? 'csv' : 'parquet')
+        await loadIntoDuckDB(srcUrl, ft, stableId.value)
+        await hydrateFromDuckDB()
+        return
+      }
+
+      if (pkgId && apiUrl) {
+        await getViewerAssets(pkgId, apiUrl)
+        const firstFileId = viewAssets.value?.[0]?.content?.id
+        if (!firstFileId) return
+        const presigned = await getFileUrl(pkgId, firstFileId, apiUrl)
+        const ft = pkgType === 'CSV' ? 'csv' : 'parquet'
+        await loadIntoDuckDB(presigned, ft, firstFileId)
+        await hydrateFromDuckDB()
+      }
+    } catch (e: any) {
+      console.error('[UMAP Wrapper] Load failed:', e?.message || e)
+    }
   },
-  pkg: {
-    type: Object,
-    default: {}
-  }
+  { immediate: true }
+)
 
-})
-
-// Reactive state
-const pointCount = ref(5000);
-const colorMode = ref('random');
-const startColor = ref('#ff0000');
-const endColor = ref('#0000ff');
-const singleColor = ref('#4285f4');
-const forceRegenerate = ref(false);
-const componentKey = ref(0);
-const colorMapType = ref("")
-
-const viewAssets = ref<any>()
-
-const pointData = ref();
-const metaData = ref();
-
-const colorMap = ref(new Map());
-const colorMapMap = ref(new Map())
-
-
-watch( () => pointData.value, () => {
-  generateColorMaps();
-})
-
-onMounted(async () => {
-  try {
-    // get Viewer Assets
-    
-    await getViewerAssets()
-    let presignedUrl = await getFileUrl(viewAssets.value[0].content.id)
-    const res = await fetch(presignedUrl)
-    const arrayBuffer = await res.arrayBuffer()
-
-    await parquetRead({
-      file: arrayBuffer,
-      onComplete: (data) => {
-        metaData.value = parquetMetadata(arrayBuffer)
-        colorMode.value = metaData.value.key_value_metadata[0].key
-        pointData.value = data
-
-      }
-    })
-
-
-  } catch (err) {
-    console.error(err);
+watch(pointCount, async () => {
+  if (tableName.value && connectionId.value) {
+    await fetchPointsAndMeta() // respects pointCount
   }
 })
+//************* */
+// auto-update when DataExplorer publishes a view/table
+watch([() => duck.sharedVersion, () => duck.sharedResultName], async () => {
+  if (!duck.sharedResultName) return
+  await ensureConnection()
+  tableName.value = duck.sharedResultName
+  await hydrateFromDuckDB()
+})
 
-async function getViewerAssets() {
-  const pkgId = pathOr('', ['content', 'id'], props.pkg)
-  const token = await useGetToken()
-  const preUrl = props.apiUrl? props.apiUrl: "https://api.pennsieve.net";
-  const url = `${preUrl}/packages/${pkgId}/view?api_key=${token}`
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
+// ----------------- DuckDB helpers -----------------
+async function ensureConnection() {
+  if (connectionId.value) return
+  const { connectionId: cid } = await duck.createConnection(`umap_${Date.now()}`)
+  connectionId.value = cid
+}
+
+async function loadIntoDuckDB(url: string, fileType: 'csv' | 'parquet', validId: string) {
+  const tname = `umap_${validId.replace(/[^a-zA-Z0-9_]/g, '_')}`
+  tableName.value = await duck.loadFile(url, fileType, tname, {}, connectionId.value!, validId)
+}
+
+/** choose axes, pull [x,y,...ALL cols], synthesize meta + color keys */
+async function hydrateFromDuckDB() {
+  if (!tableName.value || !connectionId.value) return
+  const cols = await getColumns(tableName.value)
+  const numericCols = cols.filter(c => /DOUBLE|HUGEINT|BIGINT|INTEGER|DECIMAL|FLOAT|REAL/i.test(c.type))
+
+  const xKey = cols.some(c => c.name === defaultX) ? defaultX : (numericCols[0]?.name || cols[0]?.name)
+  const yKey = cols.some(c => c.name === defaultY) ? defaultY : (numericCols[1]?.name || cols[1]?.name || xKey)
+
+  await fetchPointsAndMeta(xKey, yKey, cols.map(c => c.name))
+  await buildColorMaps(cols, xKey, yKey)
+}
+
+/** Pull rows as AoA: [x, y, ...otherCols], and meta for x/y */
+async function fetchPointsAndMeta(xKey = defaultX, yKey = defaultY, allCols?: string[]) {
+  if (!tableName.value || !connectionId.value) return
+
+  const cols = allCols || (await getColumns(tableName.value)).map(c => c.name)
+  const others = cols.filter(n => n !== xKey && n !== yKey)
+
+  const select = [
+    `CAST(${quote(xKey)} AS DOUBLE) AS __x`,
+    `CAST(${quote(yKey)} AS DOUBLE) AS __y`,
+    ...others.map(n => quote(n))
+  ].join(', ')
+
+  const q = `SELECT ${select} FROM ${tableName.value} LIMIT ${pointCount.value}`
+  const rows = await duck.executeQuery(q, connectionId.value)
+
+  pointData.value = rows.map(r => [r.__x, r.__y, ...others.map(n => r[n])])
+
+  const s = `
+    SELECT min(${quote(xKey)}) AS xmin, max(${quote(xKey)}) AS xmax,
+           min(${quote(yKey)}) AS ymin, max(${quote(yKey)}) AS ymax
+    FROM ${tableName.value}
+  `
+  const stat = (await duck.executeQuery(s, connectionId.value))?.[0] || { xmin: -1, xmax: 1, ymin: -1, ymax: 1 }
+
+  metaData.value = {
+    schema: [{ name: xKey }, { name: yKey }, ...others.map(n => ({ name: n }))],
+    row_groups: [
+      {
+        columns: [
+          { meta_data: { statistics: { min_value: stat.xmin, max_value: stat.xmax } } },
+          { meta_data: { statistics: { min_value: stat.ymin, max_value: stat.ymax } } }
+        ]
       }
-    });
-
-    if (response.ok) {
-      viewAssets.value = await response.json()
-      return
-    }
-
-    if (!response.ok) {
-      return;
-    }
-  } catch (err) {
-    console.error(err)
-    throw err;
+    ]
   }
 }
 
-async function getFileUrl(fileId) {
-  const pkgId = pathOr('', ['content', 'id'], props.pkg)
-  const token = await useGetToken()
-  const preUrl = props.apiUrl? props.apiUrl: "https://api.pennsieve.net";
-  const url = `${preUrl}/packages/${pkgId}/files/${fileId}?api_key=${token}`
+/** Build color options for *all* columns. Categorical → legend map; Numeric → empty (UMAP will do gradient) */
+async function buildColorMaps(
+  cols: Array<{ name: string, type: string }>,
+  xKey: string,
+  yKey: string
+) {
+  colorMapMap.value = new Map()
 
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+  const hexColors = ['#4269d0','#efb118','#ff725c','#6cc5b0','#3ca951','#ff8ab7','#a463f2','#97bbf5','#9c6b4e','#9498a0']
+  const isNumeric = (t: string) => /DOUBLE|HUGEINT|BIGINT|INTEGER|DECIMAL|FLOAT|REAL/i.test(t)
 
-    if (response.ok) {
-      const result = await response.json()
-      return result.url;
+  for (const c of cols) {
+    if (c.name === xKey || c.name === yKey) {
+      colorMapMap.value.set(c.name, new Map()) // axes still selectable if desired
+      continue
     }
 
-    if (!response.ok) {
-      return;
-    }
+    if (isNumeric(c.type)) {
+      // numeric: allow selection; legend will be gradient (no discrete mapping)
+      colorMapMap.value.set(c.name, new Map())
+    } else {
+      // categorical: build value → color map
+      const distinctQ = `SELECT DISTINCT ${quote(c.name)} AS v FROM ${tableName.value} LIMIT 10000`
+      const distinct = await duck.executeQuery(distinctQ, connectionId.value!)
+      const values = distinct.map(r => r.v).filter(v => v !== null && v !== undefined)
 
-  } catch (err) {
-    console.error(err)
-    throw err;
+      const valueMap = new Map<any, number[]>()
+      values.forEach((v, i) => valueMap.set(v, hexToRgb(hexColors[i % hexColors.length])))
+      colorMapMap.value.set(c.name, valueMap)
+    }
+  }
+
+  // expose all column names to the ControlPanel
+  ;(metaData.value ||= {}).key_value_metadata = Array.from(colorMapMap.value.keys()).map(key => ({
+    key,
+    value: JSON.stringify(Array.from(colorMapMap.value.get(key)?.keys() ?? []))
+  }))
+
+  // preserve existing selection if possible; else keep 'random'
+  if (colorMode.value !== 'random' && !colorMapMap.value.has(colorMode.value)) {
+    colorMode.value = 'random'
   }
 }
 
+// ----------------- Pennsieve helpers -----------------
+async function getTokenLazy() {
+  const { useGetToken } = await import('../../composables/useGetToken')
+  return useGetToken()
+}
+async function getViewerAssets(pkgId: string, apiUrl: string) {
+  const token = await getTokenLazy()
+  const url = `${apiUrl}/packages/${pkgId}/view?api_key=${token}`
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`view failed: ${r.status}`)
+  viewAssets.value = await r.json()
+}
+async function getFileUrl(pkgId: string, fileId: string, apiUrl: string) {
+  const token = await getTokenLazy()
+  const url = `${apiUrl}/packages/${pkgId}/files/${fileId}?api_key=${token}`
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`file url failed: ${r.status}`)
+  const j = await r.json()
+  return j.url as string
+}
 
-
-// Method to trigger data regeneration in the scatterplot component
+// ----------------- tiny utils -----------------
+function quote(id: string) {
+  return `"${id.replace(/"/g, '""')}"`
+}
 function regenerateData() {
-  forceRegenerate.value = !forceRegenerate.value;
-  componentKey.value++; // Force component re-creation
+  forceRegenerate.value = !forceRegenerate.value
+  componentKey.value++
 }
-
-// Helper function to convert hex to RGB
-function hexToRgb(hex) {
+function hexToRgb(hex: string): [number, number, number] {
   try {
-    // Ensure the hex string is properly formatted
-    if (!hex || hex.length < 7) {
-      console.warn(`Invalid hex color: ${hex}, using fallback`);
-      return [1.0, 0.0, 0.0]; // Default to red
-    }
-
-    // Extract RGB components and normalize to 0-1 range for WebGL
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
-
-    // Ensure values are valid numbers
-    if (isNaN(r) || isNaN(g) || isNaN(b)) {
-      console.warn(`Invalid hex color components in: ${hex}, using fallback`);
-      return [1.0, 0.0, 0.0]; // Default to red
-    }
-
-    return [r, g, b];
-  } catch (err) {
-    console.error('Error converting hex to RGB:', err);
-    return [1.0, 0.0, 0.0]; // Default to red
-  }
-
+    if (!hex || hex.length < 7) return [1, 0, 0]
+    const r = parseInt(hex.slice(1, 3), 16) / 255
+    const g = parseInt(hex.slice(3, 5), 16) / 255
+    const b = parseInt(hex.slice(5, 7), 16) / 255
+    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return [1, 0, 0]
+    return [r, g, b]
+  } catch { return [1, 0, 0] }
+}
+function updateColorMap(data: [string, Map<any, number[]>]) {
+  colorMap.value = data[1] // categorical maps; numeric will be empty → gradient
 }
 
-function generateColorMaps() {
-
-  const hexColors = ["#4269d0","#efb118","#ff725c","#6cc5b0","#3ca951","#ff8ab7","#a463f2","#97bbf5","#9c6b4e","#9498a0"]
-  const rgbColors = hexColors.map(color => hexToRgb(color))
-
-  // iterate over Metadata Fields:
-  for (let i = 0; i <(metaData.value.key_value_metadata.length-1); i++) {
-
-    const type = metaData.value.key_value_metadata[i].key
-    const values = JSON.parse(metaData.value.key_value_metadata[i].value)
-    let valueMap = new Map()
-
-    let vIndex = 0
-    for (let v in values) {
-      valueMap.set(values[v], rgbColors[vIndex%rgbColors.length])
-      vIndex++
-    }
-
-    colorMapMap.value.set(type, valueMap)
-
-
-    let varType = colorMapMap.value.get(type)
-    if (varType == null) {
-      colorMapMap.value.set(type, new Map())
-    }
-  }
-
+// columns/types
+async function getColumns(tbl: string) {
+  const rows = await duck.executeQuery(`PRAGMA table_info(${tbl});`, connectionId.value!)
+  return rows.map(r => ({ name: r.name, type: r.type }))
 }
 
-function updateColorMap(data) {
-  colorMapType.value = data[0]
-  colorMap.value = data[1]
-}
+// ----------------- lifecycle -----------------
+onMounted(async () => { await ensureConnection() })
+onBeforeUnmount(async () => { if (connectionId.value) await duck.closeConnection(connectionId.value) })
 </script>
 
 <style scoped>
-  .app-container {
-    height: 90vh;
-    position: relative;
+  .app-container{
+    height: 100%;
   }
 </style>

@@ -18,6 +18,7 @@ export default defineConfig({
       name: 'PennsieveVisualization',
       fileName: (format) => `pennsieve-visualization.${format}.js`,
     },
+    copyPublicDir: false,
     rollupOptions: {
       //external dependencies 
       external: [
