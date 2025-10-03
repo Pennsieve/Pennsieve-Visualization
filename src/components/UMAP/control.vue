@@ -1,37 +1,31 @@
 <!-- ControlPanel.vue -->
 <template>
-  <div class="control-panel">
-    <h3>Color Controls</h3>
+<div class="control-panel">
+  <h3>Color Controls</h3>
 
-    <div class="color-option">
-      <label for="colorMode">Color Mode:</label>
-      <select id="colorMode" v-model="localColorMode">
-        <option value="random">all</option>
-        <option
-          v-for="k in colorKeys"
-          :key="k"
-          :value="k"
-        >
-          {{ k }}
-        </option>
-      </select>
-    </div>
+  <div class="color-option">
+    <label for="colorMode">Color Mode:</label>
+    <select id="colorMode" v-model="localColorMode">
+      <option value="random">all</option>
+      <option v-for="k in colorKeys" :key="k" :value="k">{{ k }}</option>
+    </select>
+  </div>
 
-    <!-- Legend only for categorical maps (non-empty) -->
-    <div class="color-option" v-if="selectedMapEntries.length">
-      <div class="legend">
-        <h4>Legend</h4>
-        <div
-          class="legend-item"
-          v-for="([label, rgb], i) in selectedMapEntries"
-          :key="`${label}-${i}`"
-        >
-          <div class="legend-color" :style="{ backgroundColor: rgbToCss(rgb) }" />
-          <div class="legend-label">{{ label }}</div>
-        </div>
+  <div v-if="selectedMapEntries.length" class="legend-scroll">
+    <div class="legend">
+      <h4>Legend</h4>
+      <div
+        class="legend-item"
+        v-for="([label, rgb], i) in selectedMapEntries"
+        :key="`${label}-${i}`"
+      >
+        <div class="legend-color" :style="{ backgroundColor: rgbToCss(rgb) }" />
+        <div class="legend-label">{{ label }}</div>
       </div>
     </div>
   </div>
+</div>
+
 </template>
 
 <script setup lang="ts">
@@ -43,7 +37,7 @@ const props = defineProps({
   startColor: { type: String, default: '#ff0000' },
   endColor:   { type: String, default: '#0000ff' },
   singleColor:{ type: String, default: '#4285f4' },
-  colorScheme:{ type: Map,   default: () => new Map() }, // not used directly now, but kept for API stability
+  colorScheme:{ type: Map,   default: () => new Map() }, 
   colorMapMap:{ type: Map,   default: () => new Map() }
 })
 
@@ -113,9 +107,39 @@ watch(() => props.colorMapMap, () => {
 </script>
 
 <style scoped>
-.control-panel { position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,0.85); padding: 15px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 100; max-width: 320px; }
-.color-option { margin-bottom: 15px; }
-.legend-item { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
-.legend-color { width: 18px; height: 18px; border-radius: 3px; }
-.legend-label { font-size: 14px; }
+/* Make the panel constrained to the parent and use flex layout */
+.control-panel {
+  position: absolute;
+  top: 20px;
+  bottom: 20px;          
+  left: 20px;
+
+  background: rgba(255,255,255,0.85);
+  padding: 15px;
+  border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  z-index: 100;
+
+  max-width: 320px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.color-option { flex: 0 0 auto; }
+
+.legend-scroll {
+  flex: 1 1 auto;     
+  min-height: 0;     
+  overflow: auto;   
+}
+
+/* Optional aesthetics */
+.legend { padding-right: 6px; } /* space for scrollbar */
+.legend-item { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.legend-color { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); }
+.legend-label { line-height: 1.2; word-break: break-word; }
+
 </style>

@@ -23,7 +23,8 @@ const props = defineProps({
   data: { type: Array, default: () => [] },        
   metaData: { type: Object, default: () => ({}) },  
   colorMap: { type: Map, default: () => new Map() },
-  selectedMapEntries: { type: [Array, Map], default: () => [] }
+  selectedMapEntries: { type: [Array, Map], default: () => [] },
+  hoverFields: { type: Array, default: () => [] } 
 })
 
 // Refs
@@ -50,6 +51,33 @@ watch(() => props.colorMap, rebuildColorBufferForMode, { deep: true })
 
 
 // ---------- helpers ----------
+function formatLabel(v: any) {
+  if (v === null) return '∅'
+  if (v === undefined) return '—'
+  return String(v)
+}
+
+function valueForColorMode(p: any) {
+  // No color mode or 'random' -> nothing to show
+  if (!props.colorMode || props.colorMode === 'random') return undefined
+
+  const schema = ((props.metaData as any)?.schema || []) as Array<{name?: string}>
+  const idx = schema.findIndex(s => s?.name === props.colorMode)
+
+  // Prefer name-based lookup via attrs (most reliable)
+  if (idx >= 0) {
+    const key = schema[idx]?.name || ''
+    const vFromAttrs = p?.attrs?.[key]
+    if (vFromAttrs !== undefined) return vFromAttrs
+
+    // Fallback to the raw row by column index if attrs somehow missed it
+    if (Array.isArray(p?.rawRow)) return p.rawRow[idx]
+  }
+
+  // Last resort: direct attrs lookup by colorMode key
+  return p?.attrs?.[props.colorMode]
+}
+
 function hexToRgb(hex: string): [number, number, number] {
   if (!hex || hex.length < 7) return [1, 0, 0]
   const r = parseInt(hex.slice(1, 3), 16) / 255
@@ -78,7 +106,6 @@ function sizeCanvasForDPR(canvas: HTMLCanvasElement, glCtx: WebGLRenderingContex
   glCtx.viewport(0, 0, canvas.width, canvas.height)
 }
 
-// get projection params used in draw()
 function getViewParams(width: number, height: number) {
   const col0 = (props.metaData as any)?.row_groups?.[0]?.columns?.[0]?.meta_data?.statistics
   const col1 = (props.metaData as any)?.row_groups?.[0]?.columns?.[1]?.meta_data?.statistics
@@ -89,16 +116,19 @@ function getViewParams(width: number, height: number) {
 
   const rangeX = Math.max(1e-9, xMax - xMin)
   const rangeY = Math.max(1e-9, yMax - yMin)
-  const dataScale = 2 / Math.max(rangeX, rangeY)
+  const dataScale = 2 / Math.max(rangeX, rangeY)  // fit into clip [-1,1]
 
-  const panX = (transform.x / width)  * 2 - 1
-  const panY = (-transform.y / height) * 2 + 1
+  // zero-baseline pan in clip space
+  const panX = (2 * transform.x) / width
+  const panY = (-2 * transform.y) / height
+
   const s = transform.k * dataScale
   const tx = panX - s * cx
   const ty = panY - s * cy
-
   return { s, tx, ty }
 }
+
+
 
 // precise screen→data using the same math as draw()
 function screenToData(screenX: number, screenY: number, width: number, height: number) {
@@ -128,34 +158,38 @@ function findNearestPoint(data: any[], mouseX: number, mouseY: number, width: nu
   }
   return nearest
 }
-
 function generateData() {
+  const rows = props.data as any[]
+  if (rows.length && rows[0] && typeof rows[0] === 'object' && 'x' in rows[0] && 'attrs' in rows[0]) {
+    return rows as any[]
+  }
+
   const out: any[] = []
   const schema = ((props.metaData as any)?.schema || []) as Array<{name?: string}>
-  const rows = props.data as any[]
 
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i] // row aligned with schema: [x, y, ...]
+    const row = rows[i]
     const x = Number(row[0])
     const y = Number(row[1])
 
-    // build attrs by column name
     const attrs: Record<string, any> = {}
     for (let c = 0; c < schema.length; c++) {
       const key = schema[c]?.name ?? `col_${c}`
       attrs[key] = row[c]
     }
-
     out.push({
       x, y,
       rawX: x, rawY: y,
-      color: [0.5, 0.5, 0.5], 
+      color: [0.5, 0.5, 0.5],
       id: i,
-      attrs
+      attrs,
+      rawRow: row
     })
   }
   return out
 }
+
+
 
 // ---------- WebGL ----------
 function createShaderProgram(gl: WebGLRenderingContext, vsSource: string, fsSource: string) {
@@ -291,15 +325,17 @@ function drawScatterplot(gl: WebGLRenderingContext, info: any, pointSize: number
 function initVisualization() {
   if (!canvasRef.value || !containerRef.value) return
 
+  // --- WebGL setup ---
   gl = (canvasRef.value.getContext('webgl', {
     preserveDrawingBuffer: true,
     antialias: true,
     alpha: true
   }) || canvasRef.value.getContext('experimental-webgl')) as WebGLRenderingContext | null
-
   if (!gl) { console.error('WebGL not supported'); return }
+
   sizeCanvasForDPR(canvasRef.value, gl)
 
+  // --- shaders/program ---
   const vs = `
     attribute vec2 a_position;
     attribute vec3 a_color;
@@ -327,74 +363,155 @@ function initVisualization() {
   if (!program) return
   gl.useProgram(program)
 
+  // --- data/buffers ---
   data = generateData()
   programInfo = prepareBuffers(gl, program, data)
-  transform = d3.zoomIdentity.translate(cssWidth / 2, cssHeight / 2).scale(1)
-  zoom = d3.zoom().scaleExtent([0.1, 100]).on('zoom', (event: any) => {
-    transform = event.transform
-    drawScatterplot(gl!, programInfo, 2, highlightedPoint)
-  })
-  d3.select(canvasRef.value).call(zoom as any)
+
+  // identity to start (no pre-translate)
+  transform = d3.zoomIdentity
+
+  // --- d3 zoom (keep for pan + pinch) ---
+  const sel = d3.select(canvasRef.value)
+  zoom = d3.zoom<HTMLCanvasElement, unknown>()
+    .scaleExtent([0.1, 100])
+    .extent([[0, 0], [cssWidth, cssHeight]])
+    .translateExtent([[-1e6, -1e6], [1e6, 1e6]])
+    .filter((event: any) => {
+      // We'll handle wheel ourselves; let drag/pinch through
+      if (event.type === 'wheel') return false
+      return true
+    })
+    .on('zoom', (event: any) => {
+      transform = event.transform
+      drawScatterplot(gl!, programInfo, 2, highlightedPoint)
+    })
+
+  sel.call(zoom as any)
+
+  // custom wheel zoom anchored to cursor
+  canvasRef.value.addEventListener('wheel', handleWheelZoom, { passive: false })
+
+  // first draw
   requestAnimationFrame(() => drawScatterplot(gl!, programInfo, 2, null))
 
+  // hover handlers
   canvasRef.value.addEventListener('mousemove', handleMouseMove)
   canvasRef.value.addEventListener('mouseleave', handleMouseLeave)
 }
+function handleWheelZoom(e: WheelEvent) {
+  if (!canvasRef.value) return
+  e.preventDefault()
+
+  const rect = canvasRef.value.getBoundingClientRect()
+  const mx = e.clientX - rect.left  // cursor in CSS px
+  const my = e.clientY - rect.top
+
+  const width  = cssWidth
+  const height = cssHeight
+
+  // --- 1) data-space point under the cursor with the *current* transform
+  const dp = screenToData(mx, my, width, height) // { x: dx, y: dy }
+
+  // --- 2) new scale (like d3's default sensitivity)
+  const kFactor = Math.pow(2, -e.deltaY * 0.002)
+  let kNew = transform.k * kFactor
+  kNew = Math.max(0.1, Math.min(100, kNew))
+
+  // --- 3) solve for translate so the same data point stays under the cursor
+  const col0 = (props.metaData as any)?.row_groups?.[0]?.columns?.[0]?.meta_data?.statistics
+  const col1 = (props.metaData as any)?.row_groups?.[0]?.columns?.[1]?.meta_data?.statistics
+  const xMin = Number(col0?.min_value ?? -1), xMax = Number(col0?.max_value ?? 1)
+  const yMin = Number(col1?.min_value ?? -1), yMax = Number(col1?.max_value ?? 1)
+  const cx = (xMin + xMax) / 2
+  const cy = (yMin + yMax) / 2
+
+  const rangeX = Math.max(1e-9, xMax - xMin)
+  const rangeY = Math.max(1e-9, yMax - yMin)
+  const dataScale = 2 / Math.max(rangeX, rangeY)
+
+  const sNew = kNew * dataScale
+
+
+  const clipX = (mx / width) * 2 - 1
+  const clipY = -((my / height) * 2 - 1)
+
+  const panTermX = clipX - sNew * (dp.x - cx)
+  const xNew = 0.5 * width * panTermX
+
+  const panTermY = clipY - sNew * (dp.y - cy)
+  const yNew = -0.5 * height * panTermY
+
+  const next = d3.zoomIdentity.translate(xNew, yNew).scale(kNew)
+  transform = next
+  d3.select(canvasRef.value!).call(zoom.transform as any, next)
+}
+
+
 
 function handleMouseMove(e: MouseEvent) {
-  if (!canvasRef.value) return
-  const r = canvasRef.value.getBoundingClientRect()
-  const mouseX = e.clientX - r.left
-  const mouseY = e.clientY - r.top
+  if (!canvasRef.value || !containerRef.value) return
+  const rCanvas = canvasRef.value.getBoundingClientRect()
+  const rCont   = containerRef.value.getBoundingClientRect()
+
+  const mouseX = e.clientX - rCanvas.left
+  const mouseY = e.clientY - rCanvas.top
   const p = findNearestPoint(data, mouseX, mouseY, cssWidth, cssHeight)
 
+  const t = tooltipRef.value!
   if (p) {
-    const t = tooltipRef.value!
-    t.style.left = `${e.clientX + 15}px`
-    t.style.top  = `${e.clientY - 15}px`
+    // position tooltip relative to the container (not the viewport)
+    const offsetX = 12, offsetY = 16
+    t.style.left   = `${e.clientX - rCont.left + offsetX}px`
+    t.style.top    = `${e.clientY - rCont.top  + offsetY}px`
     t.style.opacity = '1'
 
-    // determine the color column index/name
-    const schema = ((props.metaData as any)?.schema || []) as Array<{name?: string}>
-    const colorSchemaIdx = schema.findIndex(s => s?.name === props.colorMode)
-    const colorName = props.colorMode
-    const colorVal  = colorSchemaIdx >= 0 ? p.attrs?.[schema[colorSchemaIdx]?.name || ''] : undefined
+// color field for current colorMode 
+const colorVal = valueForColorMode(p) 
 
-    // if selectedMapEntries provided, try to find a matching label (mostly the same as value)
-    let legendLabel = ''
-    const entries = props.selectedMapEntries as any
-    if (colorVal !== undefined) {
-      if (entries instanceof Map) {
-        legendLabel = entries.has(colorVal) ? String(colorVal) : ''
-      } else if (Array.isArray(entries)) {
-        legendLabel = entries.some(([k]) => k === colorVal) ? String(colorVal) : ''
-      }
-    }
+const schema = ((props.metaData as any)?.schema || []) as Array<{name?: string}>
+const allNames = schema.map(s => s?.name || '')
+const nonXY = allNames.slice(2)
 
-    const extras: string[] = []
-    for (let i = 2; i < Math.min(schema.length, 7); i++) {
-      const k = schema[i]?.name
-      if (!k) continue
-      const v = p.attrs?.[k]
-      extras.push(`<div><em>${k}</em>: ${v === undefined ? '—' : String(v)}</div>`)
-    }
+const baseList = new Set<string>([
+  ...(props.colorMode && props.colorMode !== 'random' ? [props.colorMode] : []),
+  ...((props.hoverFields as string[]) || [])
+])
 
+let fields: string[] = Array.from(baseList).filter(k => k && nonXY.includes(k))
+
+if (!fields.length) {
+  // take first 5 columns after x,y has
+  fields = nonXY.filter(k => p.attrs?.[k] !== undefined && p.attrs?.[k] !== '').slice(0, 5)
+}
+
+const extras: string[] = []
+for (const k of fields) {
+  const v = p.attrs?.[k]
+  extras.push(`<div><em>${k}</em>: ${formatLabel(v)}</div>`)
+}
+
+
+    // render
     t.innerHTML = `
-      <strong>(${p.rawX.toFixed(2)}, ${p.rawY.toFixed(2)})</strong>
-      ${colorSchemaIdx >= 0 ? `<div><b>${colorName}</b>: ${legendLabel || String(colorVal)}</div>` : ''}
+      <strong>(${Number(p.rawX).toFixed(2)}, ${Number(p.rawY).toFixed(2)})</strong>
+      ${props.colorMode && props.colorMode !== 'random'
+        ? `<div><b>${props.colorMode}</b>: ${formatLabel(colorVal)}</div>`
+        : ''
+      }
       ${extras.join('')}
     `
 
     highlightedPoint = p
     drawScatterplot(gl!, programInfo, 2, highlightedPoint)
   } else {
-    if (tooltipRef.value) tooltipRef.value.style.opacity = '0'
+    t.style.opacity = '0'
     if (highlightedPoint !== null) {
       highlightedPoint = null
       drawScatterplot(gl!, programInfo, 2, null)
     }
   }
 }
+
 function handleMouseLeave() {
   if (tooltipRef.value) tooltipRef.value.style.opacity = '0'
   if (highlightedPoint !== null) {
@@ -405,6 +522,10 @@ function handleMouseLeave() {
 function handleResize() {
   if (!canvasRef.value || !gl) return
   sizeCanvasForDPR(canvasRef.value, gl)
+  // update the zoom’s notion of the drawable region
+  d3.select(canvasRef.value)
+    .call((zoom as any).extent([[0,0],[cssWidth, cssHeight]]))
+    .call(zoom.transform as any, transform) // keep current zoom state
   drawScatterplot(gl, programInfo, 2, highlightedPoint)
 }
 
@@ -413,7 +534,6 @@ function rebuildColorBufferForMode() {
 
   const schema = (props.metaData as any)?.schema || []
   const schemaIdx = schema.findIndex((s: any) => s?.name === props.colorMode)
-
   const valueIndex = schemaIdx >= 0 ? schemaIdx : -1
 
   const startRGB = hexToRgb(props.startColor)
@@ -422,18 +542,23 @@ function rebuildColorBufferForMode() {
   let colorsArr: number[] = []
 
   if (props.colorMap && props.colorMap.size > 0 && valueIndex >= 0) {
-    // categorical
+    // look up a color per value
+    const name = schema[valueIndex]?.name
     colorsArr = (props.data as any[]).flatMap(d => {
-      const rgb = props.colorMap.get(d[valueIndex]) || [0.6, 0.6, 0.6]
-      return rgb
+      const v = (d && d.attrs && name) ? d.attrs[name] : d[valueIndex]
+      return props.colorMap.get(v) || [0.6, 0.6, 0.6]
     })
   } else if (valueIndex >= 0) {
-    // numeric → gradient
-    const vals = (props.data as any[]).map(d => Number(d[valueIndex])).filter(Number.isFinite)
+    // NUMERIC: gradient by the selected column
+    const vals = (props.data as any[])
+      .map(d => numericValueFor(d, valueIndex, schema, props.colorMode))
+      .filter(v => Number.isFinite(v)) as number[]
+
     const vmin = Math.min(...vals), vmax = Math.max(...vals)
-    const denom = vmax - vmin || 1
+    const denom = (vmax - vmin) || 1
+
     colorsArr = (props.data as any[]).flatMap(d => {
-      const v = Number(d[valueIndex])
+      const v = numericValueFor(d, valueIndex, schema, props.colorMode)
       const t = Math.max(0, Math.min(1, (v - vmin) / denom))
       return [
         lerp(startRGB[0], endRGB[0], t),
@@ -442,9 +567,18 @@ function rebuildColorBufferForMode() {
       ]
     })
   } else {
-    // single color
-    const sRGB = hexToRgb(props.singleColor)
-    colorsArr = (props.data as any[]).flatMap(() => sRGB)
+    // Fallback for no match
+    const xs = (props.data as any[]).map(d => Number(d.rawX ?? (Array.isArray(d) ? d[0] : undefined))).filter(Number.isFinite)
+    const xmin = Math.min(...xs), xmax = Math.max(...xs), denom = (xmax - xmin) || 1
+    colorsArr = (props.data as any[]).flatMap(d => {
+      const v = Number(d.rawX ?? (Array.isArray(d) ? d[0] : undefined))
+      const t = Math.max(0, Math.min(1, (v - xmin) / denom))
+      return [
+        lerp(startRGB[0], endRGB[0], t),
+        lerp(startRGB[1], endRGB[1], t),
+        lerp(startRGB[2], endRGB[2], t)
+      ]
+    })
   }
 
   gl.deleteBuffer(programInfo.colorBuffer)
@@ -454,6 +588,20 @@ function rebuildColorBufferForMode() {
   programInfo.colorBuffer = colorBuffer
   drawScatterplot(gl, programInfo, 2, highlightedPoint)
 }
+
+function numericValueFor(d: any, valueIndex: number, schema: any[], colorMode: string) {
+
+  // if (colorMode === 'UMAP_1') return Number(d.rawX ?? (Array.isArray(d) ? d[0] : undefined))
+  // if (colorMode === 'UMAP_2') return Number(d.rawY ?? (Array.isArray(d) ? d[1] : undefined))
+
+  // Otherwise, try by schema name (attrs) then fallback to array index
+  const name = schema[valueIndex]?.name
+  if(!d?.attrs?.[name]){return Number(d.rawY ?? (Array.isArray(d) ? d[1] : undefined))}
+  if (name && d && d.attrs && d.attrs[name] !== undefined) {console.log("here"); return Number(d.attrs[name])}
+  console.log(d[valueIndex])
+  return Number(Array.isArray(d) ? d[valueIndex] : undefined)
+}
+
 
 
 // ---------- watchers / lifecycle ----------
@@ -503,8 +651,10 @@ onBeforeUnmount(() => {
   if (canvasRef.value) {
     canvasRef.value.removeEventListener('mousemove', handleMouseMove)
     canvasRef.value.removeEventListener('mouseleave', handleMouseLeave)
+    canvasRef.value.removeEventListener('wheel', handleWheelZoom) // <-- add this
   }
   window.removeEventListener('resize', handleResize)
+
   if (gl && programInfo) {
     gl.deleteBuffer(programInfo.positionBuffer)
     gl.deleteBuffer(programInfo.colorBuffer)
@@ -520,6 +670,7 @@ onBeforeUnmount(() => {
   background: #f0f0f0; 
 }
 canvas { 
+  touch-action: none;
   display: block; 
   cursor: crosshair; 
   width: 100%; 

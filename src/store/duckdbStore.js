@@ -16,7 +16,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
 
     // Getters
     const isReady = computed(() => isInitialized.value && !initError.value)
-    const getLoadedFile = computed(() => (fileId) => {console.log(fileId); return loadedFiles.value.get(fileId)})
+    const getLoadedFile = computed(() => (fileId) => loadedFiles.value.get(fileId))
     const isFileLoaded = computed(() => (fileId) => {
         const file = loadedFiles.value.get(fileId)
         return file && !file.isLoading && !file.error
@@ -128,7 +128,7 @@ const createConnection = async (viewerId) => {
 
             // If no viewers are using this file anymore, we could optionally remove it
             if (viewerSet.size === 0) {
-                console.log(`File ${fileId} is no longer used by any viewers`)
+               // console.log(`File ${fileId} is no longer used by any viewers`)
                 // Optionally remove the file from DuckDB and loadedFiles
                 // unloadFile(fileId)
             }
@@ -170,9 +170,8 @@ const createConnection = async (viewerId) => {
 
         // Check if file is already loaded using stable key
         const existingFile = loadedFiles.value.get(stableKey)
-        console.log(loadedFiles.value)
         if (existingFile && !existingFile.isLoading && !existingFile.error) {
-             console.log(`File already loaded using stable key ${stableKey}, reusing table: ${existingFile.tableName}`)
+             //console.log(`File already loaded using stable key ${stableKey}, reusing table: ${existingFile.tableName}`)
             // Track usage by this viewer
             if (viewerId) {
                 trackFileUsage(stableKey, viewerId)
@@ -396,7 +395,6 @@ const createConnection = async (viewerId) => {
         sharedVersion.value++
     }
     const formatIdFromUrl = (srUrl)=>{
-        console.log(srUrl)
         return ('url_' + btoa(srUrl).replace(/=+$/,'').replace(/[+/]/g,'_'))
     }
     return {

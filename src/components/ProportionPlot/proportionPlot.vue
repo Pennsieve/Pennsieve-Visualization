@@ -12,23 +12,26 @@
                     placeholder="https://.../file.parquet"
                 />
                 </div>
-        
+
                 <div class="pp-field">
-                <label>X (group) column</label>
-                <select v-model="xCol" class="pp-select" :disabled="isLoading || columns.length === 0">
-                    <option disabled value="">— choose —</option>
-                    <option v-for="c in categoricalColumns" :key="c.name" :value="c.name">{{ c.name }} ({{ c.type }})</option>
-                    <option v-for="c in numericColumns" :key="c.name + '-num'" :value="c.name">{{ c.name }} ({{ c.type }})</option>
-                </select>
+                  <div >
+                  <label>X (group) column</label>
+                  <select v-model="xCol" class="pp-select" :disabled="isLoading || columns.length === 0">
+                      <option disabled value="">— choose —</option>
+                      <option v-for="c in categoricalColumns" :key="c.name" :value="c.name">{{ c.name }} ({{ c.type }})</option>
+                      <option v-for="c in numericColumns" :key="c.name + '-num'" :value="c.name">{{ c.name }} ({{ c.type }})</option>
+                  </select>
+                  </div>
+          
+                  <div >
+                  <label>Y (category) column</label>
+                  <select v-model="yCol" class="pp-select" :disabled="isLoading || columns.length === 0">
+                      <option disabled value="">— choose —</option>
+                      <option v-for="c in categoricalColumns" :key="c.name + '-y'" :value="c.name">{{ c.name }} ({{ c.type }})</option>
+                  </select>
+                  </div>
                 </div>
-        
-                <div class="pp-field">
-                <label>Y (category) column</label>
-                <select v-model="yCol" class="pp-select" :disabled="isLoading || columns.length === 0">
-                    <option disabled value="">— choose —</option>
-                    <option v-for="c in categoricalColumns" :key="c.name + '-y'" :value="c.name">{{ c.name }} ({{ c.type }})</option>
-                </select>
-                </div>
+
                 <div class="pp-field">
                     <button
                     class="pp-btn pp-btn--primary"
@@ -37,11 +40,12 @@
                     >
                     {{ isLoading ? 'Working…' : 'Plot' }}
                     </button>
+                    <div class="pp-message" v-if="message">{{ message }}</div>
                 </div>
 
             </div>
         
-            <div class="pp-message" v-if="message">{{ message }}</div>
+
       </div>
       <div :id="plotId" class="pp-plot"></div>
     </div>
@@ -325,8 +329,15 @@ function isBrowser() {
 async function ensurePlotly() {
   if (!isBrowser()) return null
   if (Plotly) return Plotly
-  const m = await import('plotly.js-dist-min') 
-  Plotly = m.default ?? m
+  await new Promise<void>((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.plot.ly/plotly-2.35.3.min.js';
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Failed to load Plotly CDN'));
+        document.head.appendChild(s);
+      });
+      (window as any).Plotly;
+  Plotly = (window as any).Plotly;
   return Plotly
 }
   // ----------------- lifecycle -----------------
@@ -346,10 +357,12 @@ async function ensurePlotly() {
   .pp-container { 
     padding: 16px;
     height: 100%;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
      }
   .pp-header{ 
-    height: 20%;
+    flex: 0 0 auto;
     overflow: scroll;
 }
   .pp-controls {
@@ -397,7 +410,9 @@ async function ensurePlotly() {
     margin-top: 4px; 
     }
   .pp-plot { 
-    width: 100%; 
+    flex: 1 1 auto;
+    min-height: 0;    
+    width: 100%;
     height: 80%; 
 }
   </style>

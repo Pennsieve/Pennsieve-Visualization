@@ -46,8 +46,8 @@ onMounted(async () => {
 
   // Mode B: Pennsieve pkg + api
   const pkgId = pathOr('', ['content','id'], props.pkg)
-  if (!pkgId || !props.apiUrl) {
-    console.error('[DuckDBViewerWrapper] Missing pkg.id or apiUrl, and no srcUrl provided.')
+  if (!pkgId) {
+    console.error('[DuckDBViewerWrapper] Missing pkg.id , and no srcUrl provided.')
     return
   }
 
@@ -71,8 +71,8 @@ function emitNewQueryResults(results){
     emit('queryResults',results)
 }
 async function getTokenLazy() {
-    const { useGetToken } = await import('../../composables/useGetToken');
-    return useGetToken();
+    const { useGetToken } = await import('@/composables/useGetToken');
+    return await useGetToken();
   }
 async function getViewerAssets(pkgId: string) {
   const token = await getTokenLazy()

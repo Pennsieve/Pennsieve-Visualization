@@ -1,6 +1,6 @@
 {
   "name": "pennsieve-visualization",
-  "version": "0.4.5",
+  "version": "0.4.8",
   "main": "./dist/pennsieve-visualization.umd.js",
   "module": "./dist/pennsieve-visualization.es.js",
   "style": "dist/style.css",
@@ -29,7 +29,6 @@
     "core-js": "^3.8.3",
     "d3": "^7.9.0",
     "hyparquet": "^1.12.1",
-    "plotly.js-dist-min": "^3.1.0",
     "ramda": "^0.31.3"
   },
   "devDependencies": {

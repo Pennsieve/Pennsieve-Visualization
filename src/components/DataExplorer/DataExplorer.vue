@@ -1,6 +1,6 @@
 <template>
     <div class="dashboard-container">
-      <header class="dashboard-header">
+      <!-- <header class="dashboard-header">
         <h1>Data Explorer</h1>
         <div
           class="status-indicator"
@@ -8,7 +8,7 @@
         >
           {{ statusText }}
         </div>
-      </header>
+      </header> -->
   
       <div class="dashboard-content">
         <!-- Query Panel -->
@@ -27,7 +27,7 @@
           </div>
           <textarea
             v-model="sqlQuery"
-            placeholder="SELECT * FROM data LIMIT 10;"
+            placeholder="SELECT * FROM data;"
             class="query-textarea"
             rows="4"
           ></textarea>
@@ -183,13 +183,6 @@
     return duckDBStore.isReady && connectionId.value && !isLoading.value;
   });
   const stableId =  computed(()=> duckDBStore.formatIdFromUrl(props.url))
-  const statusText = computed(() => {
-    if (isLoading.value) return "Loading...";
-    if (duckDBStore.isInitializing) return "Initializing...";
-    if (!duckDBStore.isReady) return "Not Ready";
-    if (isConnected.value) return "Connected";
-    return "Not Connected";
-  });
   
   const tableColumns = computed(() => {
     if (
@@ -215,7 +208,7 @@
   
   const queryExamples = computed(() => {
     return [
-      { name: "Show All", query: `SELECT * FROM data LIMIT 100;` },
+      { name: "Show All", query: `SELECT * FROM data;` },
       { name: "Count Rows", query: `SELECT COUNT(*) as row_count FROM data;` },
       {
         name: "Group By",
@@ -294,7 +287,7 @@
       // console.log(`File loaded as table: ${tableName.value}`);
   
       // Auto-execute a sample query using "data"
-      setQuery(`SELECT * FROM data LIMIT 100;`);
+      setQuery(`SELECT * FROM data;`);
     } catch (err) {
       // console.error("Failed to load file:", err);
       // error.value = `Failed to load ${props.fileType} file: ${err.message}`;

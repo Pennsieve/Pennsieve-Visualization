@@ -12,6 +12,7 @@
       :selectedMapEntries="Array.from(colorMap)"
       :forceRegenerate="forceRegenerate"
       :key="componentKey"
+      :hover-fields="hoverFields" 
     />
     <ControlPanel
       v-model:pointCount="pointCount"
@@ -32,6 +33,7 @@ import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
 import WebGLScatterplot from './scatterplot.vue'
 import ControlPanel from './control.vue'
 import { useDuckDBStore } from '@/store/duckdbStore'
+import { parquetMetadata, parquetRead} from "hyparquet";
 
 const props = defineProps<{
   apiUrl?: string
@@ -75,7 +77,7 @@ watch(
     srcFileType: props.srcFileType,
     srcFileId: props.srcFileId,
     pkgId: props.pkg?.content?.id || '',
-    pkgType: props.pkg?.content?.packageType || '',
+    pkgType: props.pkg?.content?.packageType || 'csv',
     apiUrl: props.apiUrl || ''
   }),
   async ({ srcUrl, srcFileType, srcFileId, pkgId, pkgType, apiUrl }) => {
@@ -86,7 +88,7 @@ watch(
 
       if (srcUrl) {
         const ft = srcFileType ?? (srcUrl.toLowerCase().endsWith('.csv') ? 'csv' : 'parquet')
-        await loadIntoDuckDB(srcUrl, ft, stableId.value)
+        await loadIntoDuckDB(srcUrl, ft, stableId.value.toString())
         await hydrateFromDuckDB()
         return
       }
@@ -96,8 +98,8 @@ watch(
         const firstFileId = viewAssets.value?.[0]?.content?.id
         if (!firstFileId) return
         const presigned = await getFileUrl(pkgId, firstFileId, apiUrl)
-        const ft = pkgType === 'CSV' ? 'csv' : 'parquet'
-        await loadIntoDuckDB(presigned, ft, firstFileId)
+        const ft = 'parquet'
+        await loadIntoDuckDB(presigned, ft, firstFileId.toString())
         await hydrateFromDuckDB()
       }
     } catch (e: any) {
@@ -146,43 +148,136 @@ async function hydrateFromDuckDB() {
   await buildColorMaps(cols, xKey, yKey)
 }
 
-/** Pull rows as AoA: [x, y, ...otherCols], and meta for x/y */
-async function fetchPointsAndMeta(xKey = defaultX, yKey = defaultY, allCols?: string[]) {
+async function fetchPointsAndMeta(
+  xKey = 'UMAP_1',
+  yKey = 'UMAP_2',
+  allColNames?: string[],
+  allCols?: Array<{ name: string, type: string }>
+) {
   if (!tableName.value || !connectionId.value) return
 
-  const cols = allCols || (await getColumns(tableName.value)).map(c => c.name)
-  const others = cols.filter(n => n !== xKey && n !== yKey)
+  const cols = allCols ?? await getColumns(tableName.value)
 
+  const names = allColNames ?? cols.map(c => c.name)
+
+  const xCol = cols.find(c => c.name === xKey)
+  const yCol = cols.find(c => c.name === yKey)
+
+  const xExpr = isNumericType(xCol?.type ?? '') ? duckIdent(xKey) : `TRY_CAST(${duckIdent(xKey)} AS DOUBLE)`
+  const yExpr = isNumericType(yCol?.type ?? '') ? duckIdent(yKey) : `TRY_CAST(${duckIdent(yKey)} AS DOUBLE)`
+
+  const others = names.filter(n => n !== xKey && n !== yKey)
   const select = [
-    `CAST(${quote(xKey)} AS DOUBLE) AS __x`,
-    `CAST(${quote(yKey)} AS DOUBLE) AS __y`,
-    ...others.map(n => quote(n))
+    `${xExpr} AS __x`,
+    `${yExpr} AS __y`,
+    ...others.map(n => duckIdent(n))
   ].join(', ')
 
-  const q = `SELECT ${select} FROM ${tableName.value} LIMIT ${pointCount.value}`
-  const rows = await duck.executeQuery(q, connectionId.value)
+  const tbl = duckIdent(tableName.value!)
+  const q = `
+    SELECT ${select}
+    FROM ${tbl}
+    WHERE ${xExpr} IS NOT NULL AND ${yExpr} IS NOT NULL
+    LIMIT ${pointCount.value}
+  `
+  const rows = await duck.executeQuery(q, connectionId.value!)
 
-  pointData.value = rows.map(r => [r.__x, r.__y, ...others.map(n => r[n])])
+  pointData.value = rows.map((r, i) => {
+    const attrs: Record<string, any> = {}
+    for (const name of names) {
+      attrs[name] = r[name]
+    }
+    const rawRow = [r.__x, r.__y, ...others.map(n => r[n])]
+    return {
+      x: Number(r.__x),
+      y: Number(r.__y),
+      rawX: Number(r.__x),
+      rawY: Number(r.__y),
+      id: i,
+      color: [0.5, 0.5, 0.5],
+      attrs,
+      rawRow
+    }
+  })
 
   const s = `
-    SELECT min(${quote(xKey)}) AS xmin, max(${quote(xKey)}) AS xmax,
-           min(${quote(yKey)}) AS ymin, max(${quote(yKey)}) AS ymax
-    FROM ${tableName.value}
+    SELECT min(${xExpr}) AS xmin, max(${xExpr}) AS xmax,
+           min(${yExpr}) AS ymin, max(${yExpr}) AS ymax
+    FROM ${tbl}
+    WHERE ${xExpr} IS NOT NULL AND ${yExpr} IS NOT NULL
   `
-  const stat = (await duck.executeQuery(s, connectionId.value))?.[0] || { xmin: -1, xmax: 1, ymin: -1, ymax: 1 }
-
+  const stat = (await duck.executeQuery(s, connectionId.value!))?.[0] || { xmin: -1, xmax: 1, ymin: -1, ymax: 1 }
   metaData.value = {
     schema: [{ name: xKey }, { name: yKey }, ...others.map(n => ({ name: n }))],
     row_groups: [
-      {
-        columns: [
+      { columns: [
           { meta_data: { statistics: { min_value: stat.xmin, max_value: stat.xmax } } },
           { meta_data: { statistics: { min_value: stat.ymin, max_value: stat.ymax } } }
-        ]
-      }
+        ] }
     ]
   }
+  computeHoverFieldsFromSample()
 }
+const hoverFields = ref<string[]>([])
+
+function computeHoverFieldsFromSample(maxFields = 6) {
+  const schema = (metaData.value?.schema ?? []).map((s: any) => s?.name || '')
+  if (!schema.length || !pointData.value?.length) { hoverFields.value = []; return }
+
+  // skip x,y at 0,1
+  const candidates = schema.slice(2)
+  const rows = pointData.value as Array<{ attrs?: Record<string, any> }>
+
+  type Stat = { name: string; nullRate: number; unique: number; isNumeric: boolean }
+  const stats: Stat[] = candidates.map((name) => {
+    let nulls = 0
+    const set = new Set<any>()
+    let numericCount = 0
+    let nonNullCount = 0
+
+    for (const r of rows) {
+      const v = r?.attrs?.[name]
+      if (v === null || v === undefined || v === '') { nulls++; continue }
+      nonNullCount++
+      set.add(v)
+      // treat numeric if it parses to finite number most of the time
+      const num = typeof v === 'number' ? v : Number(v)
+      if (Number.isFinite(num)) numericCount++
+    }
+
+    const nullRate = rows.length ? nulls / rows.length : 1
+    const isNumeric = nonNullCount > 0 && (numericCount / nonNullCount) > 0.8
+    return { name, nullRate, unique: set.size, isNumeric }
+  })
+
+  const preferredNames = new Set([
+    'seurat_clusters','cluster','cell_type','Study','Species','Sex','Donor',
+    'Atlas_annotation','Level','orig.ident','Dataset'
+  ])
+
+  const score = (s: Stat) => {
+    let sc = 0
+    if (!s.isNumeric) sc += 3
+    if (s.unique >= 2 && s.unique <= 30) sc += 3
+    sc += Math.max(0, 2 - Math.abs(10 - s.unique) / 10)
+    sc += (1 - s.nullRate) * 3
+    if (preferredNames.has(s.name)) sc += 2
+    return sc
+  }
+
+  stats.sort((a, b) => score(b) - score(a))
+  hoverFields.value = stats.filter(s => s.nullRate < 0.95).slice(0, maxFields).map(s => s.name)
+}
+
+
+//helpers
+function duckIdent(id: string) {
+  return `"${id.replace(/"/g, '""')}"`
+}
+function isNumericType(t: string) {
+  return /INT|DECIMAL|DOUBLE|FLOAT|REAL|HUGEINT|UBIGINT|BIGINT/i.test(t)
+}
+
 
 /** Build color options for *all* columns. Categorical → legend map; Numeric → empty (UMAP will do gradient) */
 async function buildColorMaps(
@@ -235,11 +330,12 @@ async function getTokenLazy() {
 }
 async function getViewerAssets(pkgId: string, apiUrl: string) {
   const token = await getTokenLazy()
-  const url = `${apiUrl}/packages/${pkgId}/view?api_key=${token}`
+ const url = `${apiUrl}/packages/${pkgId}/view?api_key=${token}`
   const r = await fetch(url)
   if (!r.ok) throw new Error(`view failed: ${r.status}`)
   viewAssets.value = await r.json()
 }
+
 async function getFileUrl(pkgId: string, fileId: string, apiUrl: string) {
   const token = await getTokenLazy()
   const url = `${apiUrl}/packages/${pkgId}/files/${fileId}?api_key=${token}`
@@ -248,7 +344,6 @@ async function getFileUrl(pkgId: string, fileId: string, apiUrl: string) {
   const j = await r.json()
   return j.url as string
 }
-
 // ----------------- tiny utils -----------------
 function quote(id: string) {
   return `"${id.replace(/"/g, '""')}"`
@@ -285,5 +380,8 @@ onBeforeUnmount(async () => { if (connectionId.value) await duck.closeConnection
 <style scoped>
   .app-container{
     height: 100%;
+    position: relative;  
+    height: 100%;
+    overflow: hidden; 
   }
 </style>
