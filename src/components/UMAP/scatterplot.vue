@@ -597,8 +597,7 @@ function numericValueFor(d: any, valueIndex: number, schema: any[], colorMode: s
   // Otherwise, try by schema name (attrs) then fallback to array index
   const name = schema[valueIndex]?.name
   if(!d?.attrs?.[name]){return Number(d.rawY ?? (Array.isArray(d) ? d[1] : undefined))}
-  if (name && d && d.attrs && d.attrs[name] !== undefined) {console.log("here"); return Number(d.attrs[name])}
-  console.log(d[valueIndex])
+  if (name && d && d.attrs && d.attrs[name] !== undefined) { return Number(d.attrs[name])}
   return Number(Array.isArray(d) ? d[valueIndex] : undefined)
 }
 

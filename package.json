@@ -1,6 +1,6 @@
 {
   "name": "pennsieve-visualization",
-  "version": "0.4.8",
+  "version": "0.6.1",
   "main": "./dist/pennsieve-visualization.umd.js",
   "module": "./dist/pennsieve-visualization.es.js",
   "style": "dist/style.css",
@@ -29,7 +29,9 @@
     "core-js": "^3.8.3",
     "d3": "^7.9.0",
     "hyparquet": "^1.12.1",
-    "ramda": "^0.31.3"
+    "ramda": "^0.31.3",
+    "marked": "^15.0.7",
+    "dompurify": "^3.2.6"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",

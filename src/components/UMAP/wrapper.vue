@@ -363,7 +363,7 @@ function hexToRgb(hex: string): [number, number, number] {
   } catch { return [1, 0, 0] }
 }
 function updateColorMap(data: [string, Map<any, number[]>]) {
-  colorMap.value = data[1] // categorical maps; numeric will be empty → gradient
+  colorMap.value = data[1] 
 }
 
 // columns/types
