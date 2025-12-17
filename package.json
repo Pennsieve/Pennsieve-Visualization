@@ -1,6 +1,6 @@
 {
   "name": "pennsieve-visualization",
-  "version": "0.6.1",
+  "version": "0.6.5",
   "main": "./dist/pennsieve-visualization.umd.js",
   "module": "./dist/pennsieve-visualization.es.js",
   "style": "dist/style.css",

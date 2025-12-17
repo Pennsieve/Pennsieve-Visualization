@@ -16,3 +16,6 @@ export const ProportionPlot = defineAsyncComponent(
 export const Markdown = defineAsyncComponent(
   () => import("./components/Markdown/Markdown.vue")
 );
+export const TextViewer = defineAsyncComponent(
+  () => import("./components/TextViewer/TextViewer.vue")
+);
