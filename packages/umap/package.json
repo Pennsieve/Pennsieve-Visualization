@@ -1,0 +1,41 @@
+{
+  "name": "@pennsieve-viz/umap",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@pennsieve-viz/core": "workspace:*",
+    "@pennsieve-viz/duckdb": "workspace:*",
+    "d3": "^7.9.0",
+    "hyparquet": "^1.12.1"
+  },
+  "peerDependencies": {
+    "pinia": "^3.0.3",
+    "vue": "^3.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-amplify/auth": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "@pennsieve-viz/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles/theme": {
+      "import": "./src/styles/theme.scss",
+      "default": "./src/styles/theme.scss"
+    },
+    "./styles/*": "./src/styles/*"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "*.css",
+    "*.scss"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "peerDependencies": {
+    "vue": "^3.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-amplify/auth": {
+      "optional": true
+    }
+  }
+}

@@ -1,57 +1,44 @@
 {
-  "name": "pennsieve-visualization",
-  "version": "0.6.5",
-  "main": "./dist/pennsieve-visualization.umd.js",
-  "module": "./dist/pennsieve-visualization.es.js",
-  "style": "dist/style.css",
-  "files": [
-    "dist/"
-  ],
-  "exports": {
-    ".": {
-      "import": "./dist/pennsieve-visualization.es.js",
-      "require": "./dist/pennsieve-visualization.umd.js"
-    },
-    "./style.css": "./dist/style.css"
-  },
-  "sideEffects": [
-    "*.css"
-  ],
+  "name": "pennsieve-viz",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "type-check": "vue-tsc --noEmit"
-  },
-  "dependencies": {
-    "@duckdb/duckdb-wasm": "^1.29.1-dev132.0",
-    "@types/ramda": "^0.30.2",
-    "core-js": "^3.8.3",
-    "d3": "^7.9.0",
-    "hyparquet": "^1.12.1",
-    "ramda": "^0.31.3",
-    "marked": "^15.0.7",
-    "dompurify": "^3.2.6"
+    "dev": "pnpm --filter @pennsieve-viz/pennsieve-viz dev",
+    "build": "pnpm -r build",
+    "build:core": "pnpm --filter @pennsieve-viz/core build",
+    "build:duckdb": "pnpm --filter @pennsieve-viz/duckdb build",
+    "build:packages": "pnpm -r --filter './packages/*' build",
+    "type-check": "pnpm -r type-check",
+    "clean": "pnpm -r exec rm -rf dist",
+    "lint": "eslint packages --ext .ts,.vue",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@aws-amplify/auth": "^6.13.0",
+    "@changesets/cli": "^2.27.10",
     "@types/d3": "^7.4.3",
+    "@types/dompurify": "^3.0.5",
+    "@types/ramda": "^0.30.2",
     "@vitejs/plugin-vue": "^5.1.4",
     "@vue/tsconfig": "^0.7.0",
-    "pinia": "^3.0.3",
     "sass-embedded": "^1.90.0",
     "typescript": "^5.8.3",
     "vite": "^6.0.0-alpha.24",
+    "vite-plugin-dts": "^4.3.0",
     "vue": "^3.5.17",
-    "vue-tsc": "^3.0.3"
+    "vue-tsc": "^3.0.3",
+    "pinia": "^3.0.3"
   },
   "peerDependencies": {
-    "@aws-amplify/auth": "^6.5.4",
-    "pinia": "^3.0.3",
-    "vue": "^3.2.0"
+    "vue": "^3.2.0",
+    "pinia": "^3.0.3"
   },
-  "peerDependenciesMeta": {
-    "@aws-amplify/auth": {
-      "optional": true
-    }
-  }
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  },
+  "packageManager": "pnpm@9.14.2"
 }

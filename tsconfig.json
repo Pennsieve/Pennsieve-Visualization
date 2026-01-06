@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@pennsieve-viz/core": ["./packages/core/src"],
+      "@pennsieve-viz/duckdb": ["./packages/duckdb/src"],
+      "@pennsieve-viz/data-explorer": ["./packages/data-explorer/src"],
+      "@pennsieve-viz/umap": ["./packages/umap/src"],
+      "@pennsieve-viz/proportion-plot": ["./packages/proportion-plot/src"],
+      "@pennsieve-viz/markdown": ["./packages/markdown/src"],
+      "@pennsieve-viz/text-viewer": ["./packages/text-viewer/src"],
+      "@pennsieve-viz/ai-plotly": ["./packages/ai-plotly/src"],
+      "@pennsieve-viz/pennsieve-viz": ["./packages/pennsieve-viz/src"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.vue"],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/duckdb" },
+    { "path": "./packages/data-explorer" },
+    { "path": "./packages/umap" },
+    { "path": "./packages/proportion-plot" },
+    { "path": "./packages/markdown" },
+    { "path": "./packages/text-viewer" },
+    { "path": "./packages/ai-plotly" },
+    { "path": "./packages/pennsieve-viz" }
+  ]
+}

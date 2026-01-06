@@ -1,0 +1,54 @@
+{
+  "name": "@pennsieve-viz/pennsieve-viz",
+  "version": "0.1.0",
+  "description": "Meta-package that re-exports all Pennsieve visualization components",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@pennsieve-viz/core": "workspace:*",
+    "@pennsieve-viz/duckdb": "workspace:*",
+    "@pennsieve-viz/data-explorer": "workspace:*",
+    "@pennsieve-viz/umap": "workspace:*",
+    "@pennsieve-viz/proportion-plot": "workspace:*",
+    "@pennsieve-viz/markdown": "workspace:*",
+    "@pennsieve-viz/text-viewer": "workspace:*",
+    "@pennsieve-viz/ai-plotly": "workspace:*",
+    "tsviewer": "workspace:*",
+    "element-plus": "^2.3.0"
+  },
+  "peerDependencies": {
+    "pinia": "^3.0.3",
+    "plotly.js": "^2.35.0",
+    "vue": "^3.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-amplify/auth": {
+      "optional": true
+    },
+    "plotly.js": {
+      "optional": true
+    }
+  }
+}
