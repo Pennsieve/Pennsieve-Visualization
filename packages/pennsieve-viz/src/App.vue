@@ -6,7 +6,7 @@
     <section class="component-section">
       <h2 class="component-label">Markdown</h2>
       <p class="component-path">@pennsieve-viz/markdown</p>
-      <div class="component-container" style="height: 300px;">
+      <div class="component-container" style="height: 300px">
         <Markdown
           mode="preview"
           markdownText="# Markdown Preview
@@ -29,11 +29,8 @@ const hello = 'world';
     <section class="component-section">
       <h2 class="component-label">TextViewer</h2>
       <p class="component-path">@pennsieve-viz/text-viewer</p>
-      <div class="component-container" style="height: 200px;">
-        <TextViewer
-          :content="sampleTextContent"
-          filename="example.txt"
-        />
+      <div class="component-container" style="height: 200px">
+        <TextViewer :content="sampleTextContent" filename="example.txt" />
       </div>
     </section>
 
@@ -41,11 +38,8 @@ const hello = 'world';
     <section class="component-section">
       <h2 class="component-label">AiPlotly</h2>
       <p class="component-path">@pennsieve-viz/ai-plotly</p>
-      <div class="component-container" style="height: 400px;">
-        <AiPlotly
-          :data="samplePlotlyData"
-          :layout="samplePlotlyLayout"
-        />
+      <div class="component-container" style="height: 400px">
+        <AiPlotly :data="samplePlotlyData" :layout="samplePlotlyLayout" />
       </div>
     </section>
 
@@ -53,15 +47,11 @@ const hello = 'world';
     <section class="component-section">
       <h2 class="component-label">DataExplorer</h2>
       <p class="component-path">@pennsieve-viz/data-explorer</p>
-      <p class="component-note">Requires: apiUrl, pkg (package info), optional token</p>
-      <div class="component-container" style="height: 400px; background: #f5f5f5;">
-        <p class="placeholder">DataExplorer - Needs API connection to display tabular data</p>
-        <!-- Uncomment when you have valid API data:
-        <DataExplorer
-          :apiUrl="apiUrl"
-          :pkg="samplePackage"
-        />
-        -->
+      <div
+        class="component-container"
+        style="height: 400px; background: #f5f5f5"
+      >
+        <DataExplorer :src-url="apiUrl" />
       </div>
     </section>
 
@@ -69,15 +59,11 @@ const hello = 'world';
     <section class="component-section">
       <h2 class="component-label">UMAP</h2>
       <p class="component-path">@pennsieve-viz/umap</p>
-      <p class="component-note">Requires: apiUrl, pkg (parquet file), optional token</p>
-      <div class="component-container" style="height: 400px; background: #f5f5f5;">
-        <p class="placeholder">UMAP - Needs parquet file data for scatter plot visualization</p>
-        <!-- Uncomment when you have valid parquet data:
-        <UMAP
-          :apiUrl="apiUrl"
-          :pkg="sampleParquetPackage"
-        />
-        -->
+      <div
+        class="component-container"
+        style="height: 400px; background: #f5f5f5"
+      >
+        <UMAP :src-url="apiUrl" />
       </div>
     </section>
 
@@ -85,17 +71,23 @@ const hello = 'world';
     <section class="component-section">
       <h2 class="component-label">ProportionPlot</h2>
       <p class="component-path">@pennsieve-viz/proportion-plot</p>
-      <p class="component-note">Requires: apiUrl, pkg, xKey, yKey for stacked bar chart</p>
-      <div class="component-container" style="height: 400px; background: #f5f5f5;">
-        <p class="placeholder">ProportionPlot - Needs data source for proportion visualization</p>
-        <!-- Uncomment when you have valid data:
-        <ProportionPlot
-          :apiUrl="apiUrl"
-          :pkg="samplePackage"
-          xKey="category"
-          yKey="value"
-        />
-        -->
+      <div
+        class="component-container"
+        style="height: 400px; background: #f5f5f5"
+      >
+        <ProportionPlot :src-url="apiUrl" xKey="category" yKey="value" />
+      </div>
+    </section>
+
+    <!-- TSViewer Component -->
+    <section class="component-section">
+      <h2 class="component-label">TSViewer</h2>
+      <p class="component-path">tsviewer</p>
+      <div
+        class="component-container"
+        style="height: 500px; background: #f5f5f5"
+      >
+        <TSViewer />
       </div>
     </section>
 
@@ -112,16 +104,17 @@ const hello = 'world';
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref } from "vue";
 import {
   Markdown,
   TextViewer,
   AiPlotly,
-  // DataExplorer,
-  // UMAP,
-  // ProportionPlot,
-  EditIcon
-} from './index'
+  DataExplorer,
+  UMAP,
+  ProportionPlot,
+  EditIcon,
+  TSViewer,
+} from "./index";
 
 // Sample data for TextViewer
 const sampleTextContent = ref(`This is sample text content.
@@ -130,51 +123,53 @@ The TextViewer component handles plain text files.
 
 Line 4
 Line 5
-Line 6`)
+Line 6`);
 
 // Sample data for AiPlotly
 const samplePlotlyData = ref([
   {
     x: [1, 2, 3, 4, 5],
     y: [10, 15, 13, 17, 22],
-    type: 'scatter',
-    mode: 'lines+markers',
-    name: 'Sample Data',
-    marker: { color: 'blue' }
+    type: "scatter",
+    mode: "lines+markers",
+    name: "Sample Data",
+    marker: { color: "blue" },
   },
   {
     x: [1, 2, 3, 4, 5],
     y: [12, 9, 15, 12, 18],
-    type: 'bar',
-    name: 'Bar Data',
-    marker: { color: 'orange' }
-  }
-])
+    type: "bar",
+    name: "Bar Data",
+    marker: { color: "orange" },
+  },
+]);
 
 const samplePlotlyLayout = ref({
-  title: 'Sample Plotly Chart',
-  xaxis: { title: 'X Axis' },
-  yaxis: { title: 'Y Axis' }
-})
+  title: "Sample Plotly Chart",
+  xaxis: { title: "X Axis" },
+  yaxis: { title: "Y Axis" },
+});
 
 // API configuration (update these for real data)
-const apiUrl = ref('https://api.pennsieve.net')
+const apiUrl = ref(
+  "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
+);
 
 const samplePackage = ref({
   content: {
-    id: 'N:package:example-id',
-    name: 'example.csv',
-    packageType: 'CSV',
-    datasetId: 'N:dataset:example-dataset',
-    state: 'READY',
-    createdAt: new Date().toISOString()
-  }
-})
+    id: "N:package:example-id",
+    name: "example.csv",
+    packageType: "CSV",
+    datasetId: "N:dataset:example-dataset",
+    state: "READY",
+    createdAt: new Date().toISOString(),
+  },
+});
 </script>
 
 <style lang="scss">
 .playground {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
@@ -183,7 +178,7 @@ const samplePackage = ref({
     text-align: center;
     color: #333;
     margin-bottom: 40px;
-    border-bottom: 2px solid #2196F3;
+    border-bottom: 2px solid #2196f3;
     padding-bottom: 10px;
   }
 }
@@ -197,7 +192,7 @@ const samplePackage = ref({
 }
 
 .component-label {
-  background: #2196F3;
+  background: #2196f3;
   color: white;
   margin: 0;
   padding: 12px 20px;
@@ -206,7 +201,7 @@ const samplePackage = ref({
 
 .component-path {
   background: #e3f2fd;
-  color: #1565C0;
+  color: #1565c0;
   margin: 0;
   padding: 8px 20px;
   font-family: monospace;

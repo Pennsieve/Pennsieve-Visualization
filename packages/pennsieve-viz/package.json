@@ -34,7 +34,9 @@
     "@pennsieve-viz/proportion-plot": "workspace:*",
     "@pennsieve-viz/markdown": "workspace:*",
     "@pennsieve-viz/text-viewer": "workspace:*",
-    "@pennsieve-viz/ai-plotly": "workspace:*"
+    "@pennsieve-viz/ai-plotly": "workspace:*",
+    "tsviewer": "workspace:*",
+    "element-plus": "^2.3.0"
   },
   "peerDependencies": {
     "pinia": "^3.0.3",

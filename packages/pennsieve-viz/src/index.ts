@@ -32,6 +32,10 @@ export const AiPlotly = defineAsyncComponent(
   () => import('@pennsieve-viz/ai-plotly').then(m => m.AiPlotly)
 )
 
+export const TSViewer = defineAsyncComponent(
+  () => import('tsviewer').then(m => m.TSViewer)
+)
+
 // Direct exports (not lazy-loaded) for consumers who want them
 export * from '@pennsieve-viz/data-explorer'
 export * from '@pennsieve-viz/umap'
@@ -39,3 +43,4 @@ export * from '@pennsieve-viz/proportion-plot'
 export * from '@pennsieve-viz/markdown'
 export * from '@pennsieve-viz/text-viewer'
 export * from '@pennsieve-viz/ai-plotly'
+export * from 'tsviewer'

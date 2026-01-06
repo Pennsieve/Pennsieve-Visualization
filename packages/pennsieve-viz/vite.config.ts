@@ -21,7 +21,9 @@ export default defineConfig({
       '@pennsieve-viz/proportion-plot': resolve(__dirname, '../proportion-plot/src'),
       '@pennsieve-viz/markdown': resolve(__dirname, '../markdown/src'),
       '@pennsieve-viz/text-viewer': resolve(__dirname, '../text-viewer/src'),
-      '@pennsieve-viz/ai-plotly': resolve(__dirname, '../ai-plotly/src')
+      '@pennsieve-viz/ai-plotly': resolve(__dirname, '../ai-plotly/src'),
+      'tsviewer': resolve(__dirname, '../ts-viewer/src'),
+      '@': resolve(__dirname, '../ts-viewer/src')
     }
   },
   build: {
@@ -45,7 +47,8 @@ export default defineConfig({
         '@pennsieve-viz/proportion-plot',
         '@pennsieve-viz/markdown',
         '@pennsieve-viz/text-viewer',
-        '@pennsieve-viz/ai-plotly'
+        '@pennsieve-viz/ai-plotly',
+        'tsviewer'
       ],
       output: {
         globals: {
