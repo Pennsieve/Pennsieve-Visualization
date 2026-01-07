@@ -137,6 +137,9 @@ importers:
       '@pennsieve-viz/text-viewer':
         specifier: workspace:*
         version: link:../text-viewer
+      '@pennsieve-viz/tsviewer':
+        specifier: workspace:*
+        version: link:../ts-viewer
       '@pennsieve-viz/umap':
         specifier: workspace:*
         version: link:../umap
@@ -149,9 +152,6 @@ importers:
       plotly.js:
         specifier: ^2.35.0
         version: 2.35.3(mapbox-gl@1.13.3)(webpack@5.104.1)
-      tsviewer:
-        specifier: workspace:*
-        version: link:../ts-viewer
       vue:
         specifier: ^3.2.0
         version: 3.5.26(typescript@5.9.3)

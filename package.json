@@ -1,14 +1,12 @@
 {
-  "name": "pennsieve-viz",
+  "name": "pennsieve-viz-monorepo",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @pennsieve-viz/pennsieve-viz dev",
-    "build": "pnpm -r build",
-    "build:core": "pnpm --filter @pennsieve-viz/core build",
-    "build:duckdb": "pnpm --filter @pennsieve-viz/duckdb build",
-    "build:packages": "pnpm -r --filter './packages/*' build",
+    "dev": "pnpm --filter @pennsieve-viz/lib dev",
+    "build": "pnpm --filter @pennsieve-viz/lib build && pnpm --filter @pennsieve-viz/tsviewer build",
+    "build:lib": "pnpm --filter @pennsieve-viz/lib build",
+    "build:tsviewer": "pnpm --filter @pennsieve-viz/tsviewer build",
     "type-check": "pnpm -r type-check",
     "clean": "pnpm -r exec rm -rf dist",
     "lint": "eslint packages --ext .ts,.vue",
@@ -30,10 +28,6 @@
     "vite-plugin-dts": "^4.3.0",
     "vue": "^3.5.17",
     "vue-tsc": "^3.0.3",
-    "pinia": "^3.0.3"
-  },
-  "peerDependencies": {
-    "vue": "^3.2.0",
     "pinia": "^3.0.3"
   },
   "engines": {
