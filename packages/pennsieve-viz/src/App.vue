@@ -91,6 +91,21 @@ const hello = 'world';
       </div>
     </section>
 
+    <!-- OmeViewer (Micro-CT) Component -->
+    <section class="component-section">
+      <h2 class="component-label">OmeViewer (Micro-CT)</h2>
+      <p class="component-path">@pennsieve-viz/micro-ct</p>
+      <div
+        class="component-container"
+        style="height: 600px; background: #0f0f0f"
+      >
+        <OmeViewer
+          :source="omeZarrSource"
+          source-type="ome-zarr"
+        />
+      </div>
+    </section>
+
     <!-- EditIcon Component -->
     <section class="component-section">
       <h2 class="component-label">EditIcon</h2>
@@ -114,6 +129,7 @@ import {
   ProportionPlot,
   EditIcon,
   TSViewer,
+  OmeViewer,
 } from "./index";
 
 // Sample data for TextViewer
@@ -153,6 +169,11 @@ const samplePlotlyLayout = ref({
 // API configuration (update these for real data)
 const apiUrl = ref(
   "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
+);
+
+// OME-Zarr test source (3D OME-Zarr with Z-stack and tiled zoom)
+const omeZarrSource = ref(
+  "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001257.zarr"
 );
 
 const samplePackage = ref({

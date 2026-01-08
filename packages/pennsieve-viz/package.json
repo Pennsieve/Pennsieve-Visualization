@@ -35,7 +35,8 @@
     "pinia": "^2.0.0 || ^3.0.0",
     "plotly.js": "^2.35.0",
     "@aws-amplify/auth": "^6.0.0",
-    "@pennsieve-viz/tsviewer": "^1.0.0"
+    "@pennsieve-viz/tsviewer": "^1.0.0",
+    "@pennsieve-viz/micro-ct": "^1.0.0"
   },
   "peerDependenciesMeta": {
     "plotly.js": {
@@ -45,6 +46,9 @@
       "optional": true
     },
     "@pennsieve-viz/tsviewer": {
+      "optional": true
+    },
+    "@pennsieve-viz/micro-ct": {
       "optional": true
     }
   },
