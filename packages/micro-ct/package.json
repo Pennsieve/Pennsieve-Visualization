@@ -25,7 +25,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@deck.gl/core": "^9.0.0",
+    "@deck.gl/core": "~9.1.0",
+    "@deck.gl/extensions": "~9.1.0",
+    "@deck.gl/geo-layers": "~9.1.0",
+    "@deck.gl/layers": "~9.1.0",
+    "@deck.gl/mesh-layers": "~9.1.0",
+    "@luma.gl/constants": "~9.1.0",
+    "@luma.gl/core": "~9.1.0",
+    "@luma.gl/engine": "~9.1.0",
+    "@luma.gl/shadertools": "~9.1.0",
+    "@luma.gl/webgl": "~9.1.0",
     "@vivjs/extensions": "^0.18.0",
     "@vivjs/layers": "^0.18.0",
     "@vivjs/loaders": "^0.18.0",

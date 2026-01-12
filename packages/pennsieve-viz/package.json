@@ -52,6 +52,10 @@
       "optional": true
     }
   },
+  "devDependencies": {
+    "@pennsieve-viz/micro-ct": "workspace:*",
+    "@pennsieve-viz/tsviewer": "workspace:*"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Pennsieve/pennsieve-visualization.git",

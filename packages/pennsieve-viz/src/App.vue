@@ -99,10 +99,7 @@ const hello = 'world';
         class="component-container"
         style="height: 600px; background: #0f0f0f"
       >
-        <OmeViewer
-          :source="omeZarrSource"
-          source-type="ome-zarr"
-        />
+        <OmeViewer :source="omeTiffSource" source-type="ome-tiff" />
       </div>
     </section>
 
@@ -131,6 +128,8 @@ import {
   TSViewer,
   OmeViewer,
 } from "./index";
+import "@pennsieve-viz/micro-ct/style.css";
+import "@pennsieve-viz/tsviewer/style.css";
 
 // Sample data for TextViewer
 const sampleTextContent = ref(`This is sample text content.
@@ -172,8 +171,8 @@ const apiUrl = ref(
 );
 
 // OME-Zarr test source (3D OME-Zarr with Z-stack and tiled zoom)
-const omeZarrSource = ref(
-  "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001257.zarr"
+const omeTiffSource = ref(
+  "https://pennsieve-dev-zarr-test-use1.s3.us-east-1.amazonaws.com/ddb6cb43-3749-4e9d-9c59-e2d4a8aa7f5a/sam-SR042-CL1-Downsampled4x.ome.tiff"
 );
 
 const samplePackage = ref({

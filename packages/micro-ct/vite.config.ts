@@ -17,7 +17,7 @@ export default defineConfig({
       fileName: (format) => `index.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
-      external: ["vue", "@deck.gl/core", "@vivjs/layers", "@vivjs/extensions", "@vivjs/views", "@vivjs/loaders", "geotiff"],
+      external: ["vue"],
       output: {
         exports: "named",
         globals: {

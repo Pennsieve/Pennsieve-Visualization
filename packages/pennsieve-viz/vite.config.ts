@@ -45,6 +45,7 @@ export default defineConfig({
         "plotly.js",
         "@aws-amplify/auth",
         "@pennsieve-viz/tsviewer",
+        "@pennsieve-viz/micro-ct",
       ],
       output: {
         globals: {

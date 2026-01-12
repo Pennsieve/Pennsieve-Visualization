@@ -6,9 +6,8 @@ import { ColorPaletteExtension } from "@vivjs/extensions";
 import { getDefaultInitialViewState, DetailView } from "@vivjs/views";
 
 import OmeViewerControls from "./OmeViewerControls.vue";
-import OmeOrthogonalViewer from "./OmeOrthogonalViewer.vue";
 import { useOmeLoader } from "./useOmeLoader";
-import type { SourceType, ViewerLayerProps, OmeDimensions } from "./types";
+import type { SourceType, ViewerLayerProps } from "./types";
 
 // Props
 interface Props {
@@ -28,14 +27,6 @@ let deckInstance: Deck | null = null;
 let tileLoadingTimeout: ReturnType<typeof setTimeout> | null = null;
 let tileLoadingDebounce: ReturnType<typeof setTimeout> | null = null;
 let sliceUpdateDebounce: ReturnType<typeof setTimeout> | null = null;
-
-// 3D detection and orthogonal viewer state
-const is3D = ref(false);
-const loadedData = ref<{
-  loader: any[];
-  metadata: any;
-  dimensions: OmeDimensions;
-} | null>(null);
 
 // Dimension navigation state
 const currentZ = ref(0);
@@ -225,27 +216,6 @@ async function initializeViewer() {
 
   const { loader, metadata, dimensions, isCustomLoader } = result;
 
-  // Detect if this is a 3D dataset suitable for orthogonal views
-  const hasZAxis = dimensions.labels.includes('z');
-  const detected3D = hasZAxis && dimensions.sizeZ > 1;
-  console.log('is3D:', detected3D, {
-    hasZAxis,
-    sizeZ: dimensions.sizeZ,
-    shape: dimensions.shape,
-    labels: dimensions.labels,
-  });
-
-  // Store loaded data and 3D detection
-  is3D.value = detected3D;
-  loadedData.value = { loader, metadata, dimensions };
-
-  // If 3D, the orthogonal viewer component will handle rendering
-  if (detected3D) {
-    console.log('Using orthogonal viewer for 3D data');
-    return;
-  }
-
-  // 2D data - use regular single-panel viewer
   if (!containerRef.value) return;
 
   // Store dimension info for navigation
@@ -331,8 +301,6 @@ function cleanup() {
   }
   currentLoader = null;
   currentLayerProps = null;
-  is3D.value = false;
-  loadedData.value = null;
 }
 
 // Watchers
@@ -379,16 +347,8 @@ onUnmounted(() => {
       <span>{{ error.message }}</span>
     </div>
 
-    <!-- 3D Orthogonal Viewer -->
-    <OmeOrthogonalViewer
-      v-if="is3D && loadedData"
-      :loader="loadedData.loader"
-      :metadata="loadedData.metadata"
-      :dimensions="loadedData.dimensions"
-    />
-
-    <!-- 2D Single-panel Viewer -->
-    <template v-else-if="!isLoading && !is3D">
+    <!-- Single-panel Viewer -->
+    <template v-if="!isLoading && !error">
       <!-- Tile loading indicator -->
       <div v-if="isTileLoading" class="ome-viewer-tile-loading">
         <div class="tile-spinner"></div>
