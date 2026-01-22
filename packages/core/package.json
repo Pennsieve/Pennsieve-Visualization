@@ -1,39 +1,74 @@
 {
   "name": "@pennsieve-viz/core",
-  "version": "0.1.0",
+  "version": "0.1.01",
+  "description": "Pennsieve visualization component library for scientific data",
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/pennsieve-viz.cjs.js",
+  "module": "./dist/pennsieve-viz.es.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./dist/pennsieve-viz.es.js",
+      "require": "./dist/pennsieve-viz.cjs.js"
     },
-    "./styles/theme": {
-      "import": "./src/styles/theme.scss",
-      "default": "./src/styles/theme.scss"
-    },
-    "./styles/*": "./src/styles/*"
+    "./style.css": "./dist/style.css",
+    "./styles/theme.scss": "./src/styles/theme.scss"
   },
   "files": [
-    "dist"
+    "dist",
+    "src/styles"
   ],
   "sideEffects": [
     "*.css",
     "*.scss"
   ],
   "scripts": {
+    "dev": "vite",
     "build": "vite build",
+    "preview": "vite preview",
     "type-check": "vue-tsc --noEmit"
   },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.29.1-dev132.0",
+    "@element-plus/icons-vue": "^2.3.1",
+    "d3": "^7.9.0",
+    "dompurify": "^3.2.6",
+    "element-plus": "^2.3.0",
+    "hyparquet": "^1.12.1",
+    "marked": "^15.0.7",
+    "ramda": "^0.31.3"
+  },
   "peerDependencies": {
+    "@aws-amplify/auth": "^6.0.0",
+    "@pennsieve-viz/micro-ct": "^1.0.0",
+    "@pennsieve-viz/tsviewer": "^1.0.0",
+    "pinia": "^2.0.0 || ^3.0.0",
+    "plotly.js": "^2.35.0",
     "vue": "^3.2.0"
   },
   "peerDependenciesMeta": {
     "@aws-amplify/auth": {
       "optional": true
+    },
+    "@pennsieve-viz/micro-ct": {
+      "optional": true
+    },
+    "@pennsieve-viz/tsviewer": {
+      "optional": true
+    },
+    "plotly.js": {
+      "optional": true
     }
-  }
+  },
+  "devDependencies": {
+    "@pennsieve-viz/micro-ct": "workspace:*",
+    "@pennsieve-viz/tsviewer": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pennsieve/pennsieve-visualization.git",
+    "directory": "packages/core"
+  },
+  "license": "MIT"
 }

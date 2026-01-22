@@ -54,68 +54,51 @@ importers:
         specifier: ^3.0.3
         version: 3.1.8(typescript@5.9.3)
 
-  packages/ai-plotly:
+  packages/core:
     dependencies:
-      '@pennsieve-viz/core':
-        specifier: workspace:*
-        version: link:../core
+      '@aws-amplify/auth':
+        specifier: ^6.0.0
+        version: 6.17.1(@aws-amplify/core@6.15.0)
+      '@duckdb/duckdb-wasm':
+        specifier: ^1.29.1-dev132.0
+        version: 1.30.0
+      '@element-plus/icons-vue':
+        specifier: ^2.3.1
+        version: 2.3.1(vue@3.5.26(typescript@5.9.3))
+      d3:
+        specifier: ^7.9.0
+        version: 7.9.0
+      dompurify:
+        specifier: ^3.2.6
+        version: 3.3.1
+      element-plus:
+        specifier: ^2.3.0
+        version: 2.10.2(vue@3.5.26(typescript@5.9.3))
+      hyparquet:
+        specifier: ^1.12.1
+        version: 1.23.2
+      marked:
+        specifier: ^15.0.7
+        version: 15.0.12
+      pinia:
+        specifier: ^2.0.0 || ^3.0.0
+        version: 3.0.4(typescript@5.9.3)(vue@3.5.26(typescript@5.9.3))
       plotly.js:
         specifier: ^2.35.0
         version: 2.35.3(mapbox-gl@1.13.3)(webpack@5.104.1)
-      vue:
-        specifier: ^3.2.0
-        version: 3.5.26(typescript@5.9.3)
-
-  packages/core:
-    dependencies:
-      vue:
-        specifier: ^3.2.0
-        version: 3.5.26(typescript@5.9.3)
-
-  packages/data-explorer:
-    dependencies:
-      '@pennsieve-viz/core':
-        specifier: workspace:*
-        version: link:../core
-      '@pennsieve-viz/duckdb':
-        specifier: workspace:*
-        version: link:../duckdb
-      pinia:
-        specifier: ^3.0.3
-        version: 3.0.4(typescript@5.9.3)(vue@3.5.26(typescript@5.9.3))
       ramda:
         specifier: ^0.31.3
         version: 0.31.3
       vue:
         specifier: ^3.2.0
         version: 3.5.26(typescript@5.9.3)
-
-  packages/duckdb:
-    dependencies:
-      '@duckdb/duckdb-wasm':
-        specifier: ^1.29.1-dev132.0
-        version: 1.30.0
-      pinia:
-        specifier: ^3.0.3
-        version: 3.0.4(typescript@5.9.3)(vue@3.5.26(typescript@5.9.3))
-      vue:
-        specifier: ^3.2.0
-        version: 3.5.26(typescript@5.9.3)
-
-  packages/markdown:
-    dependencies:
-      '@pennsieve-viz/core':
+    devDependencies:
+      '@pennsieve-viz/micro-ct':
         specifier: workspace:*
-        version: link:../core
-      dompurify:
-        specifier: ^3.2.6
-        version: 3.3.1
-      marked:
-        specifier: ^15.0.7
-        version: 15.0.12
-      vue:
-        specifier: ^3.2.0
-        version: 3.5.26(typescript@5.9.3)
+        version: link:../micro-ct
+      '@pennsieve-viz/tsviewer':
+        specifier: workspace:*
+        version: link:../ts-viewer
 
   packages/micro-ct:
     dependencies:
@@ -178,61 +161,6 @@ importers:
         specifier: ^3.5.17
         version: 3.5.26(typescript@5.9.3)
 
-  packages/pennsieve-viz:
-    dependencies:
-      '@aws-amplify/auth':
-        specifier: ^6.0.0
-        version: 6.17.1(@aws-amplify/core@6.15.0)
-      '@element-plus/icons-vue':
-        specifier: ^2.3.1
-        version: 2.3.1(vue@3.5.26(typescript@5.9.3))
-      element-plus:
-        specifier: ^2.3.0
-        version: 2.13.0(vue@3.5.26(typescript@5.9.3))
-      pinia:
-        specifier: ^2.0.0 || ^3.0.0
-        version: 3.0.4(typescript@5.9.3)(vue@3.5.26(typescript@5.9.3))
-      plotly.js:
-        specifier: ^2.35.0
-        version: 2.35.3(mapbox-gl@1.13.3)(webpack@5.104.1)
-      vue:
-        specifier: ^3.2.0
-        version: 3.5.26(typescript@5.9.3)
-    devDependencies:
-      '@pennsieve-viz/micro-ct':
-        specifier: workspace:*
-        version: link:../micro-ct
-      '@pennsieve-viz/tsviewer':
-        specifier: workspace:*
-        version: link:../ts-viewer
-
-  packages/proportion-plot:
-    dependencies:
-      '@pennsieve-viz/core':
-        specifier: workspace:*
-        version: link:../core
-      '@pennsieve-viz/duckdb':
-        specifier: workspace:*
-        version: link:../duckdb
-      pinia:
-        specifier: ^3.0.3
-        version: 3.0.4(typescript@5.9.3)(vue@3.5.26(typescript@5.9.3))
-      plotly.js:
-        specifier: ^2.35.0
-        version: 2.35.3(mapbox-gl@1.13.3)(webpack@5.104.1)
-      vue:
-        specifier: ^3.2.0
-        version: 3.5.26(typescript@5.9.3)
-
-  packages/text-viewer:
-    dependencies:
-      '@pennsieve-viz/core':
-        specifier: workspace:*
-        version: link:../core
-      vue:
-        specifier: ^3.2.0
-        version: 3.5.26(typescript@5.9.3)
-
   packages/ts-viewer:
     dependencies:
       '@element-plus/icons-vue':
@@ -286,27 +214,6 @@ importers:
         version: 6.4.1(@types/node@25.0.3)(sass-embedded@1.97.0)(sass@1.97.0)(terser@5.44.1)
       vue:
         specifier: ^3.5.17
-        version: 3.5.26(typescript@5.9.3)
-
-  packages/umap:
-    dependencies:
-      '@pennsieve-viz/core':
-        specifier: workspace:*
-        version: link:../core
-      '@pennsieve-viz/duckdb':
-        specifier: workspace:*
-        version: link:../duckdb
-      d3:
-        specifier: ^7.9.0
-        version: 7.9.0
-      hyparquet:
-        specifier: ^1.12.1
-        version: 1.23.2
-      pinia:
-        specifier: ^3.0.3
-        version: 3.0.4(typescript@5.9.3)(vue@3.5.26(typescript@5.9.3))
-      vue:
-        specifier: ^3.2.0
         version: 3.5.26(typescript@5.9.3)
 
 packages:
@@ -638,11 +545,6 @@ packages:
 
   '@element-plus/icons-vue@2.3.1':
     resolution: {integrity: sha512-XxVUZv48RZAd87ucGS48jPf6pKu0yV5UCg9f4FFwtrYxXOwWuVJo6wOvSLKEoMQKjv8GsX/mhP6UsC1lRwbUWg==}
-    peerDependencies:
-      vue: ^3.2.0
-
-  '@element-plus/icons-vue@2.3.2':
-    resolution: {integrity: sha512-OzIuTaIfC8QXEPmJvB4Y4kw34rSXdCJzxcD1kFStBvr8bK6X1zQAYDo0CNMjojnfTqRQCJ0I7prlErcoRiET2A==}
     peerDependencies:
       vue: ^3.2.0
 
@@ -2672,11 +2574,6 @@ packages:
     resolution: {integrity: sha512-p2KiAa0jEGXrzdlTAfpiS7HQFAhla4gvx6H7RuDf+OO0uC3DGpolxvdHjFR8gt7+vaWyxQNcHa1sAdBkmjqlgA==}
     peerDependencies:
       vue: ^3.2.0
-
-  element-plus@2.13.0:
-    resolution: {integrity: sha512-qjxS+SBChvqCl6lU6ShiliLMN6WqFHiXQENYbAY3GKNflG+FS3jqn8JmQq0CBZq4koFqsi95NT1M6SL4whZfrA==}
-    peerDependencies:
-      vue: ^3.3.0
 
   element-size@1.1.1:
     resolution: {integrity: sha512-eaN+GMOq/Q+BIWy0ybsgpcYImjGIdNLyjLFJU4XsLHXYQao5jCNb36GyN6C2qwmDDYSfIBmKpPpr4VnBdLCsPQ==}
@@ -5461,10 +5358,6 @@ snapshots:
     dependencies:
       vue: 3.5.26(typescript@5.9.3)
 
-  '@element-plus/icons-vue@2.3.2(vue@3.5.26(typescript@5.9.3))':
-    dependencies:
-      vue: 3.5.26(typescript@5.9.3)
-
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
 
@@ -6821,7 +6714,8 @@ snapshots:
 
   '@types/web-bluetooth@0.0.16': {}
 
-  '@types/web-bluetooth@0.0.20': {}
+  '@types/web-bluetooth@0.0.20':
+    optional: true
 
   '@vitejs/plugin-vue@5.2.4(vite@6.4.1(@types/node@25.0.3)(sass-embedded@1.97.0)(sass@1.97.0)(terser@5.44.1))(vue@3.5.26(typescript@5.9.3))':
     dependencies:
@@ -7024,6 +6918,7 @@ snapshots:
     transitivePeerDependencies:
       - '@vue/composition-api'
       - vue
+    optional: true
 
   '@vueuse/core@9.13.0(vue@3.5.26(typescript@5.9.3))':
     dependencies:
@@ -7035,7 +6930,8 @@ snapshots:
       - '@vue/composition-api'
       - vue
 
-  '@vueuse/metadata@10.11.1': {}
+  '@vueuse/metadata@10.11.1':
+    optional: true
 
   '@vueuse/metadata@9.13.0': {}
 
@@ -7045,6 +6941,7 @@ snapshots:
     transitivePeerDependencies:
       - '@vue/composition-api'
       - vue
+    optional: true
 
   '@vueuse/shared@9.13.0(vue@3.5.26(typescript@5.9.3))':
     dependencies:
@@ -7825,26 +7722,6 @@ snapshots:
       async-validator: 4.2.5
       dayjs: 1.11.19
       escape-html: 1.0.3
-      lodash: 4.17.21
-      lodash-es: 4.17.22
-      lodash-unified: 1.0.3(@types/lodash-es@4.17.12)(lodash-es@4.17.22)(lodash@4.17.21)
-      memoize-one: 6.0.0
-      normalize-wheel-es: 1.2.0
-      vue: 3.5.26(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@vue/composition-api'
-
-  element-plus@2.13.0(vue@3.5.26(typescript@5.9.3)):
-    dependencies:
-      '@ctrl/tinycolor': 3.6.1
-      '@element-plus/icons-vue': 2.3.2(vue@3.5.26(typescript@5.9.3))
-      '@floating-ui/dom': 1.7.4
-      '@popperjs/core': '@sxzz/popperjs-es@2.11.7'
-      '@types/lodash': 4.17.21
-      '@types/lodash-es': 4.17.12
-      '@vueuse/core': 10.11.1(vue@3.5.26(typescript@5.9.3))
-      async-validator: 4.2.5
-      dayjs: 1.11.19
       lodash: 4.17.21
       lodash-es: 4.17.22
       lodash-unified: 1.0.3(@types/lodash-es@4.17.12)(lodash-es@4.17.22)(lodash@4.17.21)
