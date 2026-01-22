@@ -40,6 +40,10 @@ export const OmeViewer = defineAsyncComponent(
   () => import('@pennsieve-viz/micro-ct').then(m => m.OmeViewer)
 )
 
+export const TiffViewer = defineAsyncComponent(
+  () => import('@pennsieve-viz/micro-ct').then(m => m.TiffViewer)
+)
+
 // Direct exports (not lazy-loaded) for consumers who want them
 export * from '@pennsieve-viz/data-explorer'
 export * from '@pennsieve-viz/umap'

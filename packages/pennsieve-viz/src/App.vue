@@ -103,6 +103,18 @@ const hello = 'world';
       </div>
     </section>
 
+    <!-- TiffViewer Component -->
+    <section class="component-section">
+      <h2 class="component-label">TiffViewer</h2>
+      <p class="component-path">@pennsieve-viz/micro-ct</p>
+      <div
+        class="component-container"
+        style="height: 600px; background: #0f0f0f"
+      >
+        <TiffViewer :source="TiffSource" />
+      </div>
+    </section>
+
     <!-- EditIcon Component -->
     <section class="component-section">
       <h2 class="component-label">EditIcon</h2>
@@ -127,6 +139,7 @@ import {
   EditIcon,
   TSViewer,
   OmeViewer,
+  TiffViewer,
 } from "./index";
 import "@pennsieve-viz/micro-ct/style.css";
 import "@pennsieve-viz/tsviewer/style.css";
@@ -174,6 +187,9 @@ const apiUrl = ref(
 const omeTiffSource = ref(
   "https://pennsieve-dev-zarr-test-use1.s3.us-east-1.amazonaws.com/ddb6cb43-3749-4e9d-9c59-e2d4a8aa7f5a/sam-SR042-CL1-Downsampled4x.ome.tiff"
 );
+const TiffSource = ref(
+  "/smallTest.tiff"
+)
 
 const samplePackage = ref({
   content: {

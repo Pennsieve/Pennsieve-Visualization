@@ -15,6 +15,7 @@ A monorepo containing Vue 3 visualization components for the Pennsieve platform.
 | `@pennsieve-viz/text-viewer` | Text file viewer component |
 | `@pennsieve-viz/ai-plotly` | AI-powered Plotly charts |
 | `@pennsieve-viz/tsviewer` | Timeseries data viewer component |
+| `@pennsieve-viz/micro-ct` | OME-TIFF/TIFF viewer components for microscopy data |
 | `@pennsieve-viz/pennsieve-viz` | Demo app / development playground |
 
 ## Requirements
@@ -35,6 +36,35 @@ Run the development server:
 ```bash
 pnpm dev
 ```
+
+This starts the dev server for `@pennsieve-viz/pennsieve-viz`, which serves `packages/pennsieve-viz/src/App.vue` as a playground for testing components.
+
+### Developing Packages
+
+When making changes to a package (e.g., `@pennsieve-viz/micro-ct`), you must **build the package** before the changes appear in the dev server:
+
+```bash
+# Build a specific package
+pnpm --filter @pennsieve-viz/micro-ct build
+
+# Then the dev server will pick up the changes on next refresh
+```
+
+**Workflow:**
+1. Make changes to a package in `packages/<package-name>/src/`
+2. Build that package: `pnpm --filter @pennsieve-viz/<package-name> build`
+3. Refresh the dev server in your browser to see changes
+
+This is because `pnpm dev` only watches the `pennsieve-viz` package itself. Other packages are imported from their built `dist/` folders.
+
+### Adding Components to the Playground
+
+To test a new component in the dev server:
+
+1. Export the component from your package's `index.ts`
+2. Build the package
+3. Import and add it to `packages/pennsieve-viz/src/index.ts`
+4. Use it in `packages/pennsieve-viz/src/App.vue`
 
 ## Build
 
