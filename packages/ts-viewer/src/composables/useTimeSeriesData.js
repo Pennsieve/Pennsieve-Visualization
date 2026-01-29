@@ -226,7 +226,9 @@ export const useTimeSeriesData = () => {
                     let countForChannel = requestedPage.counter.get(curChData.id)
 
                     if (isNaN(countForChannel)) {
-                        countForChannel = obj.nrResponses || 1
+                        // Handle missing nrResponses field - default to 1 if not provided
+                        const expectedResponses = obj.nrResponses !== undefined ? obj.nrResponses : 1
+                        countForChannel = expectedResponses
                         requestedPage.counter.set(curChData.id, countForChannel)
                     }
 
@@ -269,12 +271,6 @@ export const useTimeSeriesData = () => {
                         if (a.startTs > b.startTs) return 1
                         return 0
                     })
-
-                    // console.log('📈 Added data to cache:', {
-                    //     channelId: curChData.id,
-                    //     pageStart: obj.data.pageStart,
-                    //     nrPoints: obj.data.nrPoints
-                    // })
                 }
                 break
 
