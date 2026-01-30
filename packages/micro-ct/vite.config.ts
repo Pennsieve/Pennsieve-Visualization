@@ -17,7 +17,12 @@ export default defineConfig({
       fileName: (format) => `index.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
-      external: ["vue"],
+      external: [
+        "vue",
+        /^@deck\.gl\/.*/,
+        /^@luma\.gl\/.*/,
+        /^@vivjs\/.*/,
+      ],
       output: {
         exports: "named",
         globals: {
