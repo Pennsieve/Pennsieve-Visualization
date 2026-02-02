@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHandleXhrError } from '@/mixins/request/request_composable'
 import { useToken } from '@/composables/useToken'
-import { useViewerStore } from '@/stores/tsviewer' // Import Pinia store
+import { useViewerStore } from '../stores/tsviewer' // Import Pinia store
 
 export function useTsAnnotation() {
     const viewerStore = useViewerStore() // Add Pinia store

@@ -1,6 +1,6 @@
 // composables/useAnnotationLayers.js
 import { ref } from 'vue'
-import { useViewerStore } from '@/stores/tsviewer'
+import { useViewerStore } from '../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import EventBus from '@/utils/event-bus'

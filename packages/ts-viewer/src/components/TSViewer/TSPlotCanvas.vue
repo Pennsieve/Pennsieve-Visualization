@@ -25,7 +25,7 @@
 <script setup>
 import { computed, watch, onMounted, onUnmounted, reactive, ref,nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useViewerStore } from '@/stores/tsviewer'
+import { useViewerStore } from '../../stores/tsviewer'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useCanvasRenderer } from '@/composables/useCanvasRenderer'
 import { useTimeSeriesData } from '@/composables/useTimeSeriesData'

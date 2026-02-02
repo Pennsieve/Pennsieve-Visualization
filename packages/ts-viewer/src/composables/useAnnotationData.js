@@ -1,6 +1,6 @@
 // composables/useAnnotationData.js
 import { ref } from 'vue'
-import { useViewerStore } from '@/stores/tsviewer'
+import { useViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError } from "@/mixins/request/request_composable"

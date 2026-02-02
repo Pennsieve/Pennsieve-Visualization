@@ -1,6 +1,6 @@
 // composables/useAnnotationRendering.js
 import { ref, computed } from 'vue'
-import { useViewerStore } from '@/stores/tsviewer'
+import { useViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { propOr, pathOr } from 'ramda'
