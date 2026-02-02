@@ -101,7 +101,7 @@ import { storeToRefs } from 'pinia'
 import { find, propEq } from 'ramda'
 
 import TSPlotCanvas from "@/components/TSViewer/TSPlotCanvas.vue"
-import { useViewerStore } from "@/stores/tsviewer"
+import { useViewerStore } from "../../stores/tsviewer"
 
 // Import TimeseriesAnnotationCanvas properly
 const TimeseriesAnnotationCanvas = defineAsyncComponent(() =>

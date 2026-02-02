@@ -1,6 +1,6 @@
 // composables/useAnnotationInteraction.js
 import { ref } from 'vue'
-import { useViewerStore } from '@/stores/tsviewer'
+import { useViewerStore } from '../stores/tsviewer'
 
 export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets) {
     const viewerStore = useViewerStore()

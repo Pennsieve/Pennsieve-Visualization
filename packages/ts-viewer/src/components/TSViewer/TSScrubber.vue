@@ -34,7 +34,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { useViewerStore } from '@/stores/tsviewer'
+import { useViewerStore } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import { map } from 'ramda'

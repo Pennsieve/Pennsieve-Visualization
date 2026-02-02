@@ -139,7 +139,7 @@ import {
   isEmpty
 } from 'ramda'
 
-import { useViewerStore } from "@/stores/tsviewer"
+import { useViewerStore } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
 
 // Component imports (required for <script setup>)
