@@ -37,6 +37,13 @@ const fluidMode = ref(false);
 let currentLoader: any = null;
 let currentLayerProps: ViewerLayerProps | null = null;
 
+// Channel state
+const channels = ref<Array<{
+  name: string;
+  color: [number, number, number];
+  visible: boolean;
+}>>([]);
+
 // Default colors for channels
 const DEFAULT_COLORS: [number, number, number][] = [
   [255, 255, 255], // white for grayscale
@@ -152,6 +159,23 @@ function buildLayerProps(
       .fill(null)
       .map((_, i) => DEFAULT_COLORS[i % DEFAULT_COLORS.length]);
   }
+
+  // Get channel names
+  let channelNames: string[];
+  if (omeroChannels.length > 0) {
+    channelNames = omeroChannels.map((ch: any, i: number) => ch.label || ch.name || `Channel ${i + 1}`);
+  } else if (pixelsChannels.length > 0) {
+    channelNames = pixelsChannels.map((ch: any, i: number) => ch.Name || `Channel ${i + 1}`);
+  } else {
+    channelNames = Array(numChannels).fill(null).map((_, i) => `Channel ${i + 1}`);
+  }
+
+  // Populate the channels ref for the UI
+  channels.value = colors.map((color, i) => ({
+    name: channelNames[i],
+    color,
+    visible: channelsVisible[i],
+  }));
 
   const layerProps: ViewerLayerProps = {
     isCustomLoader: loader[0]._tiff !== undefined,
@@ -288,8 +312,20 @@ function updateSlice() {
     selections.push(selection);
   }
 
-  const layer = createLayer(currentLoader, selections, currentLayerProps);
+  // Use current channel visibility from UI state
+  const channelsVisible = channels.value.map(ch => ch.visible);
+
+  const layer = createLayer(currentLoader, selections, {
+    ...currentLayerProps,
+    channelsVisible,
+  });
   deckInstance.setProps({ layers: [layer] });
+}
+
+// Handle channel visibility toggle
+function onChannelVisibilityChange(index: number, visible: boolean) {
+  channels.value[index].visible = visible;
+  updateSlice();
 }
 
 // Cleanup
@@ -361,6 +397,8 @@ onUnmounted(() => {
         v-model:fluidMode="fluidMode"
         :maxZ="maxZ"
         :maxT="maxT"
+        :channels="channels"
+        @channel-visibility-change="onChannelVisibilityChange"
       />
 
       <!-- Deck.gl container -->
