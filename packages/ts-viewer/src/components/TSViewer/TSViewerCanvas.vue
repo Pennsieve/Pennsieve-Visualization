@@ -95,13 +95,14 @@ import {
   watch,
   nextTick,
   onMounted,
-  defineAsyncComponent
+  defineAsyncComponent,
+  inject
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { find, propEq } from 'ramda'
 
 import TSPlotCanvas from "@/components/TSViewer/TSPlotCanvas.vue"
-import { useViewerStore } from "../../stores/tsviewer"
+import { createViewerStore } from "../../stores/tsviewer"
 
 // Import TimeseriesAnnotationCanvas properly
 const TimeseriesAnnotationCanvas = defineAsyncComponent(() =>
@@ -136,8 +137,9 @@ const emit = defineEmits([
   'annLayersInitialized'
 ])
 
-// Store setup
-const viewerStore = useViewerStore()
+// Store setup - inject from parent TSViewer component
+// Falls back to default store for backwards compatibility
+const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
 const { viewerChannels, viewerAnnotations, viewerActiveTool, viewerSelectedChannels } = storeToRefs(viewerStore)
 
 // Template refs

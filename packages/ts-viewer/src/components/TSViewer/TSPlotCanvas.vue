@@ -23,9 +23,9 @@
 </template>
 
 <script setup>
-import { computed, watch, onMounted, onUnmounted, reactive, ref,nextTick } from 'vue'
+import { computed, watch, onMounted, onUnmounted, reactive, ref, nextTick, inject } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useViewerStore } from '../../stores/tsviewer'
+import { createViewerStore } from '../../stores/tsviewer'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useCanvasRenderer } from '@/composables/useCanvasRenderer'
 import { useTimeSeriesData } from '@/composables/useTimeSeriesData'
@@ -52,8 +52,9 @@ const emit = defineEmits(['channelsInitialized', 'setGlobalZoom'])
 const activeViewer = computed( () => props.activeViewer || {})
 const baseChannels = computed(() => activeViewer.value?.channels || [])
 
-// Pinia Store
-const viewerStore = useViewerStore()
+// Store - inject from parent TSViewer component
+// Falls back to default store for backwards compatibility
+const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
 const {
   viewerChannels,
   viewerMontageScheme,

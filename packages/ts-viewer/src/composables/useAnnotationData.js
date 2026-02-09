@@ -1,14 +1,19 @@
 // composables/useAnnotationData.js
-import { ref } from 'vue'
-import { useViewerStore } from '../stores/tsviewer'
+import { ref, inject } from 'vue'
+import { createViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError } from "@/mixins/request/request_composable"
 import { pathOr, propOr, head } from 'ramda'
 import { annIndexOf } from '@/utils/annotationUtils'
 
-export function useAnnotationData() {
-    const viewerStore = useViewerStore()
+/**
+ * Composable for annotation data management.
+ * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ */
+export function useAnnotationData(storeInstance = null) {
+    // Use provided store, inject from parent, or fall back to default
+    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
     const { viewerChannels, viewerAnnotations, viewerMontageScheme } = storeToRefs(viewerStore)
 
     // Reactive state
