@@ -1,21 +1,42 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 
+interface Channel {
+  name: string;
+  color: [number, number, number];
+  visible: boolean;
+}
+
 interface Props {
   currentZ: number;
   currentT: number;
   maxZ: number;
   maxT: number;
   fluidMode: boolean;
+  channels: Channel[];
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  channels: () => [],
+});
 
 const emit = defineEmits<{
   "update:currentZ": [value: number];
   "update:currentT": [value: number];
   "update:fluidMode": [value: boolean];
+  "channel-visibility-change": [index: number, visible: boolean];
 }>();
+
+const showChannels = computed(() => props.channels.length > 1);
+
+function rgbToHex(color: [number, number, number]): string {
+  return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+}
+
+function onChannelToggle(index: number, event: Event) {
+  const checked = (event.target as HTMLInputElement).checked;
+  emit("channel-visibility-change", index, checked);
+}
 
 const showZSlider = computed(() => props.maxZ > 0);
 const showTSlider = computed(() => props.maxT > 0);
@@ -155,6 +176,31 @@ function incrementZ() {
         class="slider"
         @input="onTChange"
       />
+    </div>
+
+    <!-- Channel toggles -->
+    <div v-if="showChannels" class="slider-container channels-container">
+      <div class="channels-header">
+        <span class="slider-label">Channels</span>
+      </div>
+      <div class="channels-list">
+        <label
+          v-for="(channel, index) in channels"
+          :key="index"
+          class="channel-toggle"
+        >
+          <input
+            type="checkbox"
+            :checked="channel.visible"
+            @change="onChannelToggle(index, $event)"
+          />
+          <span
+            class="channel-color"
+            :style="{ backgroundColor: rgbToHex(channel.color) }"
+          ></span>
+          <span class="channel-name">{{ channel.name }}</span>
+        </label>
+      </div>
     </div>
   </div>
 </template>
@@ -358,5 +404,79 @@ function incrementZ() {
   border-radius: 50%;
   cursor: pointer;
   border: none;
+}
+
+/* Channel controls */
+.channels-container {
+  max-height: 200px;
+}
+
+.channels-header {
+  margin-bottom: 8px;
+}
+
+.channels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.channels-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.channels-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.channels-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.channels-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.channel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.channel-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.channel-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #60a5fa;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.channel-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.channel-name {
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
 }
 </style>
