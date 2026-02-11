@@ -140,7 +140,6 @@ watch(() => props.cWidth, () => {
 // Watch for changes in activeViewer (package switching)
 watch(() => props.activeViewer, (newViewer, oldViewer) => {
   if (newViewer && newViewer !== oldViewer) {
-    console.log('TSScrubber: ActiveViewer changed, resetting component state')
     isInitializing.value = true
     resetComponentState()
 
@@ -169,7 +168,6 @@ watch(() => viewerStore.viewerChannels, (newChannels, oldChannels) => {
       (newChannels[0]?.id !== oldChannels[0]?.id)
 
     if (hasSignificantChange) {
-      console.log('TSScrubber: Viewer channels changed, re-initializing segments')
       resetSegmentState()
       nextTick(() => {
         initSegmentSpans()
@@ -181,13 +179,11 @@ watch(() => viewerStore.viewerChannels, (newChannels, oldChannels) => {
 // Watch for changes in viewer annotations (only if not currently initializing)
 watch(() => viewerStore.viewerAnnotations, (newAnnotations, oldAnnotations) => {
   if (newAnnotations && newAnnotations !== oldAnnotations && !isInitializing.value) {
-    console.log('TSScrubber: Viewer annotations changed independently, re-fetching annotations')
     nextTick(() => {
       getAnnotations()
     })
   } else if (newAnnotations && newAnnotations.length > 0 && !oldAnnotations && props.activeViewer?.content.id) {
     // Special case: annotation layers just became available and we have an active viewer
-    console.log('TSScrubber: Annotation layers now available, fetching annotations')
     nextTick(() => {
       getAnnotations()
     })
@@ -196,8 +192,6 @@ watch(() => viewerStore.viewerAnnotations, (newAnnotations, oldAnnotations) => {
 
 // Helper methods for state management
 const resetComponentState = () => {
-  console.log('TSScrubber: Resetting component state')
-
   // Reset annotation data
   annotations.value = []
 
@@ -214,8 +208,6 @@ const resetComponentState = () => {
 }
 
 const resetSegmentState = () => {
-  console.log('TSScrubber: Resetting segment state')
-
   // Reset segments array
   segments.value = new Array(5000)
   segments.value = segments.value.fill(0, 0, 4999)
@@ -363,8 +355,6 @@ const initSegmentSpans = () => {
     return
   }
 
-  console.log(`TSScrubber: Initializing segment spans for ${viewerStore.viewerChannels.length} channels`)
-
   // Reset segment state before fetching new data
   resetSegmentState()
 
@@ -395,7 +385,6 @@ const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
     const token = await useToken()
     const url = `${viewerStore.config.timeSeriesApi}/ts/retrieve/segments?session=${token}&channel=${channel}&start=${start}&end=${end}`
 
-    console.log(`TSScrubber: Fetching segments for channel ${channel} (${channelIdx})`)
     const resp = await useSendXhr(url)
 
     // Validate that we still have the same channels (user might have switched packages)
@@ -494,7 +483,6 @@ const getAnnotations = async () => {
   }
 
   if (!viewerStore.viewerAnnotations || viewerStore.viewerAnnotations.length === 0) {
-    console.log('TSScrubber: No annotation layers available, skipping annotation fetch')
     annotations.value = []
     render()
     return
@@ -511,15 +499,12 @@ const getAnnotations = async () => {
       url = url + `&layerIds=${layerIds[i]}`
     }
 
-    console.log(`TSScrubber: Fetching annotations for viewer ${currentViewerId}`)
     const resp = await useSendXhr(url)
 
     // Double-check that we're still on the same viewer (async operations can be overtaken)
     if (props.activeViewer?.content.id === currentViewerId) {
       annotations.value = resp
       render()
-    } else {
-      console.log('TSScrubber: Ignoring annotation response - viewer changed during fetch')
     }
   } catch (err) {
     console.error('TSScrubber: Error fetching annotations:', err)

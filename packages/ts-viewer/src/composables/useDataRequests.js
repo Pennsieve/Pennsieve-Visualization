@@ -50,15 +50,8 @@ export const useDataRequests = () => {
                         clearInterval(prefetchTimer.value)
                         isPrefetching.value = false
                     }
-                } else {
-                    console.log('🚫 Prefetch blocked - too many pending pages:', {
-                        current: currentPendingSize,
-                        max: maxPendingPages,
-                        pendingPageStarts: Array.from(requestedPagesRef.value?.keys() || [])
-                    })
                 }
             } else {
-                console.log('✅ No more prefetch requests, stopping prefetch timer')
                 clearInterval(prefetchTimer.value)
                 isPrefetching.value = false
             }
@@ -307,7 +300,6 @@ export const useDataRequests = () => {
     // Request data from server (from original) - now accepts ts_end as parameter
     const requestDataFromServer = (requests, firstRequest = 0, websocket, userToken, activeViewer, rsPeriod, requestedPages, ts_end) => {
         if (requests.length === 0) {
-            console.log('⚠️ No requests to send')
             return false
         }
 
@@ -478,19 +470,11 @@ export const useDataRequests = () => {
 
     // Clear all requests
     const clearRequests = () => {
-        const oldAsyncCount = aSyncRequests.value.length
-        const oldPreCount = aSyncPreRequests.value.length
-
         aSyncRequests.value = []
         aSyncPreRequests.value = []
         prevStart.value = 0
         prevDuration.value = 0
         stopPrefetching()
-
-        console.log('🧹 Cleared requests:', {
-            asyncRequests: oldAsyncCount,
-            preRequests: oldPreCount
-        })
     }
 
     // Get viewport requests
