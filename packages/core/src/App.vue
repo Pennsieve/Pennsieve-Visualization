@@ -43,13 +43,25 @@ const hello = 'world';
       </div>
     </section>
 
+    <!-- CSVViewer Component -->
+    <section class="component-section">
+      <h2 class="component-label">CSVViewer</h2>
+      <p class="component-path">@pennsieve-viz/csv-viewer</p>
+      <div
+        class="component-container bg-tertiary"
+        style="height: 400px"
+      >
+        <CSVViewer :src-url="csvUrl" />
+      </div>
+    </section>
+
     <!-- DataExplorer Component -->
     <section class="component-section">
       <h2 class="component-label">DataExplorer</h2>
       <p class="component-path">@pennsieve-viz/data-explorer</p>
       <div
-        class="component-container"
-        style="height: 400px; background: #f5f5f5"
+        class="component-container bg-tertiary"
+        style="height: 400px"
       >
         <DataExplorer :src-url="apiUrl" />
       </div>
@@ -60,8 +72,8 @@ const hello = 'world';
       <h2 class="component-label">UMAP</h2>
       <p class="component-path">@pennsieve-viz/umap</p>
       <div
-        class="component-container"
-        style="height: 400px; background: #f5f5f5"
+        class="component-container bg-tertiary"
+        style="height: 400px"
       >
         <UMAP :src-url="apiUrl" />
       </div>
@@ -72,8 +84,8 @@ const hello = 'world';
       <h2 class="component-label">ProportionPlot</h2>
       <p class="component-path">@pennsieve-viz/proportion-plot</p>
       <div
-        class="component-container"
-        style="height: 400px; background: #f5f5f5"
+        class="component-container bg-tertiary"
+        style="height: 400px"
       >
         <ProportionPlot :src-url="apiUrl" xKey="category" yKey="value" />
       </div>
@@ -84,8 +96,8 @@ const hello = 'world';
       <h2 class="component-label">TSViewer</h2>
       <p class="component-path">tsviewer</p>
       <div
-        class="component-container"
-        style="height: 500px; background: #f5f5f5"
+        class="component-container bg-tertiary"
+        style="height: 500px"
       >
         <TSViewer />
       </div>
@@ -96,8 +108,8 @@ const hello = 'world';
       <h2 class="component-label">OmeViewer (Micro-CT)</h2>
       <p class="component-path">@pennsieve-viz/micro-ct</p>
       <div
-        class="component-container"
-        style="height: 600px; background: #0f0f0f"
+        class="component-container bg-dark"
+        style="height: 600px"
       >
         <OmeViewer :source="omeTiffSource" source-type="ome-tiff" />
       </div>
@@ -108,8 +120,8 @@ const hello = 'world';
       <h2 class="component-label">TiffViewer</h2>
       <p class="component-path">@pennsieve-viz/micro-ct</p>
       <div
-        class="component-container"
-        style="height: 600px; background: #0f0f0f"
+        class="component-container bg-dark"
+        style="height: 600px"
       >
         <TiffViewer :source="TiffSource" />
       </div>
@@ -130,6 +142,7 @@ const hello = 'world';
 <script setup lang="ts">
 import { ref } from "vue";
 import {
+  CSVViewer,
   Markdown,
   TextViewer,
   AiPlotly,
@@ -183,6 +196,11 @@ const apiUrl = ref(
   "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
 );
 
+// CSV sample URL (update for real CSV data)
+const csvUrl = ref(
+  "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
+);
+
 // OME-Zarr test source (3D OME-Zarr with Z-stack and tiled zoom)
 const omeTiffSource = ref(
   "https://pennsieve-dev-zarr-test-use1.s3.us-east-1.amazonaws.com/ddb6cb43-3749-4e9d-9c59-e2d4a8aa7f5a/sam-SR042-CL1-Downsampled4x.ome.tiff"
@@ -204,40 +222,42 @@ const samplePackage = ref({
 </script>
 
 <style lang="scss">
+@use "./styles/theme" as t;
+
 .playground {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: t.$system-font;
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
 
   h1 {
     text-align: center;
-    color: #333;
+    color: t.$gray_6;
     margin-bottom: 40px;
-    border-bottom: 2px solid #2196f3;
+    border-bottom: 2px solid t.$purple_3;
     padding-bottom: 10px;
   }
 }
 
 .component-section {
   margin-bottom: 40px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid t.$gray_2;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .component-label {
-  background: #2196f3;
-  color: white;
+  background: t.$purple_3;
+  color: t.$white;
   margin: 0;
   padding: 12px 20px;
   font-size: 1.2rem;
 }
 
 .component-path {
-  background: #e3f2fd;
-  color: #1565c0;
+  background: t.$purple_tint;
+  color: t.$purple_2;
   margin: 0;
   padding: 8px 20px;
   font-family: monospace;
@@ -245,8 +265,8 @@ const samplePackage = ref({
 }
 
 .component-note {
-  background: #fff3e0;
-  color: #e65100;
+  background: t.$orange_tint;
+  color: t.$orange_1;
   margin: 0;
   padding: 8px 20px;
   font-size: 0.85rem;
@@ -254,7 +274,7 @@ const samplePackage = ref({
 
 .component-container {
   padding: 20px;
-  background: white;
+  background: t.$white;
   overflow: auto;
 }
 
@@ -274,16 +294,19 @@ const samplePackage = ref({
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #666;
+  color: t.$gray_4;
   font-style: italic;
   background: repeating-linear-gradient(
     45deg,
-    #f5f5f5,
-    #f5f5f5 10px,
-    #eeeeee 10px,
-    #eeeeee 20px
+    t.$gray_0,
+    t.$gray_0 10px,
+    t.$gray_2 10px,
+    t.$gray_2 20px
   );
   margin: 0;
   border-radius: 4px;
 }
+
+.bg-tertiary { background: t.$gray_0; }
+.bg-dark { background: t.$black; }
 </style>

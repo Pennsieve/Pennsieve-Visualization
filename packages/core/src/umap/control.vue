@@ -102,16 +102,16 @@ watch(() => props.colorMapMap, () => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .control-panel {
   position: absolute;
-  top: 20px;
-  bottom: 20px;
-  left: 20px;
+  top: var(--ps-space-xl, 20px);
+  bottom: var(--ps-space-xl, 20px);
+  left: var(--ps-space-xl, 20px);
 
   background: rgba(255, 255, 255, 0.85);
-  padding: 15px;
-  border-radius: 5px;
+  padding: var(--ps-space-lg, 15px);
+  border-radius: var(--ps-radius-lg, 5px);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
   z-index: 100;
 
@@ -119,12 +119,53 @@ watch(() => props.colorMapMap, () => {
 
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--ps-space-md, 12px);
   overflow: hidden;
+  font-family: var(--ps-font-family, inherit);
+  font-size: var(--ps-font-size, 13px);
+  color: var(--ps-color-text-dark, #333333);
+
+  h3 {
+    margin: 0;
+    font-size: var(--ps-font-size-lg, 16px);
+    font-weight: 600;
+    color: var(--ps-color-text-dark, #333333);
+  }
+
+  h4 {
+    margin: 0 0 var(--ps-space-xs, 4px);
+    font-size: var(--ps-font-size-md, 14px);
+    font-weight: 600;
+    color: var(--ps-color-text-dark, #333333);
+  }
+
+  label {
+    font-size: var(--ps-font-size-md, 14px);
+    font-weight: 600;
+    color: var(--ps-color-text-dark, #333333);
+  }
+
+  select {
+    padding: var(--ps-space-xs, 4px) var(--ps-space-sm, 8px);
+    border: 1px solid var(--ps-color-border, #e5e5e5);
+    border-radius: var(--ps-radius, 4px);
+    font-size: var(--ps-font-size, 13px);
+    font-family: var(--ps-font-family, inherit);
+    background: var(--ps-color-bg, #ffffff);
+    color: var(--ps-color-text, #4d4d4d);
+
+    &:focus {
+      outline: none;
+      border-color: var(--ps-color-primary, #011F5B);
+    }
+  }
 }
 
 .color-option {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--ps-space-sm, 8px);
 }
 
 .legend-scroll {
@@ -134,25 +175,28 @@ watch(() => props.colorMapMap, () => {
 }
 
 .legend {
-  padding-right: 6px;
+  padding-right: var(--ps-space-xs, 6px);
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 6px 0;
+  gap: var(--ps-space-sm, 8px);
+  margin: var(--ps-space-xs, 6px) 0;
 }
 
 .legend-color {
   width: 14px;
   height: 14px;
-  border-radius: 3px;
-  border: 1px solid rgba(0, 0, 0, .15);
+  border-radius: var(--ps-radius-sm, 3px);
+  border: 1px solid var(--ps-color-border-dark, #CCCCCC);
+  flex-shrink: 0;
 }
 
 .legend-label {
   line-height: 1.2;
   word-break: break-word;
+  font-size: var(--ps-font-size, 13px);
+  color: var(--ps-color-text, #4d4d4d);
 }
 </style>

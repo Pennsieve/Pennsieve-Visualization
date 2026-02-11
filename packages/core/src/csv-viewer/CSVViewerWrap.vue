@@ -1,11 +1,12 @@
 <template>
-  <div class="data-explorer-wrap">
-    <DataExplorer
+  <div class="csv-viewer-wrap">
+    <CSVViewer
+      v-if="resolvedUrl"
       :url="resolvedUrl"
       :file-type="resolvedFileType"
       :file-id="resolvedFileId"
+      :rows-per-page="rowsPerPage"
       :custom-style="customStyle"
-      @query-results="(x) => emitNewQueryResults(x)"
     />
   </div>
 </template>
@@ -14,26 +15,27 @@
 import { onMounted, ref } from 'vue'
 import { pathOr } from 'ramda'
 import { useGetToken } from '../composables/useGetToken'
-import DataExplorer from './DataExplorer.vue'
+import CSVViewer from './CSVViewer.vue'
 import type { ViewerStyleOverrides } from '../composables/useViewerStyle'
 
 const props = defineProps<{
   pkg?: { content?: { id?: string; packageType?: string } } | null
   apiUrl?: string
-  /** Optional: provide a direct public URL (bypass Pennsieve API) */
+  /** Provide a direct public URL (bypass Pennsieve API) */
   srcUrl?: string
-  /** Optional: override fileType if srcUrl doesn't end with .csv/.parquet */
+  /** Override fileType if srcUrl doesn't end with .csv/.parquet */
   srcFileType?: 'csv' | 'parquet'
-  /** Optional: stable id to de-dup across viewers; defaults to derived from URL */
+  /** Stable id to de-dup across viewers; defaults to derived from URL */
   srcFileId?: string
+  /** Rows per page for pagination */
+  rowsPerPage?: number
   customStyle?: ViewerStyleOverrides
 }>()
 
-const emit = defineEmits(["queryResults"])
-const viewAssets = ref<any[]>([])
 const resolvedUrl = ref('')
-const resolvedFileType = ref<'csv' | 'parquet'>('parquet')
+const resolvedFileType = ref<'csv' | 'parquet'>('csv')
 const resolvedFileId = ref('')
+const viewAssets = ref<any[]>([])
 
 onMounted(async () => {
   // Mode A: direct URL provided
@@ -41,14 +43,15 @@ onMounted(async () => {
     resolvedUrl.value = props.srcUrl
     resolvedFileType.value =
       props.srcFileType ??
-      (props.srcUrl.toLowerCase().endsWith('.csv') ? 'csv' : 'parquet')
+      (props.srcUrl.toLowerCase().endsWith('.parquet') ? 'parquet' : 'csv')
+    resolvedFileId.value = props.srcFileId || ''
     return
   }
 
   // Mode B: Pennsieve pkg + api
   const pkgId = pathOr('', ['content', 'id'], props.pkg)
   if (!pkgId) {
-    console.error('[DataExplorerWrap] Missing pkg.id, and no srcUrl provided.')
+    console.error('[CSVViewerWrap] Missing pkg.id, and no srcUrl provided.')
     return
   }
 
@@ -56,7 +59,7 @@ onMounted(async () => {
     await getViewerAssets(pkgId)
     const firstFileId = viewAssets.value?.[0]?.content?.id
     if (!firstFileId) {
-      console.error('[DataExplorerWrap] No files found in /view response.')
+      console.error('[CSVViewerWrap] No files found in /view response.')
       return
     }
     resolvedFileId.value = firstFileId
@@ -68,10 +71,6 @@ onMounted(async () => {
     console.error(err)
   }
 })
-
-function emitNewQueryResults(results: any) {
-  emit('queryResults', results)
-}
 
 async function getViewerAssets(pkgId: string) {
   const token = await useGetToken()
@@ -91,8 +90,8 @@ async function getFileUrl(pkgId: string, fileId: string) {
 }
 </script>
 
-<style scoped lang="scss">
-.data-explorer-wrap {
+<style scoped>
+.csv-viewer-wrap {
   height: 100%;
   width: 100%;
 }

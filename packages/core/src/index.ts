@@ -3,12 +3,14 @@ import { defineAsyncComponent } from 'vue'
 
 // Composables & utilities
 export { useGetToken } from './composables/useGetToken'
+export { useViewerStyle, type ViewerStyleOverrides } from './composables/useViewerStyle'
 export { default as EditIcon } from './icons/EditIcon.vue'
 
 // DuckDB store
 export { useDuckDBStore } from './duckdb'
 
 // Direct exports from component modules
+export * from './csv-viewer'
 export * from './data-explorer'
 export * from './umap'
 export * from './proportion-plot'
@@ -17,6 +19,10 @@ export * from './text-viewer'
 export * from './ai-plotly'
 
 // Lazy-loaded component exports for tree-shaking (internal components)
+export const CSVViewerLazy = defineAsyncComponent(
+  () => import('./csv-viewer').then(m => m.CSVViewer)
+)
+
 export const DataExplorerLazy = defineAsyncComponent(
   () => import('./data-explorer').then(m => m.DataExplorer)
 )

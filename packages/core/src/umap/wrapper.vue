@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container">
+  <div class="ps-viewer umap-container" :style="rootStyle">
     <WebGLScatterplot
       :data="pointData"
       :metaData="metaData"
@@ -34,6 +34,7 @@ import WebGLScatterplot from './scatterplot.vue'
 import ControlPanel from './control.vue'
 import { useDuckDBStore } from '../duckdb'
 import { useGetToken } from '../composables/useGetToken'
+import { useViewerStyle, type ViewerStyleOverrides } from '../composables/useViewerStyle'
 
 const props = defineProps<{
   apiUrl?: string
@@ -41,7 +42,10 @@ const props = defineProps<{
   srcUrl?: string
   srcFileType?: 'csv' | 'parquet'
   srcFileId?: string
+  customStyle?: ViewerStyleOverrides
 }>()
+
+const { rootStyle } = useViewerStyle(() => props.customStyle)
 
 // ----------------- Reactive state -----------------
 const pointCount = ref(5000)
@@ -374,11 +378,13 @@ onMounted(async () => { await ensureConnection() })
 onBeforeUnmount(async () => { if (connectionId.value) await duck.closeConnection(connectionId.value) })
 </script>
 
-<style scoped>
-.app-container {
+<style scoped lang="scss">
+@use "../styles/viewer-theme" as vt;
+
+.umap-container {
+  @include vt.viewer-base;
   height: 100%;
   position: relative;
-  height: 100%;
   overflow: hidden;
 }
 </style>
