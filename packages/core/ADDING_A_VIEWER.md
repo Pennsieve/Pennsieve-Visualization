@@ -4,6 +4,149 @@ This guide walks through every step of adding a new visualization component to t
 
 ---
 
+## How Style Overrides Work
+
+Every viewer exposes a `customStyle` prop that lets consumers override any CSS custom property at runtime. This is the primary theming API for the library.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│  Consumer app                                   │
+│                                                 │
+│  <DataExplorer                                  │
+│    :custom-style="{                             │
+│      '--ps-color-primary': '#ff6600',           │
+│      '--ps-font-size': '15px',                  │
+│    }"                                           │
+│  />                                             │
+└──────────────────┬──────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────┐
+│  Wrapper (DataExplorerWrap.vue)                  │
+│  Passes customStyle through to core component    │
+└──────────────────┬──────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────┐
+│  Core component (DataExplorer.vue)               │
+│                                                 │
+│  useViewerStyle() converts the prop into a       │
+│  reactive style object bound to the root element │
+│                                                 │
+│  <div class="ps-viewer" :style="rootStyle">     │
+│    ← rootStyle sets CSS vars inline here         │
+│    ← viewer-base mixin sets defaults             │
+│    ← inline vars win over defaults (CSS cascade) │
+│  </div>                                          │
+└─────────────────────────────────────────────────┘
+```
+
+The `viewer-base` SCSS mixin sets all `--ps-*` CSS custom properties with default Pennsieve values. When `customStyle` is provided, `useViewerStyle()` merges those overrides into inline `style` on the root element, which takes precedence in the CSS cascade.
+
+### Consumer Usage
+
+```vue
+<template>
+  <!-- Default Pennsieve styling -->
+  <DataExplorer :src-url="url" />
+
+  <!-- Custom primary color and larger font -->
+  <DataExplorer
+    :src-url="url"
+    :custom-style="{
+      '--ps-color-primary': '#E04F39',
+      '--ps-color-primary-light': '#E8705E',
+      '--ps-color-primary-tint': '#FDF0EE',
+      '--ps-font-size': '15px',
+      '--ps-font-size-md': '16px',
+    }"
+  />
+
+  <!-- Dark theme -->
+  <CSVViewer
+    :src-url="url"
+    :custom-style="{
+      '--ps-color-bg': '#1a1a2e',
+      '--ps-color-bg-secondary': '#16213e',
+      '--ps-color-bg-tertiary': '#0f3460',
+      '--ps-color-text': '#e0e0e0',
+      '--ps-color-text-dark': '#ffffff',
+      '--ps-color-text-secondary': '#a0a0a0',
+      '--ps-color-border': '#2a2a4a',
+      '--ps-color-border-dark': '#3a3a5a',
+    }"
+  />
+
+  <!-- Reactive overrides from application state -->
+  <Markdown
+    :markdown-text="content"
+    :custom-style="themeOverrides"
+  />
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import { DataExplorer, CSVViewer, Markdown } from '@pennsieve-viz/core'
+
+// Overrides can be reactive
+const isDark = ref(false)
+const themeOverrides = computed(() =>
+  isDark.value
+    ? { '--ps-color-bg': '#1e1e1e', '--ps-color-text': '#d4d4d4' }
+    : {}
+)
+</script>
+```
+
+### What Can Be Overridden
+
+Any `--ps-*` CSS custom property defined in `viewer-theme.scss`. The full list is in the [CSS Custom Properties](#css-custom-properties) section below. Common overrides:
+
+| What you want to change | Variables to override |
+|--------------------------|----------------------|
+| Brand color | `--ps-color-primary`, `--ps-color-primary-light`, `--ps-color-primary-tint` |
+| Font | `--ps-font-family` |
+| Font size | `--ps-font-size`, `--ps-font-size-md`, `--ps-font-size-lg` |
+| Background | `--ps-color-bg`, `--ps-color-bg-secondary`, `--ps-color-bg-tertiary` |
+| Text color | `--ps-color-text`, `--ps-color-text-dark`, `--ps-color-text-secondary` |
+| Borders | `--ps-color-border`, `--ps-color-border-dark`, `--ps-radius`, `--ps-radius-lg` |
+| Spacing | `--ps-space-sm`, `--ps-space-md`, `--ps-space-lg` |
+| Buttons | `--ps-btn-primary-bg`, `--ps-btn-primary-color`, `--ps-btn-primary-hover` |
+| Inputs | `--ps-input-bg`, `--ps-input-border`, `--ps-input-focus-border` |
+| Tables | `--ps-table-header-bg`, `--ps-table-border`, `--ps-table-row-hover` |
+
+### How to Wire It in Your Viewer
+
+Three things are required in every viewer for overrides to work:
+
+**1. Accept the prop:**
+```ts
+import type { ViewerStyleOverrides } from '../composables/useViewerStyle'
+
+const props = defineProps<{
+  customStyle?: ViewerStyleOverrides
+  // ...other props
+}>()
+```
+
+**2. Create the reactive style object:**
+```ts
+import { useViewerStyle } from '../composables/useViewerStyle'
+
+const { rootStyle } = useViewerStyle(() => props.customStyle)
+```
+
+**3. Bind it to the root element alongside the theme class:**
+```vue
+<div class="ps-viewer your-viewer" :style="rootStyle">
+```
+
+The `viewer-base` mixin (applied via `@include vt.viewer-base`) defines all the default values. The `:style="rootStyle"` binding overlays any consumer overrides on top. If the wrapper passes `customStyle` through but the wrapper itself doesn't render themed UI, it does **not** need `useViewerStyle` — only the core component that applies `viewer-base` does.
+
+---
+
 ## Directory Structure
 
 Each viewer lives in its own directory under `packages/core/src/`:
