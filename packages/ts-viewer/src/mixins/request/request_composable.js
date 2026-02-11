@@ -70,9 +70,8 @@ export function useHandleXhrError(err) {
     let status
     if (optionalStatus === undefined) {
         // emit ajaxError
-        console.log(err)
-        return
         // EventBus.$emit('ajaxError', err) TODO
+        return
     } else {
         status = err.status
     }

@@ -176,17 +176,12 @@ const ensureActiveAnnotationLayer = () => {
   if (viewerAnnotations.value.length > 0) {
     const hasSelected = viewerAnnotations.value.some(layer => layer.selected)
     if (!hasSelected) {
-      console.log('No layer selected, selecting first layer:', viewerAnnotations.value[0])
-      // FIX: Make sure the layer ID exists before setting it as active
       const firstLayer = viewerAnnotations.value[0]
       if (firstLayer && firstLayer.id) {
         viewerStore.setActiveAnnotationLayer(firstLayer.id)
-      } else {
-        console.error('First layer has no ID:', firstLayer)
       }
     }
   } else {
-    console.warn('No annotation layers available - waiting for layers to load')
     // Try again after a short delay to allow layers to load
     setTimeout(() => {
       if (viewerAnnotations.value.length > 0) {
@@ -198,7 +193,6 @@ const ensureActiveAnnotationLayer = () => {
 
 // ViewerActiveTool functionality - dynamically invoke tool methods
 const setActiveTool = (activeTool) => {
-  console.log('TSViewerCanvas: setActiveTool called with:', activeTool)
   if (activeTool) {
     // Set first character of tool to be capitalized so the method is camel case
     const methodName = 'set' + activeTool.charAt(0).toUpperCase() + activeTool.slice(1)
@@ -213,14 +207,9 @@ const setActiveTool = (activeTool) => {
 
 // Map of dynamic methods that can be called by setActiveTool
 const methodMap = {
-  setPan: () => {
-    console.log('Pan tool activated')
-  },
-  setPointer: () => {
-    console.log('Pointer tool activated')
-  },
+  setPan: () => {},
+  setPointer: () => {},
   setAnnotate: () => {
-    console.log('Annotate tool activated')
     // Ensure we have a selected annotation layer for creating annotations
     ensureActiveAnnotationLayer()
   }
@@ -297,7 +286,6 @@ watch(viewerAnnotations, (annotations) => {
 }, { immediate: true })
 
 watch(pointerMode, () => {
-  console.log(pointerMode)
   const iAreaEl = iArea.value
   if (!iAreaEl) return
 
@@ -369,7 +357,6 @@ const onAnnotationsReceived = () => {
 }
 
 const onAnnLayersInitialized = () => {
-  console.log('Annotation layers initialized, ensuring active layer for annotate tool')
   // Ensure we have an active layer when layers are initialized
   if (viewerActiveTool.value === 'annotate') {
     ensureActiveAnnotationLayer()
@@ -409,8 +396,6 @@ const _onMouseWheel = (e) => {
 }
 
 const _onMouseUp = (e) => {
-  console.log('TSViewerCanvas: _onMouseUp called with pointerMode:', pointerMode.value, 'viewerActiveTool:', viewerActiveTool.value)
-
   resizeClicked.value = false
   mouseDown.value = false
 
@@ -458,24 +443,14 @@ const _onMouseUp = (e) => {
         }
       }
 
-      console.log('Creating annotation - curLIndex:', curLIndex, 'available layers:', viewerAnnotations.value.length)
-      console.log('Selected layer details:', selectedLayer)
-
       // FIX: Validate that we have a proper layer with an ID
       if (curLIndex === null || !selectedLayer || !selectedLayer.id) {
-        console.error('No valid selected annotation layer found for annotation creation', {
-          curLIndex,
-          selectedLayer,
-          allLayers: viewerAnnotations.value
-        })
         // Try to set the first available layer
         if (viewerAnnotations.value.length > 0 && viewerAnnotations.value[0].id) {
           viewerStore.setActiveAnnotationLayer(viewerAnnotations.value[0].id)
           selectedLayer = viewerAnnotations.value[0]
           curLIndex = 0
-          console.log('Fallback: Selected first layer:', selectedLayer)
         } else {
-          console.error('No layers available with valid IDs')
           return
         }
       }
@@ -485,16 +460,6 @@ const _onMouseUp = (e) => {
 
       const duration = (e.clientX - startDragCoord.x) * rsPeriod.value
       const startTime = startDragTimeStamp.value + ((startDragCoord.x - iArea.value.getBoundingClientRect().left) * rsPeriod.value)
-
-      console.log('Creating annotation with:', {
-        startTime,
-        duration,
-        allChannels,
-        selectedChannels: selectedChannels.length,
-        layer: selectedLayer.name,
-        layerId: selectedLayer.id, // FIX: Log the layer ID
-        pointerMode: pointerMode.value
-      })
 
       // Only create annotation if we actually dragged to create a duration
       if (Math.abs(duration) > 1000) { // Only if duration > 1ms
@@ -515,14 +480,9 @@ const _onMouseUp = (e) => {
           userId: null
         }
 
-        // Use Pinia store instead of Vuex
-        console.log('📍 STEP 1 - TSViewerCanvas created:', newAnn)
         viewerStore.setActiveAnnotation(newAnn)
-        console.log('📍 STEP 1 - Store now has:', viewerStore.activeAnnotation)
         emit('addAnnotation', startTime, duration, allChannels, newAnn.label, newAnn.description, selectedLayer)
         break
-      } else {
-        console.log('Annotation duration too small, not creating annotation')
       }
       break
 
@@ -540,8 +500,6 @@ const clearICanvas = () => {
 }
 
 const _onMouseDown = (evt) => {
-  console.log('TSViewerCanvas: _onMouseDown called with pointerMode:', pointerMode.value, 'viewerActiveTool:', viewerActiveTool.value)
-
   mouseDown.value = true
   startDragTimeStamp.value = props.start
   const cCoord = iArea.value.getBoundingClientRect()
@@ -550,7 +508,6 @@ const _onMouseDown = (evt) => {
 
   // For annotate tool, ensure pointerMode is set to annotate if not doing specific action
   if (viewerActiveTool.value === 'annotate' && !['annResize-left', 'annResize-right', 'annSelect'].includes(pointerMode.value)) {
-    console.log('Setting pointerMode to annotate for annotation creation')
     pointerMode.value = 'annotate'
   }
 
@@ -615,7 +572,6 @@ const _onMouseMove = (e) => {
       } else {
         const newPointerMode = annCanvas.value?.onMouseMove(mX, mY, pointerMode.value, mouseDown.value)
         if (newPointerMode) {
-          console.log('TSViewerCanvas: annCanvas.onMouseMove returned:', newPointerMode)
           pointerMode.value = newPointerMode
         } else {
           pointerMode.value = 'annotate'

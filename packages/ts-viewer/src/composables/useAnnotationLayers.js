@@ -108,24 +108,11 @@ export function useAnnotationLayers(storeInstance = null) {
     }
 
     const updateLayerVisibility = (layerId, visible) => {
-        console.log(`[useAnnotationLayers] Updating layer ${layerId} visibility to:`, visible)
-
         const layer = viewerStore.viewerAnnotations.find(l => l.id === layerId)
 
         if (layer) {
-            console.log(`[useAnnotationLayers] Found layer:`, layer.name, 'current visible:', layer.visible)
-
             layer.visible = visible
             viewerStore.updateLayer(layer)
-
-            console.log(`[useAnnotationLayers] Updated layer:`, layer.name, 'new visible:', layer.visible)
-
-            // Verify the update took effect
-            const updatedLayer = viewerStore.viewerAnnotations.find(l => l.id === layerId)
-            console.log(`[useAnnotationLayers] Verification - layer visible is now:`, updatedLayer?.visible)
-        } else {
-            console.error(`[useAnnotationLayers] Layer not found with ID:`, layerId)
-            console.log(`[useAnnotationLayers] Available layers:`, viewerStore.viewerAnnotations.map(l => ({ id: l.id, name: l.name })))
         }
     }
 

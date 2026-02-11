@@ -280,20 +280,10 @@ export function useAnnotationRendering(storeInstance = null) {
         const viewportStart = props.start || 0
         const viewportEnd = viewportStart + viewportDuration
 
-        console.log('🎨 Annotation render debug:', {
-            start: viewportStart,
-            duration: viewportDuration,
-            end: viewportEnd,
-            layerCount: viewerAnnotations.value?.length || 0,
-            totalAnnotations: viewerAnnotations.value?.reduce((sum, layer) => sum + (layer.annotations?.length || 0), 0) || 0
-        })
-
         // Populate render array from visible layers
         for (const curLayer of viewerAnnotations.value) {
             if (curLayer.visible && curLayer.annotations?.length > 0) {
-                console.log(`🔍 Processing layer "${curLayer.name}" with ${curLayer.annotations.length} annotations`)
-
-                // FIX: Use a more robust approach to find annotations in viewport
+                // Use a more robust approach to find annotations in viewport
                 // Instead of relying on annIndexOf which might be buggy, use simple filtering
                 const annotationsInViewport = curLayer.annotations.filter(ann => {
 
@@ -303,14 +293,8 @@ export function useAnnotationRendering(storeInstance = null) {
                     // Include annotation if it overlaps with viewport at all
                     const overlaps = (annStart < viewportEnd) && (annEnd > viewportStart)
 
-                    if (overlaps) {
-                        console.log(`  ✅ Including annotation "${ann.label}": ${annStart} - ${annEnd}`)
-                    }
-
                     return overlaps
                 })
-
-                console.log(`  📊 Found ${annotationsInViewport.length} annotations in viewport`)
 
                 if (annotationsInViewport.length > 0) {
                     // Sort by start time for consistent rendering order
@@ -320,11 +304,8 @@ export function useAnnotationRendering(storeInstance = null) {
             }
         }
 
-        console.log(`🎯 Total annotations to render: ${renderAnn.value.length}`)
-
         // Only proceed if we have annotations to render
         if (renderAnn.value.length === 0) {
-            console.log('⚠️ No annotations found in viewport')
             return
         }
 
@@ -340,8 +321,6 @@ export function useAnnotationRendering(storeInstance = null) {
         if (focusedAnn.value) {
             renderAnnotationLabels(ctxLb, [focusedAnn.value], props, false, props.pointerMode, props.viewerActiveTool)
         }
-
-        console.log(`✅ Rendered ${renderAnn.value.length} annotations successfully`)
     }
 
     return {

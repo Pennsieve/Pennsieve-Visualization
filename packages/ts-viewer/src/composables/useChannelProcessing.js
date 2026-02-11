@@ -225,11 +225,6 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
             const channelParts = name.split("<->", 2)
             if (channelParts.length === 2) {
                 displayName = getDisplayName(channelParts[0], channelParts[1])
-                console.log('🎭 Montage display name created:', {
-                    originalName: name,
-                    channelParts,
-                    displayName
-                })
             }
         }
 
@@ -264,7 +259,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
         if (montageSchemeName === "NOT_MONTAGED") {
             return {
                 montage: "NOT_MONTAGED",
-                packageId: activeViewer.value?.id,
+                packageId: activeViewer.value?.content?.id,
                 montageMap: []
             }
         }

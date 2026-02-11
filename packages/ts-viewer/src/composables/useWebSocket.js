@@ -113,7 +113,6 @@ export const useWebSocket = () => {
     const disconnect = async () => {
         if (websocket.value) {
             const ws = websocket.value
-            console.log('🔌 Disconnecting WebSocket (state:', ws.readyState, ')')
             websocket.value = null
             connectionStatus.value = 'disconnected'
 
@@ -132,7 +131,6 @@ export const useWebSocket = () => {
     const openWebsocket = async (timeseriesDiscoverApi, pkgId, userToken) => {
         // If there's already a connection in progress, wait for it
         if (connectionPromise) {
-            console.log('🔄 Waiting for previous connection to finish...')
             await connectionPromise
         }
 
@@ -144,7 +142,6 @@ export const useWebSocket = () => {
                 currentState === WebSocket.OPEN ||
                 currentState === WebSocket.CLOSING) {
 
-                console.log(`🔄 Disconnecting existing WebSocket (state: ${currentState})`)
                 await disconnect()
 
                 // ✅ FIX: Add a small delay to ensure clean disconnection
@@ -152,7 +149,6 @@ export const useWebSocket = () => {
             }
         }
 
-        console.log('setting packageId to: ' + pkgId)
         packageId = pkgId
 
         // ✅ FIX: Reset initWebsocket flag for new connections
@@ -168,13 +164,11 @@ export const useWebSocket = () => {
                 websocket.value = ws
 
                 ws.onopen = () => {
-                    console.log('🔗 WebSocket opened for package:', packageId)
                     onWebsocketOpen()
                     resolve(ws)
                 }
 
                 ws.onclose = () => {
-                    console.log('🔌 WebSocket closed for package:', packageId)
                     onWebsocketClose()
                     resolve(null)
                 }
@@ -213,18 +207,14 @@ export const useWebSocket = () => {
         connectionStatus.value = 'connected'
 
         if (initWebsocket.value) {
-            console.log('📡 Sending initialization messages for package:', packageId)
-
             // Clear filters on initial connection
             if (clearChannelsCallback) {
-                console.log('🧹 Clearing channel filters')
                 clearChannelsCallback()
             }
 
             // Clear montage
             if (packageId) {
                 const payload = { montage: 'NOT_MONTAGED', packageId: packageId }
-                console.log('🎛️ Sending montage reset:', payload)
                 websocket.value.send(JSON.stringify(payload))
             }
             initWebsocket.value = false
@@ -232,7 +222,6 @@ export const useWebSocket = () => {
     }
 
     const onWebsocketClose = () => {
-        console.log('📡 WebSocket connection closed')
         connectionStatus.value = 'disconnected'
         // Don't auto-reconnect here - let the component handle it
     }

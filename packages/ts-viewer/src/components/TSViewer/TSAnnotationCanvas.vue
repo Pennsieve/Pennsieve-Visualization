@@ -138,12 +138,6 @@ watch(
 
 // Lifecycle
 onMounted(async () => {
-  console.log('TSAnnotationCanvas mounted with props:', {
-    constants: props.constants,
-    annotationsCanvas: props.annotationsCanvas,
-    viewerActiveTool: props.viewerActiveTool
-  })
-
   // EventBus.$on('active-viewer-action', (action) => {
   //   if (action.method === 'renderCanvas') {
   //     console.log('Re-rendering canvas due to layer visibility change')
