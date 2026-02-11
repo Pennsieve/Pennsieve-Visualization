@@ -33,8 +33,8 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { useViewerStore } from '../../stores/tsviewer'
+import { ref, computed, watch, onMounted, nextTick, inject } from 'vue'
+import { createViewerStore } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import { map } from 'ramda'
@@ -55,8 +55,9 @@ const props = defineProps({
 // Emits
 const emit = defineEmits(['setStart'])
 
-// Store
-const viewerStore = useViewerStore()
+// Store - inject from parent TSViewer component
+// Falls back to default store for backwards compatibility
+const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
 
 // Template refs
 const canvasWrap = ref(null)

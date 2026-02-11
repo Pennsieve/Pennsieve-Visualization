@@ -1,14 +1,19 @@
 // composables/useTsAnnotation.js - Updated to use Pinia store
 
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHandleXhrError } from '@/mixins/request/request_composable'
 import { useToken } from '@/composables/useToken'
-import { useViewerStore } from '../stores/tsviewer' // Import Pinia store
+import { createViewerStore } from '../stores/tsviewer'
 
-export function useTsAnnotation() {
-    const viewerStore = useViewerStore() // Add Pinia store
-    const { viewerChannels, viewerAnnotations } = storeToRefs(viewerStore) // Get reactive refs
+/**
+ * Composable for annotation CRUD operations.
+ * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ */
+export function useTsAnnotation(storeInstance = null) {
+    // Use provided store, inject from parent, or fall back to default
+    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
+    const { viewerChannels, viewerAnnotations } = storeToRefs(viewerStore)
 
     // Helper function to get channel ID
     const getChannelId = (channel) => {

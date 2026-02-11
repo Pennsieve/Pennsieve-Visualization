@@ -1,13 +1,18 @@
 // composables/useAnnotationLayers.js
-import { ref } from 'vue'
-import { useViewerStore } from '../stores/tsviewer'
+import { ref, inject } from 'vue'
+import { createViewerStore } from '../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import EventBus from '@/utils/event-bus'
 import { hexToRgbA } from '@/utils/annotationUtils'
 
-export function useAnnotationLayers() {
-    const viewerStore = useViewerStore()
+/**
+ * Composable for annotation layer management.
+ * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ */
+export function useAnnotationLayers(storeInstance = null) {
+    // Use provided store, inject from parent, or fall back to default
+    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
 
     const annLayerInfo = ref([])
     const defaultColors = ref([

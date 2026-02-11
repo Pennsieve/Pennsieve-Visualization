@@ -1,9 +1,17 @@
 // composables/useAnnotationInteraction.js
-import { ref } from 'vue'
-import { useViewerStore } from '../stores/tsviewer'
+import { ref, inject } from 'vue'
+import { createViewerStore } from '../stores/tsviewer'
 
-export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets) {
-    const viewerStore = useViewerStore()
+/**
+ * Composable for annotation interaction handling.
+ * @param {Ref} focusedAnn - Reference to the focused annotation
+ * @param {Ref} renderAnn - Reference to the render annotation array
+ * @param {Ref} hoverOffsets - Reference to hover offsets
+ * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ */
+export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, storeInstance = null) {
+    // Use provided store, inject from parent, or fall back to default
+    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
     const mouseDownPosition = ref([0, 0])
 
     const shouldCheckAnnotationHover = (mY, constants) => {

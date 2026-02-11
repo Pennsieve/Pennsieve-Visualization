@@ -1,9 +1,24 @@
 import './assets/styles.scss';
 
 import TSViewer from './components/TSViewer/TSViewer.vue';
-import { useViewerStore } from './stores/tsviewer';
+import {
+  createViewerStore,
+  clearViewerStore,
+  clearAllViewerStores,
+  useViewerStore  // Deprecated - kept for backwards compatibility
+} from './stores/tsviewer';
+import { useViewerControls } from './composables/useViewerControls';
 
-export { useViewerStore, TSViewer }; 
+// Primary exports for multi-instance support
+export {
+  TSViewer,
+  createViewerStore,
+  clearViewerStore,
+  clearAllViewerStores,
+  useViewerControls,
+  // Deprecated - use createViewerStore instead
+  useViewerStore
+};
 
 export default {
   install(app) {

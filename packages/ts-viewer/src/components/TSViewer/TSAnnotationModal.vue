@@ -105,9 +105,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, defineAsyncComponent } from 'vue'
+import { ref, computed, watch, defineAsyncComponent, inject } from 'vue'
 import { propOr } from 'ramda'
-import { useViewerStore } from '../../stores/tsviewer'
+import { createViewerStore } from '../../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import IconSelection from "../icons/IconSelection.vue"
 
@@ -152,8 +152,9 @@ watch(() => props.visible, (newValue) => {
 // Define emits
 const emit = defineEmits(['closeWindow', 'createUpdateAnnotation'])
 
-// Pinia store setup
-const viewerStore = useViewerStore()
+// Store - inject from parent TSViewer component
+// Falls back to default store for backwards compatibility
+const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
 const {
   activeAnnotation,
   viewerChannels,

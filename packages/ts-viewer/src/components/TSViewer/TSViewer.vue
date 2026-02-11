@@ -131,7 +131,8 @@ import {
   nextTick,
   onMounted,
   onBeforeUnmount,
-  defineAsyncComponent
+  defineAsyncComponent,
+  provide
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
@@ -139,7 +140,7 @@ import {
   isEmpty
 } from 'ramda'
 
-import { useViewerStore } from "../../stores/tsviewer"
+import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
 
 // Component imports (required for <script setup>)
@@ -186,19 +187,32 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  /**
+   * Unique identifier for this viewer instance.
+   * Required when running multiple TSViewer components on the same page.
+   * Each instance should have a unique ID to ensure isolated state.
+   */
+  instanceId: {
+    type: String,
+    default: 'default'
+  }
 })
 
-// Store setup
-const viewerStore = useViewerStore()
+// Store setup - create instance-specific store
+const viewerStore = createViewerStore(props.instanceId)
 const { viewerChannels, needsRerender } = storeToRefs(viewerStore)
 
-// TsAnnotation composable setup
+// Provide store and instanceId to child components
+provide('viewerStore', viewerStore)
+provide('viewerInstanceId', props.instanceId)
+
+// TsAnnotation composable setup - pass the store instance
 const {
   addAnnotation,
   updateAnnotation,
   removeAnnotation,
   getChannelId: getChannelIdFromAnnotation,
-} = useTsAnnotation()
+} = useTsAnnotation(viewerStore)
 
 // Template refs
 const ts_viewer = ref(null)
@@ -751,6 +765,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
+  // Clean up the store instance when the component is unmounted
+  clearViewerStore(props.instanceId)
 })
 
 // Expose methods that might be called from parent components

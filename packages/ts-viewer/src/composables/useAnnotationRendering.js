@@ -1,13 +1,18 @@
 // composables/useAnnotationRendering.js
-import { ref, computed } from 'vue'
-import { useViewerStore } from '../stores/tsviewer'
+import { ref, computed, inject } from 'vue'
+import { createViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { propOr, pathOr } from 'ramda'
 import { sortAnnotations, annIndexOf, getLayer } from '@/utils/annotationUtils'
 
-export function useAnnotationRendering() {
-    const viewerStore = useViewerStore()
+/**
+ * Composable for annotation rendering.
+ * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ */
+export function useAnnotationRendering(storeInstance = null) {
+    // Use provided store, inject from parent, or fall back to default
+    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
     const { viewerAnnotations, viewerChannels } = storeToRefs(viewerStore)
 
     const renderAnn = ref([])
