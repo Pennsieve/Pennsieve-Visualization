@@ -1,9 +1,10 @@
 <template>
-  <div class="app-container">
+  <div class="data-explorer-wrap">
     <DataExplorer
       :url="resolvedUrl"
       :file-type="resolvedFileType"
       :file-id="resolvedFileId"
+      :custom-style="customStyle"
       @query-results="(x) => emitNewQueryResults(x)"
     />
   </div>
@@ -14,6 +15,7 @@ import { onMounted, ref } from 'vue'
 import { pathOr } from 'ramda'
 import { useGetToken } from '../composables/useGetToken'
 import DataExplorer from './DataExplorer.vue'
+import type { ViewerStyleOverrides } from '../composables/useViewerStyle'
 
 const props = defineProps<{
   pkg?: { content?: { id?: string; packageType?: string } } | null
@@ -24,6 +26,7 @@ const props = defineProps<{
   srcFileType?: 'csv' | 'parquet'
   /** Optional: stable id to de-dup across viewers; defaults to derived from URL */
   srcFileId?: string
+  customStyle?: ViewerStyleOverrides
 }>()
 
 const emit = defineEmits(["queryResults"])
@@ -89,7 +92,8 @@ async function getFileUrl(pkgId: string, fileId: string) {
 </script>
 
 <style scoped lang="scss">
-.app-container {
-  color: black;
+.data-explorer-wrap {
+  height: 100%;
+  width: 100%;
 }
 </style>

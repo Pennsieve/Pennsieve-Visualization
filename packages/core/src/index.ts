@@ -3,6 +3,7 @@ import { defineAsyncComponent } from 'vue'
 
 // Composables & utilities
 export { useGetToken } from './composables/useGetToken'
+export { useViewerStyle, type ViewerStyleOverrides } from './composables/useViewerStyle'
 export { default as EditIcon } from './icons/EditIcon.vue'
 
 // DuckDB store

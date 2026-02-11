@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useViewerStyle, type ViewerStyleOverrides } from '../composables/useViewerStyle'
 
 const props = defineProps<{
-  /** S3 URL to parquet file */
   srcUrl?: string
+  customStyle?: ViewerStyleOverrides
 }>()
+
+const { rootStyle } = useViewerStyle(() => props.customStyle)
 
 const dataUrl = ref(props.srcUrl || '')
 const userPrompt = ref('')
@@ -28,91 +31,69 @@ function saveConfig() {
 </script>
 
 <template>
-  <div class="ai-plot-widget">
-    <!-- Data source input -->
-    <div class="ai-plot-field">
+  <div class="ps-viewer ai-plotly" :style="rootStyle">
+    <div class="ai-plotly-field">
       <label>Data URL</label>
       <input
         v-model="dataUrl"
         type="text"
-        class="ai-plot-input"
+        class="ps-input"
         placeholder="S3 Parquet URL"
         @blur="loadData"
       />
     </div>
 
-    <!-- AI prompt input (only shows after data loaded) -->
-    <div v-if="dataLoaded" class="ai-plot-field">
+    <div v-if="dataLoaded" class="ai-plotly-field">
       <label>Plot Description</label>
       <input
         v-model="userPrompt"
         type="text"
-        class="ai-plot-input"
+        class="ps-input"
         :maxlength="280"
         placeholder="Describe your plot..."
         @keyup.enter="generatePlot"
       />
     </div>
 
-    <!-- Plotly container -->
-    <div ref="plotlyDiv" class="plot-container"></div>
+    <div ref="plotlyDiv" class="ai-plotly-plot-container"></div>
 
-    <!-- Save config button -->
-    <button class="ai-plot-btn" @click="saveConfig">Save Widget Config</button>
+    <button class="ps-btn-primary" @click="saveConfig">Save Widget Config</button>
   </div>
 </template>
 
-<style scoped>
-.ai-plot-widget {
-  padding: 16px;
+<style scoped lang="scss">
+@use "../styles/viewer-theme" as vt;
+
+.ai-plotly {
+  @include vt.viewer-base;
+  padding: var(--ps-space-lg);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--ps-space-lg);
 }
 
-.ai-plot-field {
+.ai-plotly-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--ps-space-xs);
+
+  label {
+    font-size: var(--ps-font-size-md);
+    font-weight: 600;
+    color: var(--ps-color-text-dark);
+  }
 }
 
-.ai-plot-field label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
-
-.ai-plot-input {
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  padding: 8px 12px;
-  font-size: 14px;
-}
-
-.ai-plot-input:focus {
-  outline: none;
-  border-color: #2196f3;
-}
-
-.plot-container {
-  min-height: 300px;
-  border: 1px dashed #d1d5db;
-  border-radius: 4px;
-  background: #f9fafb;
-}
-
-.ai-plot-btn {
-  background: #243d8e;
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
+.ps-input { @include vt.ps-input; }
+.ps-btn-primary {
+  @include vt.ps-btn-primary;
   align-self: flex-start;
 }
 
-.ai-plot-btn:hover {
-  background: #4338ca;
+.ai-plotly-plot-container {
+  min-height: 300px;
+  border: 1px dashed var(--ps-color-border-dark);
+  border-radius: var(--ps-radius);
+  background: var(--ps-color-bg-tertiary);
 }
 </style>

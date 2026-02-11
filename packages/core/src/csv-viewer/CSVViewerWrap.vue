@@ -6,6 +6,7 @@
       :file-type="resolvedFileType"
       :file-id="resolvedFileId"
       :rows-per-page="rowsPerPage"
+      :custom-style="customStyle"
     />
   </div>
 </template>
@@ -15,6 +16,7 @@ import { onMounted, ref } from 'vue'
 import { pathOr } from 'ramda'
 import { useGetToken } from '../composables/useGetToken'
 import CSVViewer from './CSVViewer.vue'
+import type { ViewerStyleOverrides } from '../composables/useViewerStyle'
 
 const props = defineProps<{
   pkg?: { content?: { id?: string; packageType?: string } } | null
@@ -27,6 +29,7 @@ const props = defineProps<{
   srcFileId?: string
   /** Rows per page for pagination */
   rowsPerPage?: number
+  customStyle?: ViewerStyleOverrides
 }>()
 
 const resolvedUrl = ref('')
@@ -89,6 +92,7 @@ async function getFileUrl(pkgId: string, fileId: string) {
 
 <style scoped>
 .csv-viewer-wrap {
-  color: black;
+  height: 100%;
+  width: 100%;
 }
 </style>

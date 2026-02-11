@@ -1,27 +1,27 @@
 <!-- CSVViewer.vue - Simple CSV/Tabular data viewer with DuckDB-powered pagination -->
 <template>
-  <div class="csv-viewer-container">
+  <div class="ps-viewer csv-viewer" :style="rootStyle">
     <!-- Loading State -->
-    <div v-if="isLoading" class="csv-viewer-loading">
-      <div class="csv-viewer-spinner"></div>
+    <div v-if="isLoading" class="ps-loading">
+      <div class="ps-spinner"></div>
       <p>Loading data...</p>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="csv-viewer-error">
+    <div v-else-if="error" class="ps-error">
       <h3>Error</h3>
       <p>{{ error }}</p>
-      <button @click="retryLoad" class="csv-viewer-retry-btn">Retry</button>
+      <button @click="retryLoad" class="ps-btn-danger">Retry</button>
     </div>
 
     <!-- Data View -->
     <div v-else-if="isConnected && queryResults" class="csv-viewer-data">
       <!-- Info Bar -->
-      <div class="csv-viewer-info-bar">
-        <span class="csv-viewer-row-count">
+      <div class="ps-info-bar">
+        <span class="ps-info-bar-label">
           {{ paginatedResults.length }} of {{ totalRowsDisplay }} rows
         </span>
-        <div class="csv-viewer-info-controls">
+        <div class="ps-info-bar-controls">
           <el-pagination
             v-model:current-page="currentPage"
             :page-size="pageSize"
@@ -34,8 +34,8 @@
       </div>
 
       <!-- Data Table -->
-      <div class="csv-viewer-table-container">
-        <table class="csv-viewer-table">
+      <div class="ps-table-container">
+        <table class="ps-table">
           <thead>
             <tr>
               <th v-for="column in tableColumns" :key="column">
@@ -59,30 +59,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useDuckDBStore } from "../duckdb";
+import { useViewerStyle, type ViewerStyleOverrides } from "../composables/useViewerStyle";
 
-const props = defineProps({
-  url: {
-    type: String,
-    required: true,
-  },
-  fileType: {
-    type: String,
-    default: "csv",
-    validator: (value: string) => ["csv", "parquet"].includes(value),
-  },
-  rowsPerPage: {
-    type: Number,
-    default: 25,
-  },
-  autoLoad: {
-    type: Boolean,
-    default: true,
-  },
-  fileId: {
-    type: String,
-    default: null,
-  },
-});
+const props = defineProps<{
+  url: string
+  fileType?: string
+  rowsPerPage?: number
+  autoLoad?: boolean
+  fileId?: string | null
+  customStyle?: ViewerStyleOverrides
+}>();
+
+const { rootStyle } = useViewerStyle(() => props.customStyle);
 
 const duckDBStore = useDuckDBStore();
 
@@ -93,8 +81,9 @@ const tableName = ref("");
 const queryResults = ref<any[] | null>(null);
 const totalRows = ref<number | bigint>(0);
 const currentPage = ref(1);
-const pageSize = ref(props.rowsPerPage);
+const pageSize = ref(props.rowsPerPage ?? 25);
 const viewerId = `csv_viewer_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+const fileType = computed(() => props.fileType ?? "csv");
 
 const csvOptions = ref({
   header: true,
@@ -137,7 +126,7 @@ const initialize = async () => {
     const { connectionId: connId } = await duckDBStore.createConnection(viewerId);
     connectionId.value = connId;
 
-    if (props.autoLoad && props.url) {
+    if ((props.autoLoad ?? true) && props.url) {
       await loadCSVFile();
     } else {
       isLoading.value = false;
@@ -170,11 +159,11 @@ const loadCSVFile = async () => {
 
     tableName.value = await duckDBStore.loadFile(
       props.url,
-      props.fileType as "csv" | "parquet",
+      fileType.value as "csv" | "parquet",
       tableId,
       csvOptions.value,
       viewerId,
-      props.fileId
+      props.fileId ?? null
     );
 
     await getTotalRowCount();
@@ -257,139 +246,39 @@ onUnmounted(async () => {
 </script>
 
 <style scoped lang="scss">
-@use "../styles/theme" as theme;
+@use "../styles/viewer-theme" as vt;
 
-.csv-viewer-container {
+.csv-viewer {
+  @include vt.viewer-base;
   max-width: 100%;
-  margin: 0 auto;
 }
 
-.csv-viewer-loading {
+.ps-loading { @include vt.ps-loading; }
+.ps-spinner { @include vt.ps-spinner; }
+.ps-error { @include vt.ps-error-panel; }
+.ps-btn-danger { @include vt.ps-btn-danger; }
+.ps-info-bar { @include vt.ps-info-bar; }
+
+.ps-info-bar-label {
+  font-weight: 500;
+}
+
+.ps-info-bar-controls {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 40px;
-  color: theme.$gray_4;
-
-  p {
-    margin-top: 16px;
-    font-size: 14px;
-  }
-}
-
-.csv-viewer-spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid theme.$gray_2;
-  border-top: 3px solid theme.$purple_3;
-  border-radius: 50%;
-  animation: csv-viewer-spin 0.8s linear infinite;
-}
-
-@keyframes csv-viewer-spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.csv-viewer-error {
-  background: theme.$red_tint;
-  border: 1px solid theme.$red_1;
-  padding: 20px;
-  margin: 20px 0;
-
-  h3 {
-    color: theme.$red_2;
-    margin-top: 0;
-  }
-
-  p {
-    color: theme.$red_2;
-    margin: 10px 0;
-  }
-}
-
-.csv-viewer-retry-btn {
-  background: theme.$red_1;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-
-  &:hover {
-    background: theme.$red_2;
-  }
 }
 
 .csv-viewer-data {
-  background: white;
-  border: 1px solid theme.$gray_2;
+  background: var(--ps-color-bg);
+  border: 1px solid var(--ps-color-border);
+  border-radius: var(--ps-radius);
   overflow: hidden;
 }
 
-.csv-viewer-info-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: theme.$purple_tint;
-}
-
-.csv-viewer-row-count {
-  font-weight: 500;
-  font-size: 13px;
-  color: theme.$gray_5;
-}
-
-.csv-viewer-info-controls {
-  display: flex;
-  align-items: center;
-}
-
-.csv-viewer-table-container {
+.ps-table-container {
   overflow-x: auto;
   max-height: 600px;
 }
 
-.csv-viewer-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-
-  th,
-  td {
-    border: 1px solid theme.$gray_2;
-    padding: 8px 10px;
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  th:first-child,
-  td:first-child {
-    border-left: 0;
-  }
-
-  th:last-child,
-  td:last-child {
-    border-right: 0;
-  }
-
-  th {
-    background: theme.$gray_1;
-    font-weight: 600;
-    color: theme.$gray_6;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-
-  tbody tr:hover {
-    background: theme.$gray_0;
-  }
-
-  tbody tr:nth-child(even) {
-    background: #fafafa;
-  }
-}
+.ps-table { @include vt.ps-data-table; }
 </style>
