@@ -43,6 +43,18 @@ const hello = 'world';
       </div>
     </section>
 
+    <!-- CSVViewer Component -->
+    <section class="component-section">
+      <h2 class="component-label">CSVViewer</h2>
+      <p class="component-path">@pennsieve-viz/csv-viewer</p>
+      <div
+        class="component-container"
+        style="height: 400px; background: #f5f5f5"
+      >
+        <CSVViewer :src-url="csvUrl" />
+      </div>
+    </section>
+
     <!-- DataExplorer Component -->
     <section class="component-section">
       <h2 class="component-label">DataExplorer</h2>
@@ -130,6 +142,7 @@ const hello = 'world';
 <script setup lang="ts">
 import { ref } from "vue";
 import {
+  CSVViewer,
   Markdown,
   TextViewer,
   AiPlotly,
@@ -180,6 +193,11 @@ const samplePlotlyLayout = ref({
 
 // API configuration (update these for real data)
 const apiUrl = ref(
+  "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
+);
+
+// CSV sample URL (update for real CSV data)
+const csvUrl = ref(
   "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
 );
 
