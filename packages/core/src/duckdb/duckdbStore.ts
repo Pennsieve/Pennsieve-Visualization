@@ -1,7 +1,42 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { defineStore, getActivePinia } from 'pinia'
+import { ref, computed, watch } from 'vue'
 
-export const useDuckDBStore = defineStore('duckdb', () => {
+// ============================================================================
+// Types & Configuration
+// ============================================================================
+
+export interface DuckDBBundleConfig {
+    mvp?: { mainModule: string; mainWorker: string }
+    eh?: { mainModule: string; mainWorker: string }
+}
+
+export interface DuckDBConfig {
+    bundlePaths?: DuckDBBundleConfig
+}
+
+let _globalConfig: DuckDBConfig = {}
+
+/**
+ * Configure DuckDB bundle paths before any component uses the store.
+ * Call this in your app's main.ts to use local WASM files instead of CDN.
+ *
+ * @example
+ * configureDuckDB({
+ *   bundlePaths: {
+ *     mvp: { mainModule: '/static/duckdb/duckdb-mvp.wasm', mainWorker: '/static/duckdb/duckdb-browser-mvp.worker.js' },
+ *     eh: { mainModule: '/static/duckdb/duckdb-eh.wasm', mainWorker: '/static/duckdb/duckdb-browser-eh.worker.js' }
+ *   }
+ * })
+ */
+export function configureDuckDB(config: DuckDBConfig) {
+    _globalConfig = { ...config }
+}
+
+// ============================================================================
+// Internal store (fallback when no host store exists)
+// ============================================================================
+
+const _useInternalStore = defineStore('pennsieve-viz-duckdb', () => {
     // State
     const db = ref<any>(null)
     const isInitialized = ref(false)
@@ -49,10 +84,14 @@ export const useDuckDBStore = defineStore('duckdb', () => {
             try {
                 const duckdb = await import('@duckdb/duckdb-wasm')
 
-                // Use the CDN bundles from the npm package
-                const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles()
+                // Merge custom bundle paths with CDN defaults
+                const cdnBundles = duckdb.getJsDelivrBundles()
+                const bundles = {
+                    mvp: _globalConfig.bundlePaths?.mvp ?? cdnBundles.mvp,
+                    eh: _globalConfig.bundlePaths?.eh ?? cdnBundles.eh,
+                }
 
-                const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES)
+                const bundle = await duckdb.selectBundle(bundles)
                 const worker_url = URL.createObjectURL(
                     new Blob([`importScripts("${bundle.mainWorker!}");`], { type: 'text/javascript' })
                 )
@@ -408,3 +447,181 @@ export const useDuckDBStore = defineStore('duckdb', () => {
         formatIdFromUrl
     }
 })
+
+// ============================================================================
+// Host store detection & adaptation
+// ============================================================================
+
+/**
+ * Detect an existing Pinia store with ID "duckdb" from the host app.
+ * Returns the store if it exists and has the minimum required interface.
+ */
+function detectHostStore(): any | null {
+    try {
+        const pinia = getActivePinia()
+        if (!pinia || !(pinia as any)._s?.has('duckdb')) return null
+
+        const store = (pinia as any)._s.get('duckdb')
+
+        // Validate minimum required interface
+        if (!store ||
+            typeof store.createConnection !== 'function' ||
+            typeof store.executeQuery !== 'function' ||
+            typeof store.loadFile !== 'function' ||
+            typeof store.closeConnection !== 'function') {
+            return null
+        }
+
+        return store
+    } catch {
+        return null
+    }
+}
+
+function quoteIdentHelper(name: string) {
+    return `"${String(name).replace(/"/g, '""')}"`
+}
+
+/**
+ * Wait for the host store to become ready.
+ * Handles three cases:
+ *  - Already ready → resolves immediately
+ *  - Currently initializing → watches isReady until it flips to true
+ *  - Not yet started → calls initDuckDB/initializeDuckDB if available, else watches
+ */
+function waitForHostReady(hostStore: any, timeoutMs = 30_000): Promise<void> {
+    if (hostStore.isReady) return Promise.resolve()
+
+    // If the host exposes an init function and isn't already initializing, kick it off
+    const initFn = hostStore.initDuckDB ?? hostStore.initializeDuckDB
+    if (typeof initFn === 'function' && !hostStore.isInitializing) {
+        return initFn.call(hostStore)
+    }
+
+    // Host is mid-init (isInitializing === true) — watch for isReady
+    return new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            unwatch()
+            reject(new Error('Timed out waiting for host DuckDB store to become ready'))
+        }, timeoutMs)
+
+        const unwatch = watch(
+            () => hostStore.isReady,
+            (ready: boolean) => {
+                if (ready) {
+                    clearTimeout(timer)
+                    unwatch()
+                    resolve()
+                }
+            },
+            { immediate: true }
+        )
+    })
+}
+
+/**
+ * Patch library-specific methods onto the host store if they're missing.
+ * Mutations are idempotent — safe to call multiple times.
+ */
+function adaptHostStore(hostStore: any): void {
+    // Alias initializeDuckDB → initDuckDB if the host uses a different name
+    if (!hostStore.initDuckDB && typeof hostStore.initializeDuckDB === 'function') {
+        hostStore.initDuckDB = hostStore.initializeDuckDB
+    }
+
+    // Wrap createConnection: wait for host readiness + normalize return format
+    if (!hostStore._psvCreateConnectionWrapped) {
+        const origCreate = hostStore.createConnection
+        hostStore.createConnection = async (viewerId?: string) => {
+            // Ensure host DuckDB is initialized before creating a connection
+            await waitForHostReady(hostStore)
+
+            const result = await origCreate(viewerId)
+            // Already in expected format
+            if (result && typeof result === 'object' && 'connectionId' in result) {
+                return result
+            }
+            // Host returns just a connectionId string
+            if (typeof result === 'string') {
+                return { connection: null, connectionId: result }
+            }
+            return result
+        }
+        hostStore._psvCreateConnectionWrapped = true
+    }
+
+    // Wrap loadFile: ensure host is ready before loading
+    if (!hostStore._psvLoadFileWrapped) {
+        const origLoadFile = hostStore.loadFile
+        hostStore.loadFile = async (...args: any[]) => {
+            await waitForHostReady(hostStore)
+            return origLoadFile.apply(hostStore, args)
+        }
+        hostStore._psvLoadFileWrapped = true
+    }
+
+    // Pure utility — no DuckDB dependency
+    if (typeof hostStore.formatIdFromUrl !== 'function') {
+        hostStore.formatIdFromUrl = (srcUrl: string) => {
+            return 'url_' + btoa(srcUrl).replace(/=+$/, '').replace(/[+/]/g, '_')
+        }
+    }
+
+    // Cross-component shared query result state
+    if (hostStore.sharedResultName === undefined) {
+        hostStore.sharedResultName = null
+    }
+    if (hostStore.sharedVersion === undefined) {
+        hostStore.sharedVersion = 0
+    }
+
+    // Publish helpers (use host's executeQuery for DDL)
+    if (typeof hostStore.publishViewFromQuery !== 'function') {
+        hostStore.publishViewFromQuery = async (name: string, sql: string, connectionId: string) => {
+            await hostStore.executeQuery(
+                `CREATE OR REPLACE VIEW ${quoteIdentHelper(name)} AS ${sql}`,
+                connectionId
+            )
+            hostStore.sharedResultName = name
+            hostStore.sharedVersion = (hostStore.sharedVersion || 0) + 1
+        }
+    }
+
+    if (typeof hostStore.publishTableFromQuery !== 'function') {
+        hostStore.publishTableFromQuery = async (name: string, sql: string, connectionId: string) => {
+            await hostStore.executeQuery(
+                `CREATE OR REPLACE TABLE ${quoteIdentHelper(name)} AS ${sql}`,
+                connectionId
+            )
+            hostStore.sharedResultName = name
+            hostStore.sharedVersion = (hostStore.sharedVersion || 0) + 1
+        }
+    }
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+// Store type for consumers
+type DuckDBStoreInstance = ReturnType<typeof _useInternalStore>
+
+/**
+ * Get the DuckDB store.
+ *
+ * Detection order:
+ *  1. If a Pinia store with ID "duckdb" already exists (host app) → reuse it
+ *  2. Otherwise → create the library's own store and initialize DuckDB
+ *
+ * The host store is patched with any missing library-specific methods
+ * (formatIdFromUrl, publishViewFromQuery, etc.) so components work seamlessly.
+ */
+export function useDuckDBStore(): DuckDBStoreInstance {
+    const hostStore = detectHostStore()
+    if (hostStore) {
+        adaptHostStore(hostStore)
+        return hostStore as DuckDBStoreInstance
+    }
+
+    return _useInternalStore()
+}

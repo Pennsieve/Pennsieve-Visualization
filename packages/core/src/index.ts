@@ -5,8 +5,9 @@ import { defineAsyncComponent } from 'vue'
 export { useGetToken } from './composables/useGetToken'
 export { default as EditIcon } from './icons/EditIcon.vue'
 
-// DuckDB store
-export { useDuckDBStore } from './duckdb'
+// DuckDB store & configuration
+export { useDuckDBStore, configureDuckDB } from './duckdb'
+export type { DuckDBConfig, DuckDBBundleConfig } from './duckdb'
 
 // =============================================================================
 // Production-ready components
