@@ -1,27 +1,27 @@
 <template>
   <div class="app-container">
     <WebGLScatterplot
-      :data="pointData"
-      :metaData="metaData"
-      :pointCount="pointCount"
-      :color-map="colorMap"
-      :colorMode="colorMode"
-      :startColor="startColor"
-      :endColor="endColor"
-      :singleColor="singleColor"
-      :selectedMapEntries="Array.from(colorMap)"
-      :forceRegenerate="forceRegenerate"
-      :key="componentKey"
-      :hover-fields="hoverFields"
+      :data="store.pointData"
+      :metaData="store.metaData"
+      :pointCount="store.pointCount"
+      :color-map="store.colorMap"
+      :colorMode="store.colorMode"
+      :startColor="store.startColor"
+      :endColor="store.endColor"
+      :singleColor="store.singleColor"
+      :selectedMapEntries="Array.from(store.colorMap)"
+      :forceRegenerate="store.forceRegenerate"
+      :key="store.componentKey"
+      :hover-fields="store.hoverFields"
     />
     <ControlPanel
-      v-model:pointCount="pointCount"
-      v-model:colorMode="colorMode"
-      v-model:startColor="startColor"
-      v-model:endColor="endColor"
-      v-model:singleColor="singleColor"
-      :color-scheme="colorMap"
-      :color-map-map="colorMapMap"
+      v-model:pointCount="store.pointCount"
+      v-model:colorMode="store.colorMode"
+      v-model:startColor="store.startColor"
+      v-model:endColor="store.endColor"
+      v-model:singleColor="store.singleColor"
+      :color-scheme="store.colorMap"
+      :color-map-map="store.colorMapMap"
       @regenerate="regenerateData"
       @updateColorMap="updateColorMap"
     />
@@ -29,49 +29,68 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
+import { watch, onMounted, onBeforeUnmount, computed, provide } from 'vue'
 import WebGLScatterplot from './scatterplot.vue'
 import ControlPanel from './control.vue'
 import { useDuckDBStore } from '../duckdb'
 import { useGetToken } from '../composables/useGetToken'
+import { createUMAPStore, clearUMAPStore } from './umapStore'
 
 const props = defineProps<{
+  instanceId?: string
   apiUrl?: string
   pkg?: { content?: { id?: string; packageType?: string } } | null
   srcUrl?: string
   srcFileType?: 'csv' | 'parquet'
   srcFileId?: string
+  /** Optional: accept pre-loaded data directly (skip URL loading) */
+  data?: Array<Record<string, any>>
 }>()
 
-// ----------------- Reactive state -----------------
-const pointCount = ref(5000)
-const colorMode = ref('random')
-const startColor = ref('#ff0000')
-const endColor = ref('#0000ff')
-const singleColor = ref('#4285f4')
-const forceRegenerate = ref(false)
-const componentKey = ref(0)
+// Create instance-specific store
+const effectiveInstanceId = computed(() => props.instanceId || 'default')
+const store = createUMAPStore(effectiveInstanceId.value)
 
-const pointData = ref<any[]>([])
-const metaData = ref<any>(null)
+// Provide store to child components (for future use)
+provide('umapStore', store)
+provide('umapInstanceId', effectiveInstanceId.value)
 
-const colorMap = ref<Map<any, any>>(new Map())
-const colorMapMap = ref<Map<string, Map<any, number[]>>>(new Map())
-
-const viewAssets = ref<any[]>([])
-
-// duckdb wiring
+// DuckDB store (shared singleton)
 const duck = useDuckDBStore()
-const connectionId = ref<string | null>(null)
-const tableName = ref<string | null>(null)
 
-// default axes
+// View assets for Pennsieve API mode
+const viewAssets = computed(() => [] as any[])
+
+// Default axes
 const defaultX = 'UMAP_1'
 const defaultY = 'UMAP_2'
 
-// ----------------- Orchestrator -----------------
+// Stable ID for file deduplication
 const stableId = computed(() => duck.formatIdFromUrl(props.srcUrl || ''))
 
+// ----------------- Orchestrator -----------------
+
+// Watch for pre-loaded data prop
+watch(
+  () => props.data,
+  async (newData) => {
+    if (newData && newData.length > 0) {
+      try {
+        store.setLoading(true)
+        store.setError(null)
+        await hydrateFromPreloadedData(newData)
+      } catch (e: any) {
+        console.error('[UMAP Wrapper] Pre-loaded data processing failed:', e?.message || e)
+        store.setError(e?.message || 'Data processing failed')
+      } finally {
+        store.setLoading(false)
+      }
+    }
+  },
+  { immediate: true, deep: true }
+)
+
+// Watch for URL/pkg-based loading (skip if data prop is provided)
 watch(
   () => ({
     srcUrl: props.srcUrl,
@@ -79,13 +98,29 @@ watch(
     srcFileId: props.srcFileId,
     pkgId: props.pkg?.content?.id || '',
     pkgType: props.pkg?.content?.packageType || 'csv',
-    apiUrl: props.apiUrl || ''
+    apiUrl: props.apiUrl || '',
+    hasPreloadedData: !!(props.data && props.data.length > 0)
   }),
-  async ({ srcUrl, srcFileType, srcFileId, pkgId, pkgType, apiUrl }) => {
+  async ({ srcUrl, srcFileType, srcFileId, pkgId, pkgType, apiUrl, hasPreloadedData }) => {
+    // Skip URL loading if pre-loaded data is provided
+    if (hasPreloadedData) {
+      return
+    }
+
     try {
-      pointData.value = []
-      metaData.value = null
+      store.setPointData([])
+      store.setMetaData(null)
+      store.setLoading(true)
+      store.setError(null)
       await ensureConnection()
+
+      // Track source info
+      store.setSourceInfo({
+        url: srcUrl || null,
+        fileType: srcFileType || null,
+        fileId: srcFileId || null,
+        pkgId: pkgId || null,
+      })
 
       if (srcUrl) {
         const ft = srcFileType ?? (srcUrl.toLowerCase().endsWith('.csv') ? 'csv' : 'parquet')
@@ -95,8 +130,8 @@ watch(
       }
 
       if (pkgId && apiUrl) {
-        await getViewerAssets(pkgId, apiUrl)
-        const firstFileId = viewAssets.value?.[0]?.content?.id
+        const assets = await getViewerAssets(pkgId, apiUrl)
+        const firstFileId = assets?.[0]?.content?.id
         if (!firstFileId) return
         const presigned = await getFileUrl(pkgId, firstFileId, apiUrl)
         const ft = 'parquet'
@@ -105,46 +140,190 @@ watch(
       }
     } catch (e: any) {
       console.error('[UMAP Wrapper] Load failed:', e?.message || e)
+      store.setError(e?.message || 'Load failed')
+    } finally {
+      store.setLoading(false)
     }
   },
   { immediate: true }
 )
 
-watch(pointCount, async () => {
-  if (tableName.value && connectionId.value) {
+watch(() => store.pointCount, async () => {
+  // If pre-loaded data is available, re-hydrate from it
+  if (props.data && props.data.length > 0) {
+    await hydrateFromPreloadedData(props.data)
+    return
+  }
+  // Otherwise, re-fetch from DuckDB
+  if (store.tableName && store.connectionId) {
     await fetchPointsAndMeta()
   }
 })
 
-// auto-update when DataExplorer publishes a view/table
+// Auto-update when DataExplorer publishes a view/table
 watch([() => duck.sharedVersion, () => duck.sharedResultName], async () => {
   if (!duck.sharedResultName) return
   await ensureConnection()
-  tableName.value = duck.sharedResultName
+  store.setTableName(duck.sharedResultName)
   await hydrateFromDuckDB()
 })
 
 // ----------------- DuckDB helpers -----------------
 async function ensureConnection() {
-  if (connectionId.value) return
-  const { connectionId: cid } = await duck.createConnection(`umap_${Date.now()}`)
-  connectionId.value = cid
+  if (store.connectionId) return
+  const { connectionId: cid } = await duck.createConnection(`umap_${effectiveInstanceId.value}_${Date.now()}`)
+  store.setConnectionId(cid)
 }
 
 async function loadIntoDuckDB(url: string, fileType: 'csv' | 'parquet', validId: string) {
   const tname = `umap_${validId.replace(/[^a-zA-Z0-9_]/g, '_')}`
-  tableName.value = await duck.loadFile(url, fileType, tname, {}, connectionId.value!, validId)
+  const loadedName = await duck.loadFile(url, fileType, tname, {}, store.connectionId!, validId)
+  store.setTableName(loadedName)
+}
+
+/** Process pre-loaded data array directly (no DuckDB needed) */
+async function hydrateFromPreloadedData(rows: Array<Record<string, any>>) {
+  if (!rows || rows.length === 0) return
+
+  // Infer columns from first row
+  const firstRow = rows[0]
+  const colNames = Object.keys(firstRow)
+
+  // Infer column types
+  const cols = colNames.map(name => {
+    const sampleValue = firstRow[name]
+    let type = 'VARCHAR'
+    if (typeof sampleValue === 'number') {
+      type = Number.isInteger(sampleValue) ? 'INTEGER' : 'DOUBLE'
+    } else if (typeof sampleValue === 'bigint') {
+      type = 'BIGINT'
+    }
+    return { name, type }
+  })
+  store.setColumns(cols)
+
+  const numericCols = cols.filter(c => /DOUBLE|HUGEINT|BIGINT|INTEGER|DECIMAL|FLOAT|REAL/i.test(c.type))
+
+  // Choose axes
+  const xKey = cols.some(c => c.name === defaultX) ? defaultX : (numericCols[0]?.name || cols[0]?.name)
+  const yKey = cols.some(c => c.name === defaultY) ? defaultY : (numericCols[1]?.name || cols[1]?.name || xKey)
+  store.setAxes(xKey, yKey)
+
+  // Limit to pointCount
+  const limitedRows = rows.slice(0, store.pointCount)
+  const others = colNames.filter(n => n !== xKey && n !== yKey)
+
+  // Transform to point format
+  const points = limitedRows
+    .filter((r: any) => r[xKey] != null && r[yKey] != null)
+    .map((r: any, i: number) => {
+      const attrs: Record<string, any> = {}
+      for (const name of colNames) {
+        attrs[name] = r[name]
+      }
+      const rawRow = [r[xKey], r[yKey], ...others.map(n => r[n])]
+      return {
+        x: Number(r[xKey]),
+        y: Number(r[yKey]),
+        rawX: Number(r[xKey]),
+        rawY: Number(r[yKey]),
+        id: i,
+        color: [0.5, 0.5, 0.5],
+        attrs,
+        rawRow
+      }
+    })
+  store.setPointData(points)
+
+  // Compute stats for metadata
+  const xVals = points.map(p => p.x).filter(Number.isFinite)
+  const yVals = points.map(p => p.y).filter(Number.isFinite)
+  const xmin = Math.min(...xVals), xmax = Math.max(...xVals)
+  const ymin = Math.min(...yVals), ymax = Math.max(...yVals)
+
+  store.setMetaData({
+    schema: [{ name: xKey }, { name: yKey }, ...others.map(n => ({ name: n }))],
+    row_groups: [
+      {
+        columns: [
+          { meta_data: { statistics: { min_value: xmin, max_value: xmax } } },
+          { meta_data: { statistics: { min_value: ymin, max_value: ymax } } }
+        ]
+      }
+    ]
+  })
+
+  computeHoverFieldsFromSample()
+  await buildColorMapsFromPreloadedData(cols, xKey, yKey, limitedRows)
+}
+
+/** Build color maps from pre-loaded data (no DuckDB queries) */
+async function buildColorMapsFromPreloadedData(
+  cols: Array<{ name: string, type: string }>,
+  xKey: string,
+  yKey: string,
+  rows: Array<Record<string, any>>
+) {
+  const newColorMapMap = new Map<string, Map<any, number[]>>()
+
+  const hexColors = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0']
+  const isNumeric = (t: string) => /DOUBLE|HUGEINT|BIGINT|INTEGER|DECIMAL|FLOAT|REAL/i.test(t)
+
+  for (const c of cols) {
+    if (c.name === xKey || c.name === yKey) {
+      newColorMapMap.set(c.name, new Map())
+      continue
+    }
+
+    if (isNumeric(c.type)) {
+      newColorMapMap.set(c.name, new Map())
+    } else {
+      // Get distinct values from pre-loaded data
+      const distinctValues = new Set<any>()
+      for (const row of rows) {
+        const v = row[c.name]
+        if (v !== null && v !== undefined) {
+          distinctValues.add(v)
+          if (distinctValues.size >= 10000) break // Same limit as DuckDB version
+        }
+      }
+
+      const valueMap = new Map<any, number[]>()
+      Array.from(distinctValues).forEach((v: any, i: number) =>
+        valueMap.set(v, hexToRgb(hexColors[i % hexColors.length]))
+      )
+      newColorMapMap.set(c.name, valueMap)
+    }
+  }
+
+  store.setColorMapMap(newColorMapMap)
+
+  const meta = store.metaData
+  if (meta) {
+    meta.key_value_metadata = Array.from(newColorMapMap.keys()).map(key => ({
+      key,
+      value: JSON.stringify(Array.from(newColorMapMap.get(key)?.keys() ?? []))
+    }))
+    store.setMetaData(meta)
+  }
+
+  if (store.colorMode !== 'random' && !newColorMapMap.has(store.colorMode)) {
+    store.setColorMode('random')
+  }
 }
 
 /** choose axes, pull [x,y,...ALL cols], synthesize meta + color keys */
 async function hydrateFromDuckDB() {
-  if (!tableName.value || !connectionId.value) return
-  const cols = await getColumns(tableName.value)
+  if (!store.tableName || !store.connectionId) return
+  const cols = await getColumns(store.tableName)
+  store.setColumns(cols)
+
   const numericCols = cols.filter(c => /DOUBLE|HUGEINT|BIGINT|INTEGER|DECIMAL|FLOAT|REAL/i.test(c.type))
 
   const xKey = cols.some(c => c.name === defaultX) ? defaultX : (numericCols[0]?.name || cols[0]?.name)
   const yKey = cols.some(c => c.name === defaultY) ? defaultY : (numericCols[1]?.name || cols[1]?.name || xKey)
 
+  store.setAxes(xKey, yKey)
   await fetchPointsAndMeta(xKey, yKey, cols.map(c => c.name))
   await buildColorMaps(cols, xKey, yKey)
 }
@@ -155,9 +334,9 @@ async function fetchPointsAndMeta(
   allColNames?: string[],
   allCols?: Array<{ name: string, type: string }>
 ) {
-  if (!tableName.value || !connectionId.value) return
+  if (!store.tableName || !store.connectionId) return
 
-  const cols = allCols ?? await getColumns(tableName.value)
+  const cols = allCols ?? await getColumns(store.tableName)
 
   const names = allColNames ?? cols.map(c => c.name)
 
@@ -174,16 +353,16 @@ async function fetchPointsAndMeta(
     ...others.map(n => duckIdent(n))
   ].join(', ')
 
-  const tbl = duckIdent(tableName.value!)
+  const tbl = duckIdent(store.tableName!)
   const q = `
     SELECT ${select}
     FROM ${tbl}
     WHERE ${xExpr} IS NOT NULL AND ${yExpr} IS NOT NULL
-    LIMIT ${pointCount.value}
+    LIMIT ${store.pointCount}
   `
-  const rows = await duck.executeQuery(q, connectionId.value!)
+  const rows = await duck.executeQuery(q, store.connectionId!)
 
-  pointData.value = rows.map((r: any, i: number) => {
+  const points = rows.map((r: any, i: number) => {
     const attrs: Record<string, any> = {}
     for (const name of names) {
       attrs[name] = r[name]
@@ -200,6 +379,7 @@ async function fetchPointsAndMeta(
       rawRow
     }
   })
+  store.setPointData(points)
 
   const s = `
     SELECT min(${xExpr}) AS xmin, max(${xExpr}) AS xmax,
@@ -207,8 +387,8 @@ async function fetchPointsAndMeta(
     FROM ${tbl}
     WHERE ${xExpr} IS NOT NULL AND ${yExpr} IS NOT NULL
   `
-  const stat = (await duck.executeQuery(s, connectionId.value!))?.[0] || { xmin: -1, xmax: 1, ymin: -1, ymax: 1 }
-  metaData.value = {
+  const stat = (await duck.executeQuery(s, store.connectionId!))?.[0] || { xmin: -1, xmax: 1, ymin: -1, ymax: 1 }
+  store.setMetaData({
     schema: [{ name: xKey }, { name: yKey }, ...others.map(n => ({ name: n }))],
     row_groups: [
       {
@@ -218,18 +398,16 @@ async function fetchPointsAndMeta(
         ]
       }
     ]
-  }
+  })
   computeHoverFieldsFromSample()
 }
 
-const hoverFields = ref<string[]>([])
-
 function computeHoverFieldsFromSample(maxFields = 6) {
-  const schema = (metaData.value?.schema ?? []).map((s: any) => s?.name || '')
-  if (!schema.length || !pointData.value?.length) { hoverFields.value = []; return }
+  const schema = (store.metaData?.schema ?? []).map((s: any) => s?.name || '')
+  if (!schema.length || !store.pointData?.length) { store.setHoverFields([]); return }
 
   const candidates = schema.slice(2)
-  const rows = pointData.value as Array<{ attrs?: Record<string, any> }>
+  const rows = store.pointData as Array<{ attrs?: Record<string, any> }>
 
   type Stat = { name: string; nullRate: number; unique: number; isNumeric: boolean }
   const stats: Stat[] = candidates.map((name: string) => {
@@ -268,7 +446,7 @@ function computeHoverFieldsFromSample(maxFields = 6) {
   }
 
   stats.sort((a, b) => score(b) - score(a))
-  hoverFields.value = stats.filter(s => s.nullRate < 0.95).slice(0, maxFields).map(s => s.name)
+  store.setHoverFields(stats.filter(s => s.nullRate < 0.95).slice(0, maxFields).map(s => s.name))
 }
 
 // helpers
@@ -280,43 +458,49 @@ function isNumericType(t: string) {
   return /INT|DECIMAL|DOUBLE|FLOAT|REAL|HUGEINT|UBIGINT|BIGINT/i.test(t)
 }
 
-/** Build color options for *all* columns. Categorical → legend map; Numeric → empty (UMAP will do gradient) */
+/** Build color options for *all* columns. Categorical -> legend map; Numeric -> empty (UMAP will do gradient) */
 async function buildColorMaps(
   cols: Array<{ name: string, type: string }>,
   xKey: string,
   yKey: string
 ) {
-  colorMapMap.value = new Map()
+  const newColorMapMap = new Map<string, Map<any, number[]>>()
 
   const hexColors = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0']
   const isNumeric = (t: string) => /DOUBLE|HUGEINT|BIGINT|INTEGER|DECIMAL|FLOAT|REAL/i.test(t)
 
   for (const c of cols) {
     if (c.name === xKey || c.name === yKey) {
-      colorMapMap.value.set(c.name, new Map())
+      newColorMapMap.set(c.name, new Map())
       continue
     }
 
     if (isNumeric(c.type)) {
-      colorMapMap.value.set(c.name, new Map())
+      newColorMapMap.set(c.name, new Map())
     } else {
-      const distinctQ = `SELECT DISTINCT ${quote(c.name)} AS v FROM ${tableName.value} LIMIT 10000`
-      const distinct = await duck.executeQuery(distinctQ, connectionId.value!)
+      const distinctQ = `SELECT DISTINCT ${quote(c.name)} AS v FROM ${store.tableName} LIMIT 10000`
+      const distinct = await duck.executeQuery(distinctQ, store.connectionId!)
       const values = distinct.map((r: any) => r.v).filter((v: any) => v !== null && v !== undefined)
 
       const valueMap = new Map<any, number[]>()
       values.forEach((v: any, i: number) => valueMap.set(v, hexToRgb(hexColors[i % hexColors.length])))
-      colorMapMap.value.set(c.name, valueMap)
+      newColorMapMap.set(c.name, valueMap)
     }
   }
 
-  ; (metaData.value ||= {}).key_value_metadata = Array.from(colorMapMap.value.keys()).map(key => ({
-    key,
-    value: JSON.stringify(Array.from(colorMapMap.value.get(key)?.keys() ?? []))
-  }))
+  store.setColorMapMap(newColorMapMap)
 
-  if (colorMode.value !== 'random' && !colorMapMap.value.has(colorMode.value)) {
-    colorMode.value = 'random'
+  const meta = store.metaData
+  if (meta) {
+    meta.key_value_metadata = Array.from(newColorMapMap.keys()).map(key => ({
+      key,
+      value: JSON.stringify(Array.from(newColorMapMap.get(key)?.keys() ?? []))
+    }))
+    store.setMetaData(meta)
+  }
+
+  if (store.colorMode !== 'random' && !newColorMapMap.has(store.colorMode)) {
+    store.setColorMode('random')
   }
 }
 
@@ -326,7 +510,7 @@ async function getViewerAssets(pkgId: string, apiUrl: string) {
   const url = `${apiUrl}/packages/${pkgId}/view?api_key=${token}`
   const r = await fetch(url)
   if (!r.ok) throw new Error(`view failed: ${r.status}`)
-  viewAssets.value = await r.json()
+  return await r.json()
 }
 
 async function getFileUrl(pkgId: string, fileId: string, apiUrl: string) {
@@ -344,8 +528,7 @@ function quote(id: string) {
 }
 
 function regenerateData() {
-  forceRegenerate.value = !forceRegenerate.value
-  componentKey.value++
+  store.triggerRegenerate()
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -360,18 +543,25 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 function updateColorMap(data: [string, Map<any, number[]>]) {
-  colorMap.value = data[1]
+  store.setColorMap(data[1])
 }
 
 // columns/types
 async function getColumns(tbl: string) {
-  const rows = await duck.executeQuery(`PRAGMA table_info(${tbl});`, connectionId.value!)
+  const rows = await duck.executeQuery(`PRAGMA table_info(${tbl});`, store.connectionId!)
   return rows.map((r: any) => ({ name: r.name, type: r.type }))
 }
 
 // ----------------- lifecycle -----------------
 onMounted(async () => { await ensureConnection() })
-onBeforeUnmount(async () => { if (connectionId.value) await duck.closeConnection(connectionId.value) })
+onBeforeUnmount(async () => {
+  // Close DuckDB connection
+  if (store.connectionId) {
+    await duck.closeConnection(store.connectionId)
+  }
+  // Clear store instance
+  clearUMAPStore(effectiveInstanceId.value)
+})
 </script>
 
 <style scoped>

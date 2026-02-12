@@ -5,28 +5,25 @@ import { defineAsyncComponent } from 'vue'
 export { useGetToken } from './composables/useGetToken'
 export { default as EditIcon } from './icons/EditIcon.vue'
 
-// DuckDB store
-export { useDuckDBStore } from './duckdb'
+// DuckDB store & configuration
+export { useDuckDBStore, configureDuckDB } from './duckdb'
+export type { DuckDBConfig, DuckDBBundleConfig } from './duckdb'
 
-// Direct exports from component modules
+// =============================================================================
+// Production-ready components
+// =============================================================================
 export * from './data-explorer'
 export * from './umap'
-export * from './proportion-plot'
 export * from './markdown'
 export * from './text-viewer'
-export * from './ai-plotly'
 
-// Lazy-loaded component exports for tree-shaking (internal components)
+// Lazy-loaded versions for tree-shaking
 export const DataExplorerLazy = defineAsyncComponent(
   () => import('./data-explorer').then(m => m.DataExplorer)
 )
 
 export const UMAPLazy = defineAsyncComponent(
   () => import('./umap').then(m => m.UMAP)
-)
-
-export const ProportionPlotLazy = defineAsyncComponent(
-  () => import('./proportion-plot').then(m => m.ProportionPlot)
 )
 
 export const MarkdownLazy = defineAsyncComponent(
@@ -37,7 +34,16 @@ export const TextViewerLazy = defineAsyncComponent(
   () => import('./text-viewer').then(m => m.TextViewer)
 )
 
-export const AiPlotlyLazy = defineAsyncComponent(
+// =============================================================================
+// Beta components - not part of public API, but available for testing
+// Import directly: import { ProportionPlot } from '@pennsieve-viz/core/src/proportion-plot'
+// Or use the lazy exports below
+// =============================================================================
+export const ProportionPlotBeta = defineAsyncComponent(
+  () => import('./proportion-plot').then(m => m.ProportionPlot)
+)
+
+export const AiPlotlyBeta = defineAsyncComponent(
   () => import('./ai-plotly').then(m => m.AiPlotly)
 )
 
