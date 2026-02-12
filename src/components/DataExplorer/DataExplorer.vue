@@ -220,9 +220,7 @@
                                   ORDER BY column1, column2
                                   LIMIT 20;`,
       },
-      { name: "Describe", query: `DESCRIBE data;` },
       { name: "Sample", query: `SELECT * FROM data USING SAMPLE 10;` },
-      { name: "Columns", query: `PRAGMA table_info(data);` },
     ];
   });
   
@@ -315,12 +313,7 @@
       .replace(/\bUPDATE\s+data\b/gi, `UPDATE ${tableName.value}`)
       .replace(/\bINSERT\s+INTO\s+data\b/gi, `INSERT INTO ${tableName.value}`)
       .replace(/\bINTO\s+data\b/gi, `INTO ${tableName.value}`)
-      .replace(/\btable_info\(\s*data\s*\)/gi, `table_info(${tableName.value})`)
-      .replace(/\bDESCRIBE\s+data\b/gi, `DESCRIBE ${tableName.value}`)
-      .replace(
-        /\bPRAGMA\s+table_info\(\s*data\s*\)/gi,
-        `PRAGMA table_info(${tableName.value})`
-      );
+      .replace(/\btable_info\(\s*data\s*\)/gi, `table_info(${tableName.value})`);
   
     if (interceptedQuery !== query) {
       // console.log("Intercepted query:", interceptedQuery);

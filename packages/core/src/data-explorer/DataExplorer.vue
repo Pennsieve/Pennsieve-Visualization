@@ -203,9 +203,7 @@ const queryExamples = computed(() => {
                                   ORDER BY column1, column2
                                   LIMIT 20;`,
     },
-    { name: "Describe", query: `DESCRIBE data;` },
     { name: "Sample", query: `SELECT * FROM data USING SAMPLE 10;` },
-    { name: "Columns", query: `PRAGMA table_info(data);` },
   ];
 });
 
