@@ -1,6 +1,7 @@
 <template>
   <div class="app-container">
     <DataExplorer
+      :instance-id="props.instanceId"
       :url="resolvedUrl"
       :file-type="resolvedFileType"
       :file-id="resolvedFileId"
@@ -16,6 +17,8 @@ import { useGetToken } from '../composables/useGetToken'
 import DataExplorer from './DataExplorer.vue'
 
 const props = defineProps<{
+  /** Unique identifier for multi-instance support */
+  instanceId?: string
   pkg?: { content?: { id?: string; packageType?: string } } | null
   apiUrl?: string
   /** Optional: provide a direct public URL (bypass Pennsieve API) */

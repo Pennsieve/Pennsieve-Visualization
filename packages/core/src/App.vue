@@ -51,7 +51,7 @@ const hello = 'world';
         class="component-container"
         style="height: 400px; background: #f5f5f5"
       >
-        <DataExplorer :src-url="apiUrl" />
+        <DataExplorer instance-id="playground-explorer" :src-url="apiUrl" />
       </div>
     </section>
 
@@ -63,7 +63,7 @@ const hello = 'world';
         class="component-container"
         style="height: 400px; background: #f5f5f5"
       >
-        <UMAP :src-url="apiUrl" />
+        <UMAP instance-id="playground-umap" :src-url="apiUrl" />
       </div>
     </section>
 
@@ -132,10 +132,10 @@ import { ref } from "vue";
 import {
   Markdown,
   TextViewer,
-  AiPlotly,
+  AiPlotlyBeta as AiPlotly,
   DataExplorer,
   UMAP,
-  ProportionPlot,
+  ProportionPlotBeta as ProportionPlot,
   EditIcon,
   TSViewer,
   OmeViewer,

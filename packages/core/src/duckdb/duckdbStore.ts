@@ -105,10 +105,7 @@ export const useDuckDBStore = defineStore('duckdb', () => {
             // Clean up file usage for this viewer
             cleanupViewerFileUsage(connectionId)
 
-            // If this was the last connection, consider global cleanup
-            if (connections.value.size === 0) {
-                console.log('No active connections remaining. Keeping DuckDB instance for potential reuse.')
-            }
+            // If this was the last connection, DuckDB instance is kept for potential reuse
         }
     }
 
@@ -286,7 +283,6 @@ export const useDuckDBStore = defineStore('duckdb', () => {
         for (const [id, connData] of connections.value) {
             try {
                 await connData.connection.close()
-                console.log(`Closed connection: ${id}`)
             } catch (err) {
                 console.warn(`Error closing connection ${id}:`, err)
             }
@@ -313,8 +309,6 @@ export const useDuckDBStore = defineStore('duckdb', () => {
     const cleanup = async (force = false) => {
         if (force || connections.value.size === 0) {
             await performGlobalCleanup()
-        } else {
-            console.log(`Skipping global cleanup. ${connections.value.size} active connections remaining.`)
         }
     }
 
