@@ -49,8 +49,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useDuckDBStore } from '../duckdb'
+import { ref, computed, watch, onMounted, onBeforeUnmount, inject } from 'vue'
+import type { DuckDBStoreInterface } from '../duckdb'
 import { useGetToken } from '../composables/useGetToken'
 
 const props = defineProps<{
@@ -64,7 +64,14 @@ const props = defineProps<{
 
 // ----------------- reactive state -----------------
 let Plotly: any
-const duck = useDuckDBStore()
+const _injectedDuckDB = inject<DuckDBStoreInterface>('duckdb')
+if (!_injectedDuckDB) {
+  throw new Error(
+    '[@pennsieve-viz/core] DuckDB store not provided. ' +
+    'Please provide a DuckDB store via app.provide("duckdb", store)'
+  )
+}
+const duck: DuckDBStoreInterface = _injectedDuckDB
 const connectionId = ref<string | null>(null)
 const tableName = ref<string | null>(null)
 

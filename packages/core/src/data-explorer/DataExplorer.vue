@@ -119,8 +119,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch, provide } from "vue";
-import { useDuckDBStore } from "../duckdb";
+import { computed, onMounted, onUnmounted, watch, provide, inject } from "vue";
+import type { DuckDBStoreInterface } from "../duckdb";
 import { createDataExplorerStore, clearDataExplorerStore } from "./dataExplorerStore";
 
 const props = defineProps({
@@ -158,8 +158,15 @@ const store = createDataExplorerStore(effectiveInstanceId.value)
 provide('dataExplorerStore', store)
 provide('dataExplorerInstanceId', effectiveInstanceId.value)
 
-// Use DuckDB store (shared singleton)
-const duckDBStore = useDuckDBStore();
+// Use DuckDB store (provided by host app via provide/inject)
+const _injectedDuckDB = inject<DuckDBStoreInterface>('duckdb')
+if (!_injectedDuckDB) {
+  throw new Error(
+    '[@pennsieve-viz/core] DuckDB store not provided. ' +
+    'Please provide a DuckDB store via app.provide("duckdb", store)'
+  )
+}
+const duckDBStore: DuckDBStoreInterface = _injectedDuckDB
 
 // Initialize source info from props
 store.setSourceInfo({

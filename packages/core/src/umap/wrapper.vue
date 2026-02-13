@@ -29,10 +29,10 @@
 </template>
 
 <script setup lang="ts">
-import { watch, onMounted, onBeforeUnmount, computed, provide } from 'vue'
+import { watch, onMounted, onBeforeUnmount, computed, provide, inject } from 'vue'
 import WebGLScatterplot from './scatterplot.vue'
 import ControlPanel from './control.vue'
-import { useDuckDBStore } from '../duckdb'
+import type { DuckDBStoreInterface } from '../duckdb'
 import { useGetToken } from '../composables/useGetToken'
 import { createUMAPStore, clearUMAPStore } from './umapStore'
 
@@ -55,8 +55,15 @@ const store = createUMAPStore(effectiveInstanceId.value)
 provide('umapStore', store)
 provide('umapInstanceId', effectiveInstanceId.value)
 
-// DuckDB store (shared singleton)
-const duck = useDuckDBStore()
+// DuckDB store (provided by host app via provide/inject)
+const _injectedDuckDB = inject<DuckDBStoreInterface>('duckdb')
+if (!_injectedDuckDB) {
+  throw new Error(
+    '[@pennsieve-viz/core] DuckDB store not provided. ' +
+    'Please provide a DuckDB store via app.provide("duckdb", store)'
+  )
+}
+const duck: DuckDBStoreInterface = _injectedDuckDB
 
 // View assets for Pennsieve API mode
 const viewAssets = computed(() => [] as any[])
