@@ -51,7 +51,7 @@ export function createViewerStore(instanceId = 'default') {
     const viewerAnnotations = ref([])
     const activeAnnotationLayer = ref({})
     const activeAnnotation = ref({})
-    const viewerActiveTool = ref('POINTER')
+    const viewerActiveTool = ref('pointer')
 
     const { openConnection } = useChannelDataRequest()
 
@@ -333,7 +333,7 @@ export function createViewerStore(instanceId = 'default') {
         viewerAnnotations.value = []
         activeAnnotationLayer.value = {}
         activeAnnotation.value = {}
-        viewerActiveTool.value = 'POINTER'
+        viewerActiveTool.value = 'pointer'
         activeViewer.value = {}
         Object.keys(config).forEach(key => {
           delete config[key]
