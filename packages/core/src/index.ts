@@ -62,3 +62,6 @@ export const TiffViewer = defineAsyncComponent(
 export const OrthogonalViewer = defineAsyncComponent(
   () => import('@pennsieve-viz/orthogonal').then(m => m.OrthogonalViewer)
 )
+
+// iframe-based wrapper — isolates neuroglancer from host app
+export { OrthogonalFrame } from './orthogonal'
