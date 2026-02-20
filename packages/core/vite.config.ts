@@ -28,6 +28,7 @@ export default defineConfig({
         "@aws-amplify/auth",
         "@pennsieve-viz/tsviewer",
         "@pennsieve-viz/micro-ct",
+        "@pennsieve-viz/orthogonal",
       ],
       output: {
         globals: {
