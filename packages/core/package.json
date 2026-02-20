@@ -42,6 +42,7 @@
     "@aws-amplify/auth": "^6.0.0",
     "@duckdb/duckdb-wasm": "^1.29.0",
     "@pennsieve-viz/micro-ct": "^1.0.0",
+    "@pennsieve-viz/orthogonal": "^0.1.0",
     "@pennsieve-viz/tsviewer": "^1.0.0",
     "pinia": "^2.0.0 || ^3.0.0",
     "plotly.js": "^2.35.0",
@@ -54,6 +55,9 @@
     "@pennsieve-viz/micro-ct": {
       "optional": true
     },
+    "@pennsieve-viz/orthogonal": {
+      "optional": true
+    },
     "@pennsieve-viz/tsviewer": {
       "optional": true
     },
@@ -63,7 +67,9 @@
   },
   "devDependencies": {
     "@pennsieve-viz/micro-ct": "workspace:*",
-    "@pennsieve-viz/tsviewer": "workspace:*"
+    "@pennsieve-viz/orthogonal": "workspace:*",
+    "@pennsieve-viz/tsviewer": "workspace:*",
+    "neuroglancer": "^2.39.0"
   },
   "repository": {
     "type": "git",
