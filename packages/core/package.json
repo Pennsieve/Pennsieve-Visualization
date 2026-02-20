@@ -1,6 +1,6 @@
 {
   "name": "@pennsieve-viz/core",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Pennsieve visualization component library for scientific data",
   "type": "module",
   "main": "./dist/pennsieve-viz.cjs.js",

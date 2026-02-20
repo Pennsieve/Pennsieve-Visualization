@@ -106,7 +106,7 @@
   
   <script setup>
   import { ref, computed, onMounted, onUnmounted } from 'vue'
-  import { useDuckDBStore } from '@/stores/duckdbStore'
+  import { useDuckDBStore } from '@/store/duckdbStore'
   
   const props = defineProps({
     autoRefresh: {
