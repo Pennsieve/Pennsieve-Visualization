@@ -16,19 +16,6 @@
           color="#C14D49"
         />
       <h2>Delete annotation?</h2>
-      <template v-if="deleteDiscussions">
-        <p>
-          {{ annotationDescription }} - {{ annotationDateTime}}
-        </p>
-        <hr />
-        <p>
-          Deleting this annotation will also remove any associated discussions and cannot be undone.
-        </p>
-        <p>
-          Are you sure you would like to remove this annotation?
-        </p>
-      </template>
-
       <div class="dialog-simple-buttons">
         <bf-library-button
           class="secondary"
@@ -41,7 +28,7 @@
           :processing="isProcessing"
           @click="removeAnnotation"
         >
-          {{ btnDeleteCopy }}
+          Delete
         </bf-library-button>
       </div>
     </dialog-body>
@@ -78,7 +65,6 @@ export default {
       default: () => {
         return {
           annotation: {},
-          withDiscussions: false
         }
       }
     }
@@ -88,33 +74,6 @@ export default {
     return {
       isProcessing: false
     }
-  },
-
-  computed: {
-    /**
-     * Compute the annotation's name
-     * @returns {String}
-     */
-    annotationDescription: function() {
-      return pathOr('', ['annotation', 'label'], this.deleteAnnotation)
-    },
-    annotationDateTime: function() {
-        const deleteAnnStart = pathOr('', ['annotation', 'start'], this.deleteAnnotation)
-        return this.getUTCDateString(deleteAnnStart) + ' ' + this.getUTCTimeString(deleteAnnStart);
-    },
-    deleteDiscussions: function() {
-      return propOr(false, 'withDiscussions', this.deleteAnnotation)
-    },
-    /**
-     * Compute copy for the delete button
-     * @returns {String}
-     */
-    btnDeleteCopy: function (){
-      return this.deleteDiscussions
-        ? `Yes, I'm sure`
-        : 'Delete'
-    },
-
   },
 
   methods: {
@@ -136,7 +95,6 @@ export default {
       this.isProcessing = false
       this.$emit('update:delete-annotation', {
         annotation: {},
-        withDiscussions: false
       })
     },
     getUTCDateString: function(d) {
