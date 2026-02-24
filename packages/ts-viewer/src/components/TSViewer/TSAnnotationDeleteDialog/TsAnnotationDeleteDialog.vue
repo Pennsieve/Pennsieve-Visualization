@@ -62,11 +62,7 @@ export default {
     },
     deleteAnnotation: {
       type: Object,
-      default: () => {
-        return {
-          annotation: {},
-        }
-      }
+      default: () => ({})
     }
   },
 
@@ -78,7 +74,7 @@ export default {
 
   methods: {
     removeAnnotation: function() {
-      this.$emit('delete', this.deleteAnnotation.annotation)
+      this.$emit('delete', this.deleteAnnotation)
     },
     /**
      * Emit event to update the synced property
@@ -93,9 +89,7 @@ export default {
      */
     onClosed: function() {
       this.isProcessing = false
-      this.$emit('update:delete-annotation', {
-        annotation: {},
-      })
+      this.$emit('update:delete-annotation', {})
     },
     getUTCDateString: function(d) {
       if(d > 0) {
