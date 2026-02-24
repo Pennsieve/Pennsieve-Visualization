@@ -455,7 +455,7 @@ const _onMouseUp = (e) => {
         }
       }
 
-      const selectedChannels = viewerSelectedChannels
+      const selectedChannels = viewerSelectedChannels.value
       const allChannels = selectedChannels.length === viewerChannels.value.length || selectedChannels.length === 0
 
       const duration = (e.clientX - startDragCoord.x) * rsPeriod.value
@@ -474,7 +474,7 @@ const _onMouseUp = (e) => {
           cStart: null,
           cEnd: null,
           selected: true,
-          channelIds: selectedChannels,
+          channelIds: selectedChannels.map(ch => ch.id),
           allChannels: allChannels,
           layer_id: selectedLayer.id, // FIX: Use the validated layer ID
           userId: null
