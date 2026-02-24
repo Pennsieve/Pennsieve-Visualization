@@ -70,7 +70,7 @@ export function useTsAnnotation(storeInstance = null) {
 
         if (annotationData.allChannels) {
             // When allChannels is true, include all channels (even if they are currently not visible)
-            const allChannels = viewerStore.activeViewer.value.channels
+            const allChannels = viewerStore.activeViewer.channels
             for (let ch = 0; ch < allChannels.length; ch++) {
                 const curChannel = allChannels[ch]
                 const id = curChannel.content.id
@@ -101,7 +101,7 @@ export function useTsAnnotation(storeInstance = null) {
         }
 
         // Use correct property for timeseries ID
-        const timeseriesId = viewerStore.activeViewer.value.content.id
+        const timeseriesId = viewerStore.activeViewer.content.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${layer_id}/annotations`
 
         try {
@@ -199,7 +199,7 @@ export function useTsAnnotation(storeInstance = null) {
             channelIds: annotationData.channelIds || []
         }
 
-        const timeseriesId = viewerStore.activeViewer.value.content.id
+        const timeseriesId = viewerStore.activeViewer.content.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${annotationData.layer_id}/annotations/${annotationData.id}`
 
         try {
@@ -255,7 +255,7 @@ export function useTsAnnotation(storeInstance = null) {
             throw new TypeError("Missing layer_id for annotation deletion", annotation)
         }
 
-        const timeseriesId = viewerStore.activeViewer.value.content.id
+        const timeseriesId = viewerStore.activeViewer.content.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${annLayerId}/annotations/${annotation.id}`
 
         try {
