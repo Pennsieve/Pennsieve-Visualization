@@ -800,6 +800,7 @@ const renderAnnotationBox = (curX) => {
   ctx.clearRect(0, 0, props.cWidth, props.cHeight)
   ctx.lineWidth = 1
 
+  const selectedChannels = viewerSelectedChannels.value
   const allChannels = selectedChannels.length === viewerChannels.value.length || selectedChannels.length === 0
 
   const xStart = curX - iCanvas.getBoundingClientRect().left
