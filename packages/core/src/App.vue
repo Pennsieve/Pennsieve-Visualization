@@ -35,13 +35,13 @@ const hello = 'world';
     </section>
 
     <!-- AiPlotly Component -->
-    <section class="component-section">
+    <!-- <section class="component-section">
       <h2 class="component-label">AiPlotly</h2>
       <p class="component-path">@pennsieve-viz/ai-plotly</p>
       <div class="component-container" style="height: 400px">
         <AiPlotly :data="samplePlotlyData" :layout="samplePlotlyLayout" />
       </div>
-    </section>
+    </section> -->
 
     <!-- DataExplorer Component -->
     <section class="component-section">
@@ -147,7 +147,6 @@ import { ref } from "vue";
 import {
   Markdown,
   TextViewer,
-  AiPlotlyBeta as AiPlotly,
   DataExplorer,
   UMAP,
   ProportionPlotBeta as ProportionPlot,

@@ -50,19 +50,14 @@ const initDuckDB = async () => {
       try {
         const duckdb = await import('@duckdb/duckdb-wasm')
   
-        const bundles = {
-          mvp: {
-            mainModule: '/static/duckdb/duckdb-mvp.wasm',
-            mainWorker: '/static/duckdb/duckdb-browser-mvp.worker.js',
-          },
-          eh: {
-            mainModule: '/static/duckdb/duckdb-eh.wasm',
-            mainWorker: '/static/duckdb/duckdb-browser-eh.worker.js',
-          },
-        }
+        const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles()
+        const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES)
   
-        const bundle = await duckdb.selectBundle(bundles)
-        const worker = new Worker(bundle.mainWorker)
+        // Wrap CDN worker URL in a same-origin blob to avoid cross-origin restriction
+        const workerUrl = URL.createObjectURL(
+          new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+        )
+        const worker = new Worker(workerUrl)
         const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING)
   
         db.value = new duckdb.AsyncDuckDB(logger, worker)
@@ -115,7 +110,7 @@ const createConnection = async (viewerId) => {
 
             // If this was the last connection, consider global cleanup
             if (connections.value.size === 0) {
-                console.log('No active connections remaining. Keeping DuckDB instance for potential reuse.')
+                // No active connections remaining — keep DuckDB instance for potential reuse
                 // Optionally: await performGlobalCleanup() if you want to clean up immediately
             }
         }
@@ -307,7 +302,7 @@ const createConnection = async (viewerId) => {
         for (const [id, connData] of connections.value) {
             try {
                 await connData.connection.close()
-                console.log(`Closed connection: ${id}`)
+                // closed connection
             } catch (err) {
                 console.warn(`Error closing connection ${id}:`, err)
             }
@@ -336,7 +331,7 @@ const createConnection = async (viewerId) => {
         if (force || connections.value.size === 0) {
             await performGlobalCleanup()
         } else {
-            console.log(`Skipping global cleanup. ${connections.value.size} active connections remaining.`)
+            // Skipping global cleanup — active connections remain
         }
     }
 
