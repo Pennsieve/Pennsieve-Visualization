@@ -7,6 +7,7 @@
     "build": "pnpm --filter @pennsieve-viz/core build && pnpm --filter @pennsieve-viz/tsviewer build",
     "build:core": "pnpm --filter @pennsieve-viz/core build",
     "build:tsviewer": "pnpm --filter @pennsieve-viz/tsviewer build",
+    "build:orthogonal": "pnpm --filter @pennsieve-viz/orthogonal build",
     "type-check": "pnpm -r type-check",
     "clean": "pnpm -r exec rm -rf dist",
     "lint": "eslint packages --ext .ts,.vue",

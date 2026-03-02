@@ -62,6 +62,11 @@ export function useAnnotationLayers(storeInstance = null) {
     }
 
     const createAnnotationLayer = async (newLayer, activeViewer, emit) => {
+        // Guard: ensure activeViewer has required properties
+        if (!activeViewer?.content?.id) {
+            return null
+        }
+
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers?api_key=${token}`
@@ -133,6 +138,10 @@ export function useAnnotationLayers(storeInstance = null) {
     }
 
     const deleteLayer = async (layerId, activeViewer) => {
+        if (!activeViewer?.content?.id) {
+            return null
+        }
+
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers/${layerId}?api_key=${token}`
@@ -154,6 +163,10 @@ export function useAnnotationLayers(storeInstance = null) {
     }
 
     const updateLayerColor = async (layerId, newColor, activeViewer) => {
+        if (!activeViewer?.content?.id) {
+            return null
+        }
+
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers/${layerId}?api_key=${token}`
@@ -181,6 +194,11 @@ export function useAnnotationLayers(storeInstance = null) {
     }
 
     const loadLayers = async (activeViewer, emit) => {
+        // Guard: ensure activeViewer has required properties
+        if (!activeViewer?.content?.id) {
+            return null
+        }
+
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers?api_key=${token}`

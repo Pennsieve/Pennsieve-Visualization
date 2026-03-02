@@ -2,7 +2,7 @@
 import { OmeViewer } from "./components/ome";
 
 // 3D OME-Zarr with Z-stack AND tiled zoom (3763x2860, 145 Z-slices, 4 channels, 1024x1024 tiles)
-const testSource = "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001257.zarr";
+const testSource ="https://pennsieve-dev-zarr-test-use1.s3.us-east-1.amazonaws.com/ddb6cb43-3749-4e9d-9c59-e2d4a8aa7f5a";// "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001257.zarr";
 
 // LARGE 2D pyramidal OME-Zarr (380928 x 921600 px) - no Z-stack
 //const testSource = "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/4495402.zarr";

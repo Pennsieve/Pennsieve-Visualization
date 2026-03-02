@@ -51,6 +51,7 @@
 
       <!--       Timeseries viewport-->
       <TimeseriesViewerCanvas
+        v-if="activeViewer?.content?.id"
         ref="viewerCanvas"
         :window_height="window_height"
         :window_width="window_width"
