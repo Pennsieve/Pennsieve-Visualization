@@ -82,6 +82,7 @@
       :constants="constants"
       :duration="duration"
       :start="start"
+      v-model:globalZoomMult="globalZoomMult"
       @pageBack="onPageBack"
       @pageForward="onPageForward"
       @incrementZoom="onIncrementZoom"

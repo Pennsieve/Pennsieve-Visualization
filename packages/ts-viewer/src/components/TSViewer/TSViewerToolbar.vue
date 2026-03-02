@@ -21,7 +21,8 @@
         <el-input-number
           v-model="zoomMult"
           :precision="2"
-          :step="5"
+          :step="0.5"
+          :min="0.01"
           controls-position="right">
 
           <template #suffix>
@@ -157,10 +158,10 @@ const props = defineProps({
 
 const zoomMult = computed({
   get() {
-    return  (((96 * window.devicePixelRatio) / (props.globalZoomMult * 1)) / 25.4)
+    return  (96 * window.devicePixelRatio) / (props.globalZoomMult * 25.4)
   },
   set(newValue) {
-    emit('update:globalZoomMult', (((96 * window.devicePixelRatio) / (newValue * 1)) / 25.4)); // Emit an event to update the parent
+    emit('update:globalZoomMult', (96 * window.devicePixelRatio) / (newValue * 25.4))
   },
 });
 
@@ -179,7 +180,6 @@ const emit = defineEmits([
 
 
 // Reactive data
-const showVertZoom = ref(true)
 const showTimeZoom = ref(true)
 const showPlaybackSpeed = ref(true)
 const selectedTimeRange = ref(0)
@@ -302,10 +302,6 @@ const toggleTimeZoom = () => {
   showTimeZoom.value = !showTimeZoom.value
 }
 
-const toggleVerticalZoom = () => {
-  showVertZoom.value = !showVertZoom.value
-}
-
 const togglePlaybackSpeed = () => {
   showPlaybackSpeed.value = !showPlaybackSpeed.value
 }
@@ -419,7 +415,7 @@ onMounted(() => {
 
 .timeseries-viewer-toolbar .el-input-number.is-controls-right {
   .el-input-number__decrease, .el-input-number__increase {
-    height: 20px; // since el-input__inner has height of 40px from _el-input.scss
+    height: 16px; // since el-input__inner has height of 40px from _el-input.scss
   }
 }
 </style>
