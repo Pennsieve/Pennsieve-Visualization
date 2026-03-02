@@ -662,6 +662,8 @@ const openFilterWindow = (payload) => {
   const channels = propOr([], 'channels', payload)
   const filter = propOr('', 'filter', payload)
   const filterWindowRef = filterWindow.value
+  if (!filterWindowRef) return
+
   filterWindowRef.onChannels = channels
 
   if (!isEmpty(filter)) {

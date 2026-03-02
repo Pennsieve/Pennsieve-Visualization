@@ -65,12 +65,13 @@
 <script>
 
 import IconSelection from "../icons/IconSelection.vue"
+import BfLibraryButton from "../Shared/bf-library-button/BFLibraryButton.vue";
 
 export default {
   name: 'TimeseriesFilterModal',
 
   components: {
-    'bf-library-button': () => import('@/components/shared/bf-library-button/BfLibraryButton.vue'),
+    BfLibraryButton,
     IconSelection
   },
 
