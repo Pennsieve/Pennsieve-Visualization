@@ -62,6 +62,10 @@
   }
 }
 
+#ts_viewer .el-dialog {
+  --el-dialog-padding-primary: 0px;
+}
+
 .add-property-dialog {
   .el-dialog__header {
     align-items: flex-start;

@@ -337,10 +337,9 @@ watch(nrVisChannels, (newCount, oldCount) => {
 })
 
 const openEditAnnotationDialog = (annotation) => {
-  store.dispatch('viewerModule/setActiveAnnotation', annotation).then(() => {
-    viewerCanvas.value.renderAnnotationCanvas()
-    annotationWindowOpen.value = true
-  })
+  viewerStore.setActiveAnnotation(annotation)
+  viewerCanvas.value.renderAnnotationCanvas()
+  annotationWindowOpen.value = true
 }
 
 watch(needsRerender, (renderData) => {

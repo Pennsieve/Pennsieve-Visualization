@@ -105,6 +105,7 @@ const onMouseUp = () => {
 
 const selectFocusedAnn = () => {
   if (selectFocusedAnnotation()) {
+    emit('updateAnnotation', focusedAnn.value)
     nextTick(() => renderCanvas())
   }
 }

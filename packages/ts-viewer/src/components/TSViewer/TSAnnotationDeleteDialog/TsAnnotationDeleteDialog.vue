@@ -3,7 +3,6 @@
     class="simple"
     :modelValue="visible"
     @update:modelValue="visible = $event"
-    :show-close="false"
     @close="close"
     @closed="onClosed"
   >
@@ -116,6 +115,15 @@ export default {
 
 .mb-16 {
   color: $red_1
+}
+
+.dialog-simple-buttons {
+  display: flex;
+  margin-top: 16px;
+  justify-content: center;
+  .bf-library-button {
+    margin-left: 8px;
+  }
 }
 
 h2 {

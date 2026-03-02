@@ -38,21 +38,6 @@
     }
   }
 
-  .dialog-spacing {
-    align-items: center;
-    display: flex;
-    font-size: 14px;
-    flex-direction: column;
-    justify-content: center;
-    .simple & {
-      padding: 0 0px;
-      text-align: center;
-      &.icon {
-        //padding: 48px;
-      }
-    }
-  }
-
   .dialog-body-icon {
     margin-bottom: 8px;
   }
@@ -64,28 +49,10 @@
     margin-bottom: 8px;
   }
 
-  .btn-third-option {
-    display: inline-block;
-    margin-top: 16px;
-  }
-
   .dialog-body-content {
     color: $gray_5;
-	  line-height: 18px;
-	  width: 100%;
-  }
-
-  .dialog-simple-buttons {
-    display: flex;
-    margin-top: 16px;
-    justify-content: center;
-    .bf-library-button{
-      margin-left: 8px;
-    }
-  }
-
-  .spacing {
-    //padding: 64px 7px;
+    line-height: 18px;
+    width: 100%;
   }
 </style>
 
@@ -106,7 +73,7 @@
 
     computed: {
       classNames: function() {
-        const hasIcon = this.$slots['icon'] ? 'icon' : ''
+        const hasIcon = this.hasSlot('icon') ? 'icon' : ''
         const fixedHeight = this.fixedHeight ? 'fixed-height' : ''
 
         return `dialog-body ${hasIcon} ${fixedHeight}`

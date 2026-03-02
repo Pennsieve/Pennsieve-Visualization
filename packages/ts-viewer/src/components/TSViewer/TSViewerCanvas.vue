@@ -458,11 +458,17 @@ const _onMouseUp = (e) => {
       const selectedChannels = viewerSelectedChannels.value
       const allChannels = selectedChannels.length === viewerChannels.value.length || selectedChannels.length === 0
 
-      const duration = (e.clientX - startDragCoord.x) * rsPeriod.value
-      const startTime = startDragTimeStamp.value + ((startDragCoord.x - iArea.value.getBoundingClientRect().left) * rsPeriod.value)
+      let duration = (e.clientX - startDragCoord.x) * rsPeriod.value
+      let startTime = startDragTimeStamp.value + ((startDragCoord.x - iArea.value.getBoundingClientRect().left) * rsPeriod.value)
+
+      // Normalize negative durations (right-to-left drag)
+      if (duration < 0) {
+        startTime = startTime + duration
+        duration = -duration
+      }
 
       // Only create annotation if we actually dragged to create a duration
-      if (Math.abs(duration) > 1000) { // Only if duration > 1ms
+      if (duration > 1000) { // Only if duration > 1ms
         const newAnn = {
           name: '',
           id: null,
@@ -966,7 +972,6 @@ const setFilters = (payload) => {
         notchFreq: payload.notchFreq
       }
     }
-    // store.dispatch('viewerModule/updateChannel', channel)
   }
 
   plotCanvas.value?.invalidate()

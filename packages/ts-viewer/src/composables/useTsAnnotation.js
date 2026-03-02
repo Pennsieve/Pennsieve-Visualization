@@ -73,7 +73,7 @@ export function useTsAnnotation(storeInstance = null) {
             const allChannels = viewerStore.activeViewer.channels
             for (let ch = 0; ch < allChannels.length; ch++) {
                 const curChannel = allChannels[ch]
-                const id = curChannel.content.id
+                const id = getChannelId(curChannel)
                 channelIds.push(id)
             }
         } else if (annotationData.channelIds && Array.isArray(annotationData.channelIds) && annotationData.channelIds.length > 0) {
@@ -192,6 +192,7 @@ export function useTsAnnotation(storeInstance = null) {
 
         // Create API payload that matches server expectations
         const apiPayload = {
+            name: annotationData.label,
             label: annotationData.label,
             description: annotationData.description || '',
             start: Math.floor(start),

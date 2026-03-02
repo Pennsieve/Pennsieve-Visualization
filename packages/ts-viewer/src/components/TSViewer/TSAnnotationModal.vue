@@ -80,7 +80,7 @@
       </div>
     </div>
 
-    <div slot="footer">
+    <template #footer>
       <div class="button-wrapper">
         <div class="channels-selected">
 
@@ -99,8 +99,7 @@
           </bf-library-button>
         </div>
       </div>
-
-    </div>
+    </template>
   </el-dialog>
 </template>
 
@@ -155,6 +154,7 @@ const emit = defineEmits(['closeWindow', 'createUpdateAnnotation'])
 // Store - inject from parent TSViewer component
 // Falls back to default store for backwards compatibility
 const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
+// TODO: remove the default store reference in the inject code, this component is always used within the parent component, so default is not needed.
 const {
   activeAnnotation,
   viewerChannels,
