@@ -42,7 +42,7 @@ const loading = ref(true)
 const errorMsg = ref('')
 
 const iframeSrc = computed(() => {
-  const base = props.embedUrl || '/embed.html'
+  const base = props.embedUrl || '/'
   const params = new URLSearchParams()
   params.set('source', props.source)
   params.set('layout', props.layout)
