@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @pennsieve-viz/core dev",
+    "dev": "pnpm --filter @pennsieve-viz/core dev & pnpm --filter @pennsieve-viz/orthogonal dev:embed",
+    "dev:embed": "pnpm --filter @pennsieve-viz/orthogonal dev:embed",
     "build": "pnpm --filter @pennsieve-viz/core build && pnpm --filter @pennsieve-viz/tsviewer build",
     "build:core": "pnpm --filter @pennsieve-viz/core build",
     "build:tsviewer": "pnpm --filter @pennsieve-viz/tsviewer build",
