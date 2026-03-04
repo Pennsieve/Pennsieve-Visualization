@@ -686,7 +686,6 @@ const createPinstripeCanvas = () => {
 
 // Lifecycle
 onMounted(() => {
-  console.log('scrubber mounted test')
   segments.value = new Array(5000)
   segments.value = segments.value.fill(0, 0, 4999)
 
