@@ -102,9 +102,6 @@ importers:
       '@pennsieve-viz/tsviewer':
         specifier: workspace:*
         version: link:../ts-viewer
-      neuroglancer:
-        specifier: ^2.39.0
-        version: 2.41.2(typescript@5.9.3)
 
   packages/micro-ct:
     dependencies:
@@ -3440,8 +3437,8 @@ packages:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
     engines: {node: '>= 4'}
 
-  ikonate@git+https://git@github.com:mikolajdobrucki/ikonate.git#a86b4107c6ec717e7877f880a930d1ccf0b59d89:
-    resolution: {commit: a86b4107c6ec717e7877f880a930d1ccf0b59d89, repo: git@github.com:mikolajdobrucki/ikonate.git, type: git}
+  ikonate@https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89:
+    resolution: {tarball: https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89}
     version: 1.1.1
 
   image-size@0.7.5:
@@ -9456,7 +9453,7 @@ snapshots:
 
   ignore@5.3.2: {}
 
-  ikonate@git+https://git@github.com:mikolajdobrucki/ikonate.git#a86b4107c6ec717e7877f880a930d1ccf0b59d89:
+  ikonate@https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89:
     dependencies:
       jsdom: 11.10.0
       pretty: 2.0.0
@@ -9970,7 +9967,7 @@ snapshots:
       core-js: 3.47.0
       crc-32: 1.2.2
       gl-matrix: 3.1.0
-      ikonate: git+https://git@github.com:mikolajdobrucki/ikonate.git#a86b4107c6ec717e7877f880a930d1ccf0b59d89
+      ikonate: https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89
       lodash-es: 4.17.22
       msgpackr: 1.11.8
       nifti-reader-js: 0.6.9
