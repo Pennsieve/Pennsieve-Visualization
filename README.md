@@ -6,26 +6,33 @@ A monorepo containing Vue 3 visualization components for the Pennsieve platform.
 
 | Package | Description |
 |---------|-------------|
-| `@pennsieve-viz/core` | Main library with visualization components (DataExplorer, UMAP, ProportionPlot, Markdown, TextViewer, AiPlotly) and DuckDB utilities |
-| `@pennsieve-viz/tsviewer` | Timeseries data viewer component |
-| `@pennsieve-viz/micro-ct` | OME-TIFF/TIFF viewer components for microscopy data (OmeViewer, TiffViewer) |
+| [`@pennsieve-viz/core`](packages/core) | Main library — DataExplorer, UMAP, Markdown, TextViewer, OrthogonalFrame, plus lazy re-exports of all viewer packages |
+| [`@pennsieve-viz/tsviewer`](packages/ts-viewer) | Timeseries data viewer and annotator |
+| [`@pennsieve-viz/micro-ct`](packages/micro-ct) | OME-TIFF / TIFF viewer components for microscopy data |
+| [`@pennsieve-viz/orthogonal`](packages/orthogonal) | Neuroglancer-based orthogonal viewer for OME-Zarr volumes |
 
 ## Folder Structure
 
 ```
-pennsieve-viz-monorepo/
+pennsieve-visualization/
 ├── packages/
-│   ├── core/           # @pennsieve-viz/core - Main component library
+│   ├── core/              # @pennsieve-viz/core
 │   │   └── src/
-│   │       ├── ai-plotly/
 │   │       ├── data-explorer/
-│   │       ├── duckdb/
+│   │       ├── umap/
 │   │       ├── markdown/
-│   │       ├── proportion-plot/
 │   │       ├── text-viewer/
-│   │       └── umap/
-│   ├── ts-viewer/      # @pennsieve-viz/tsviewer - Timeseries viewer
-│   └── micro-ct/       # @pennsieve-viz/micro-ct - Micro-CT/TIFF viewers
+│   │       ├── ai-plotly/        # beta
+│   │       ├── proportion-plot/  # beta
+│   │       ├── orthogonal/       # OrthogonalFrame (iframe wrapper)
+│   │       ├── duckdb/           # DuckDB interface types
+│   │       └── composables/
+│   ├── orthogonal/        # @pennsieve-viz/orthogonal
+│   ├── ts-viewer/         # @pennsieve-viz/tsviewer
+│   └── micro-ct/          # @pennsieve-viz/micro-ct
+├── src/                   # Dev playground app (not published)
+│   ├── store/duckdbStore.js
+│   └── main.js
 ├── pnpm-workspace.yaml
 └── package.json
 ```
@@ -35,350 +42,298 @@ pennsieve-viz-monorepo/
 - Node.js >= 18
 - pnpm >= 8
 
-## Project Setup
-
-```bash
-pnpm install
-```
-
 ## Local Development
-
-### Quick Start
 
 ```bash
 # Install dependencies
 pnpm install
 
-# Start the dev server
+# Start the dev server (runs core playground)
 pnpm dev
 ```
 
-The dev server runs at `http://localhost:5173` (or next available port) and serves `packages/core/src/App.vue` as a playground for testing components.
+The dev server runs at `http://localhost:5173` and serves `packages/core/src/App.vue` as a playground for testing components.
 
-### Development Workflow
+### Working on packages
 
-1. **Start the dev server**: `pnpm dev`
-2. **Edit components** in `packages/core/src/` - changes hot-reload automatically
-3. **For changes to `tsviewer` or `micro-ct`**: rebuild the package, then refresh the browser
+`pnpm dev` only watches the core package. Changes to other packages require a rebuild:
 
 ```bash
-# Example: After editing packages/ts-viewer/src/
-pnpm --filter @pennsieve-viz/tsviewer build
+# After editing packages/ts-viewer/src/
+pnpm build:tsviewer
 # Then refresh your browser
+
+# Same for other packages
+pnpm build:orthogonal
+pnpm build:orthogonal-embed   # standalone embed app for iframe hosting
 ```
 
-### Developing Packages
+### Orthogonal viewer development
 
-When making changes to a dependent package (e.g., `@pennsieve-viz/micro-ct` or `@pennsieve-viz/tsviewer`), you must **build the package** before the changes appear in the dev server:
+The orthogonal viewer has its own dev server for the embed app:
 
 ```bash
-# Build a specific package
-pnpm --filter @pennsieve-viz/micro-ct build
-pnpm --filter @pennsieve-viz/tsviewer build
+# Run the embed app standalone
+pnpm --filter @pennsieve-viz/orthogonal dev:embed
 
-# Then the dev server will pick up the changes on next refresh
+# To test with the core playground, run both:
+# Terminal 1: embed app on port 5174
+pnpm --filter @pennsieve-viz/orthogonal dev:embed
+# Terminal 2: core playground on port 5173
+pnpm dev
 ```
-
-**Workflow:**
-1. Make changes to a package in `packages/<package-name>/src/`
-2. Build that package: `pnpm --filter @pennsieve-viz/<package-name> build`
-3. Refresh the dev server in your browser to see changes
-
-This is because `pnpm dev` only watches the `core` package itself. Other packages are imported from their built `dist/` folders.
-
-### Adding a New Component to Core
-
-To add a new visualization component to `@pennsieve-viz/core`:
-
-1. **Create a component folder** in `packages/core/src/`:
-   ```
-   packages/core/src/my-component/
-   ├── index.ts           # Exports
-   ├── MyComponent.vue    # Main component
-   └── types.ts           # TypeScript types (optional)
-   ```
-
-2. **Create the component** (`MyComponent.vue`):
-   ```vue
-   <script setup lang="ts">
-   defineProps<{
-     apiUrl: string
-   }>()
-   </script>
-
-   <template>
-     <div class="my-component">
-       <!-- Component content -->
-     </div>
-   </template>
-   ```
-
-3. **Create the index export** (`index.ts`):
-   ```ts
-   export { default as MyComponent } from './MyComponent.vue'
-   ```
-
-4. **Export from the core package** - Add to `packages/core/src/index.ts`:
-   ```ts
-   export * from './my-component'
-
-   // Optional: Add lazy-loaded version
-   export const MyComponentLazy = defineAsyncComponent(
-     () => import('./my-component').then(m => m.MyComponent)
-   )
-   ```
-
-5. **Test in the playground** - Import and use in `packages/core/src/App.vue`:
-   ```vue
-   <script setup>
-   import { MyComponent } from './my-component'
-   </script>
-
-   <template>
-     <MyComponent :apiUrl="apiUrl" />
-   </template>
-   ```
-
-6. **Run the dev server** to test:
-   ```bash
-   pnpm dev
-   ```
-
-### Adding Components to the Playground
-
-To test a component in the dev server, use it in `packages/core/src/App.vue`.
 
 ## Build
 
-Build all packages:
-
 ```bash
-pnpm build
+pnpm build                    # core + tsviewer
+pnpm build:core               # @pennsieve-viz/core only
+pnpm build:tsviewer            # @pennsieve-viz/tsviewer only
+pnpm build:orthogonal          # @pennsieve-viz/orthogonal library
+pnpm build:orthogonal-embed    # orthogonal embed app (dist-embed/)
 ```
 
-Build a specific package:
-
 ```bash
-pnpm build:core
-pnpm build:tsviewer
-```
-
-## Other Commands
-
-```bash
-pnpm clean       # Remove all dist folders
-pnpm lint        # Lint all packages
-pnpm type-check  # Type check all packages
+pnpm clean        # Remove all dist folders
+pnpm lint         # Lint all packages
+pnpm type-check   # Type check all packages
 ```
 
 ## Publishing to npm
 
-This monorepo uses [Changesets](https://github.com/changesets/changesets) for version management and publishing.
-
-### First-time Setup
-
-Initialize changesets if not already configured:
+This monorepo uses [Changesets](https://github.com/changesets/changesets) for version management.
 
 ```bash
-pnpm changeset init
+pnpm changeset    # Create a changeset (select packages + change type)
+pnpm version      # Update versions and changelogs
+pnpm release      # Build + publish to npm
 ```
 
-### Publishing Workflow
-
-1. **Create a changeset** when you make changes that should be released:
-   ```bash
-   pnpm changeset
-   ```
-   Follow the prompts to select which packages changed and the type of change (patch/minor/major).
-
-2. **Version packages** (updates package.json versions and changelogs):
-   ```bash
-   pnpm version
-   ```
-
-3. **Build and publish** to npm:
-   ```bash
-   pnpm release
-   ```
-   This runs `pnpm build` followed by `changeset publish`.
-
-### Manual Publishing (without Changesets)
-
-To publish a single package manually:
+For a single package manually:
 
 ```bash
-# Build the package
 pnpm --filter @pennsieve-viz/core build
-
-# Navigate to the package and publish
-cd packages/core
-npm publish --access public
+cd packages/core && npm publish --access public
 ```
 
-### npm Registry Setup
+---
 
-Ensure you're logged in to npm:
+## Usage in a Consuming App
 
-```bash
-npm login
-```
-
-For scoped packages (`@pennsieve-viz/*`), you may need to set up organization access on npmjs.com.
-
-## Usage in Your Application
-
-Install the core package:
+### Install
 
 ```bash
 pnpm add @pennsieve-viz/core
+
+# Optional viewer packages (only needed if importing directly, not via core lazy exports)
+pnpm add @pennsieve-viz/tsviewer
+pnpm add @pennsieve-viz/micro-ct
+pnpm add @pennsieve-viz/orthogonal neuroglancer
 ```
 
-For optional viewers, install the additional packages:
+### DuckDB Setup (required for DataExplorer & UMAP)
 
-```bash
-pnpm add @pennsieve-viz/tsviewer    # For timeseries viewer
-pnpm add @pennsieve-viz/micro-ct    # For micro-CT/TIFF viewers
-```
+DataExplorer and UMAP use DuckDB for in-browser SQL queries. Your app must provide a DuckDB store via Vue's `provide/inject`:
 
-Import styles in your main entry file:
+1. Install DuckDB:
+   ```bash
+   pnpm add @duckdb/duckdb-wasm
+   ```
+
+2. Create a DuckDB store that implements the `DuckDBStoreInterface` (see `src/store/duckdbStore.js` for a reference implementation).
+
+3. Provide it in your app entry:
+   ```js
+   import { createApp } from 'vue'
+   import { createPinia } from 'pinia'
+   import { useDuckDBStore } from './store/duckdbStore'
+
+   const app = createApp(App)
+   const pinia = createPinia()
+   app.use(pinia)
+
+   const duckdbStore = useDuckDBStore()
+   app.provide('duckdb', duckdbStore)
+
+   app.mount('#app')
+   ```
+
+Components that don't use DuckDB (Markdown, TextViewer, OrthogonalFrame, TSViewer) work without this setup.
+
+### Import Styles
 
 ```js
 import '@pennsieve-viz/core/style.css'
 ```
 
-Import and use components from the core package:
+### Components
+
+#### Direct imports (production-ready)
 
 ```vue
 <script setup>
-import { UMAP, DataExplorer, ProportionPlot, Markdown, TextViewer, AiPlotly } from '@pennsieve-viz/core'
+import { DataExplorer, UMAP, Markdown, TextViewer } from '@pennsieve-viz/core'
+import { OrthogonalFrame } from '@pennsieve-viz/core'
 </script>
-
-<template>
-  <UMAP :apiUrl="config.apiUrl" />
-  <DataExplorer :apiUrl="config.apiUrl" />
-</template>
 ```
 
-### Lazy-loaded Components
-
-The core package also provides lazy-loaded versions for tree-shaking:
+#### Lazy-loaded (tree-shaking)
 
 ```vue
 <script setup>
-import { UMAPLazy, DataExplorerLazy, TSViewer, OmeViewer, TiffViewer } from '@pennsieve-viz/core'
+import {
+  DataExplorerLazy,
+  UMAPLazy,
+  MarkdownLazy,
+  TextViewerLazy,
+  // These lazy-load from their respective packages:
+  TSViewer,
+  OmeViewer,
+  TiffViewer,
+  OrthogonalViewer
+} from '@pennsieve-viz/core'
 </script>
 ```
 
-## Props
-
-Components accept an `apiUrl` prop that should match your environment's API domain:
+#### Beta components
 
 ```vue
-<UMAP :apiUrl="config.apiUrl" />
-<DataExplorer :apiUrl="config.apiUrl" />
+<script setup>
+import { ProportionPlotBeta, AiPlotlyBeta } from '@pennsieve-viz/core'
+</script>
 ```
+
+### OrthogonalFrame
+
+`OrthogonalFrame` wraps the Neuroglancer viewer in an iframe for full isolation. Point it at the Pennsieve-hosted embed app (or your own):
+
+```vue
+<OrthogonalFrame
+  :source="zarrUrl"
+  layout="4panel"
+  :embed-url="'https://your-cloudfront-domain.com/embed.html'"
+  @ready="onReady"
+  @error="onError"
+/>
+```
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `source` | `string` | — | OME-Zarr source URL (required) |
+| `layout` | `'4panel' \| '3d' \| 'xy' \| 'xz' \| 'yz'` | `'4panel'` | Viewer layout |
+| `embedUrl` | `string` | `'/'` | Base URL of the hosted embed app |
+
+---
 
 ## TSViewer
 
-The `@pennsieve-viz/tsviewer` package (`packages/ts-viewer/`) provides a timeseries data visualization component for viewing and annotating time-based signal data.
-
-### Installation
-
-```bash
-pnpm add @pennsieve-viz/tsviewer
-```
-
 ### Peer Dependencies
 
-The tsviewer requires the following peer dependencies:
-
 ```bash
-pnpm add vue@^3.2.0 pinia@^2.0.0 element-plus@^2.3.0
+pnpm add vue pinia element-plus
+pnpm add @aws-amplify/auth  # optional, for authenticated endpoints
 ```
 
-Optional peer dependency for authentication:
-
-```bash
-pnpm add @aws-amplify/auth@^6.0.0
-```
-
-### Importing
-
-Import styles in your main entry file:
+### Usage
 
 ```js
 import '@pennsieve-viz/tsviewer/style.css'
 ```
 
-Import the component and store:
-
-```js
-import { TSViewer, useViewerStore } from '@pennsieve-viz/tsviewer'
-```
-
-Or use the lazy-loaded version from core:
-
-```js
-import { TSViewer } from '@pennsieve-viz/core'
-```
-
-### Usage
-
 ```vue
 <script setup>
-import { TSViewer, useViewerStore } from '@pennsieve-viz/tsviewer'
+import { TSViewer, createViewerStore, clearViewerStore } from '@pennsieve-viz/tsviewer'
 
-const viewerStore = useViewerStore()
+// Create an isolated store instance (supports multiple viewers on one page)
+const viewerStore = createViewerStore('my-viewer')
 
-// Configure the API endpoint
 viewerStore.setViewerConfig({
   timeseriesDiscoverApi: 'https://api.pennsieve.io/timeseries'
 })
 
-// Load timeseries data for a package
 viewerStore.fetchAndSetActiveViewer({ packageId: 'your-package-id' })
+
+// Cleanup when done
+onUnmounted(() => clearViewerStore('my-viewer'))
 </script>
 
 <template>
-  <TSViewer
-    :pkg="packageData"
-    :is-preview="false"
-    :side-panel-open="false"
-  />
+  <TSViewer :pkg="packageData" />
 </template>
 ```
 
-### Props
-
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `pkg` | Object | `{}` | Package metadata object |
-| `isPreview` | Boolean | `false` | When true, renders in preview mode (no toolbar) |
-| `sidePanelOpen` | Boolean | `false` | Indicates if side panel is open (affects layout) |
+| `pkg` | `Object` | `{}` | Package metadata object |
+| `isPreview` | `Boolean` | `false` | Preview mode (no toolbar) |
+| `sidePanelOpen` | `Boolean` | `false` | Side panel state (affects layout) |
 
 ### Store API
 
-The `useViewerStore()` provides methods for managing viewer state:
+```js
+const store = createViewerStore('instance-id')
+
+store.setViewerConfig({ timeseriesDiscoverApi: '...' })
+store.fetchAndSetActiveViewer({ packageId: '...' })
+
+store.viewerChannels           // all channels
+store.viewerSelectedChannels   // selected channels
+store.setSelectedChannels([...])
+
+store.viewerAnnotations
+store.createAnnotation(annotation)
+store.updateAnnotation(annotation)
+store.deleteAnnotation(annotation)
+
+store.resetViewer()
+
+// Cleanup
+clearViewerStore('instance-id')
+clearAllViewerStores()
+```
+
+---
+
+## Micro-CT
+
+### Peer Dependencies
+
+```bash
+pnpm add vue @deck.gl/core @deck.gl/extensions @deck.gl/geo-layers @deck.gl/layers @deck.gl/mesh-layers @luma.gl/constants @luma.gl/core @luma.gl/engine @luma.gl/shadertools @luma.gl/webgl
+```
+
+### Usage
 
 ```js
-const viewerStore = useViewerStore()
-
-// Configuration
-viewerStore.setViewerConfig({ timeseriesDiscoverApi: '...' })
-
-// Load data
-viewerStore.fetchAndSetActiveViewer({ packageId: '...' })
-
-// Access channels
-viewerStore.viewerChannels
-viewerStore.viewerSelectedChannels
-
-// Annotations
-viewerStore.viewerAnnotations
-viewerStore.createAnnotation(annotation)
-viewerStore.updateAnnotation(annotation)
-viewerStore.deleteAnnotation(annotation)
-
-// Reset state
-viewerStore.resetViewer()
+import '@pennsieve-viz/micro-ct/style.css'
 ```
+
+```vue
+<script setup>
+import { OmeViewer, TiffViewer } from '@pennsieve-viz/micro-ct'
+</script>
+
+<template>
+  <OmeViewer :source="omeTiffUrl" />
+  <TiffViewer :source="tiffUrl" />
+</template>
+```
+
+Exports: `OmeViewer`, `OmeViewerControls`, `OmeOrthogonalViewer`, `TiffViewer`, `useOmeLoader`.
+
+---
+
+## Adding a New Component to Core
+
+1. Create a folder in `packages/core/src/my-component/` with `index.ts` and `MyComponent.vue`
+
+2. Export from `packages/core/src/index.ts`:
+   ```ts
+   export * from './my-component'
+
+   export const MyComponentLazy = defineAsyncComponent(
+     () => import('./my-component').then(m => m.MyComponent)
+   )
+   ```
+
+3. Test in `packages/core/src/App.vue` with `pnpm dev`
