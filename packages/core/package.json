@@ -68,8 +68,7 @@
   "devDependencies": {
     "@pennsieve-viz/micro-ct": "workspace:*",
     "@pennsieve-viz/orthogonal": "workspace:*",
-    "@pennsieve-viz/tsviewer": "workspace:*",
-    "neuroglancer": "^2.39.0"
+    "@pennsieve-viz/tsviewer": "workspace:*"
   },
   "repository": {
     "type": "git",

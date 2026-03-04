@@ -19,13 +19,7 @@ export default defineConfig({
     format: "es",
   },
   optimizeDeps: {
-    entries: [
-      "index.html",
-      "node_modules/neuroglancer/lib/main.bundle.js",
-      "node_modules/neuroglancer/lib/async_computation.bundle.js",
-      "node_modules/neuroglancer/lib/chunk_worker.bundle.js",
-    ],
-    exclude: ["neuroglancer"],
+    entries: ["index.html"],
   },
   build: {
     cssCodeSplit: false,
