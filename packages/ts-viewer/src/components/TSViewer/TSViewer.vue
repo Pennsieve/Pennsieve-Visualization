@@ -144,6 +144,7 @@ import {
 
 import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
+import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
 
 // Component imports (required for <script setup>)
 const TimeseriesScrubber = defineAsyncComponent(() => import('@/components/TSViewer/TSScrubber.vue'))
@@ -207,6 +208,9 @@ const { viewerChannels, needsRerender } = storeToRefs(viewerStore)
 // Provide store and instanceId to child components
 provide('viewerStore', viewerStore)
 provide('viewerInstanceId', props.instanceId)
+
+// Global message handler for toast/error events
+useGlobalMessageHandler()
 
 // TsAnnotation composable setup - pass the store instance
 const {

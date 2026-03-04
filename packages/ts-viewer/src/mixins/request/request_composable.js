@@ -70,7 +70,7 @@ export function useHandleXhrError(err) {
     let status
     if (optionalStatus === undefined) {
         // emit ajaxError
-        // EventBus.$emit('ajaxError', err) TODO
+        console.log(err)
         return
     } else {
         status = err.status
@@ -80,12 +80,12 @@ export function useHandleXhrError(err) {
         err.body.getReader().read().then(({ done, value }) => {
             const strData = value instanceof Uint8Array ? String.fromCharCode.apply(null, value) : value
             const errorMsg = compose(defaultTo(strData), tryCatch(compose(prop('message'), JSON.parse), (_, v) => v))(strData)
-            // EventBus.$emit('ajaxError', {
-            //     detail: {
-            //         type: 'error',
-            //         msg: errorMsg
-            //     }
-            // }) TODO
+            EventBus.$emit('ajaxError', {
+                detail: {
+                    type: 'error',
+                    msg: errorMsg
+                }
+            })
         })
     } // logout
     else if (status === 401) {
@@ -93,7 +93,24 @@ export function useHandleXhrError(err) {
         return useHandleLogout()
     }
     else {
-        // emit ajaxError
-        // EventBus.$emit('ajaxError', err) TODO
-    }
+        err.json().then(errorJson => {
+          if (errorJson) {
+            const msg = errorJson.message
+            console.log('error message is ', msg)
+            EventBus.$emit('ajaxError', {
+              detail: {
+                type: 'info',
+                msg: msg,
+              }
+            })
+          } else {
+            EventBus.$emit('ajaxError', {
+              detail: {
+                type: 'error',
+                msg: `Request failed with status ${status}`
+              }
+            })
+          }
+        })
+  }
 }
