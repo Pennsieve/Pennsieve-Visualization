@@ -2,6 +2,7 @@
 
 import {compose, defaultTo, prop, propOr, tryCatch} from "ramda";
 import {useHandleLogout} from "../logout-handler/logout_handler_composable";
+import EventBus from '@/utils/event-bus';
 
 const _isString = (x) => Object.prototype.toString.call(x) === '[object String]'
 
