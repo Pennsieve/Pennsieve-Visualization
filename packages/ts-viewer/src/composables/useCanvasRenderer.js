@@ -85,11 +85,9 @@ export const useCanvasRenderer = () => {
                 for (let i = 0; i < curChannelView.dataSegments.length; i += 2) {
 
                     if (curChannelView.dataSegments[i + 1] < startT) {
-                        console.log('skipping something')
                         continue
                     }
                     if (curChannelView.dataSegments[i] > (startT + viewport.duration)) {
-                        console.log('breaking something')
                         break
                     }
                     let xPos1 = Math.floor((((xOffset + (curChannelView.dataSegments[i] - startT) / (rsP)))))
@@ -136,7 +134,6 @@ export const useCanvasRenderer = () => {
                     const curBlock = curChannelData.blocks[block]
 
                     if (curBlock.nrPoints === 0) {
-                        console.log('zero points')
                         continue
                     }
 

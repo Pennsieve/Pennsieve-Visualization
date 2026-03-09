@@ -35,13 +35,13 @@ const hello = 'world';
     </section>
 
     <!-- AiPlotly Component -->
-    <section class="component-section">
+    <!-- <section class="component-section">
       <h2 class="component-label">AiPlotly</h2>
       <p class="component-path">@pennsieve-viz/ai-plotly</p>
       <div class="component-container" style="height: 400px">
         <AiPlotly :data="samplePlotlyData" :layout="samplePlotlyLayout" />
       </div>
-    </section>
+    </section> -->
 
     <!-- CSVViewer Component -->
     <section class="component-section">
@@ -63,7 +63,7 @@ const hello = 'world';
         class="component-container bg-tertiary"
         style="height: 400px"
       >
-        <DataExplorer :src-url="apiUrl" />
+        <DataExplorer instance-id="playground-explorer" src-url="https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/humandrg/v2/genes.parquet" />
       </div>
     </section>
 
@@ -75,7 +75,7 @@ const hello = 'world';
         class="component-container bg-tertiary"
         style="height: 400px"
       >
-        <UMAP :src-url="apiUrl" />
+        <UMAP instance-id="playground-umap" :src-url="apiUrl" />
       </div>
     </section>
 
@@ -127,6 +127,21 @@ const hello = 'world';
       </div>
     </section>
 
+    <!-- OrthogonalViewer Component (iframe-isolated) -->
+    <section class="component-section">
+      <h2 class="component-label">OrthogonalViewer (Neuroglancer)</h2>
+      <p class="component-path">@pennsieve-viz/orthogonal via iframe</p>
+      <div
+        class="component-container"
+        style="height: 700px; background: #000; padding: 0"
+      >
+        <OrthogonalFrame
+          :source="zarrSource"
+          :embed-url="orthogonalEmbedUrl"
+        />
+      </div>
+    </section>
+
     <!-- EditIcon Component -->
     <section class="component-section">
       <h2 class="component-label">EditIcon</h2>
@@ -145,14 +160,14 @@ import {
   CSVViewer,
   Markdown,
   TextViewer,
-  AiPlotly,
   DataExplorer,
   UMAP,
-  ProportionPlot,
+  ProportionPlotBeta as ProportionPlot,
   EditIcon,
   TSViewer,
   OmeViewer,
   TiffViewer,
+  OrthogonalFrame,
 } from "./index";
 import "@pennsieve-viz/micro-ct/style.css";
 import "@pennsieve-viz/tsviewer/style.css";
@@ -200,6 +215,12 @@ const apiUrl = ref(
 const csvUrl = ref(
   "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
 );
+
+// OrthogonalViewer (Neuroglancer) — runs in iframe for full isolation
+const zarrSource = "https://pennsieve-dev-zarr-test-use1.s3.us-east-1.amazonaws.com/ddb6cb43-3749-4e9d-9c59-e2d4a8aa7f5a";
+//needs to be different port than current localhost
+const orthogonalEmbedUrl = "http://localhost:5173/embed.html";
+
 
 // OME-Zarr test source (3D OME-Zarr with Z-stack and tiled zoom)
 const omeTiffSource = ref(

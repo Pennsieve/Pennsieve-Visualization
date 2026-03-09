@@ -1,13 +1,18 @@
 // composables/useAnnotationLayers.js
-import { ref } from 'vue'
-import { useViewerStore } from '../stores/tsviewer'
+import { ref, inject } from 'vue'
+import { createViewerStore } from '../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import EventBus from '@/utils/event-bus'
 import { hexToRgbA } from '@/utils/annotationUtils'
 
-export function useAnnotationLayers() {
-    const viewerStore = useViewerStore()
+/**
+ * Composable for annotation layer management.
+ * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ */
+export function useAnnotationLayers(storeInstance = null) {
+    // Use provided store, inject from parent, or fall back to default
+    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
 
     const annLayerInfo = ref([])
     const defaultColors = ref([
@@ -57,6 +62,11 @@ export function useAnnotationLayers() {
     }
 
     const createAnnotationLayer = async (newLayer, activeViewer, emit) => {
+        // Guard: ensure activeViewer has required properties
+        if (!activeViewer?.content?.id) {
+            return null
+        }
+
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers?api_key=${token}`
@@ -103,24 +113,11 @@ export function useAnnotationLayers() {
     }
 
     const updateLayerVisibility = (layerId, visible) => {
-        console.log(`[useAnnotationLayers] Updating layer ${layerId} visibility to:`, visible)
-
         const layer = viewerStore.viewerAnnotations.find(l => l.id === layerId)
 
         if (layer) {
-            console.log(`[useAnnotationLayers] Found layer:`, layer.name, 'current visible:', layer.visible)
-
             layer.visible = visible
             viewerStore.updateLayer(layer)
-
-            console.log(`[useAnnotationLayers] Updated layer:`, layer.name, 'new visible:', layer.visible)
-
-            // Verify the update took effect
-            const updatedLayer = viewerStore.viewerAnnotations.find(l => l.id === layerId)
-            console.log(`[useAnnotationLayers] Verification - layer visible is now:`, updatedLayer?.visible)
-        } else {
-            console.error(`[useAnnotationLayers] Layer not found with ID:`, layerId)
-            console.log(`[useAnnotationLayers] Available layers:`, viewerStore.viewerAnnotations.map(l => ({ id: l.id, name: l.name })))
         }
     }
 
@@ -141,6 +138,10 @@ export function useAnnotationLayers() {
     }
 
     const deleteLayer = async (layerId, activeViewer) => {
+        if (!activeViewer?.content?.id) {
+            return null
+        }
+
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers/${layerId}?api_key=${token}`
@@ -162,6 +163,10 @@ export function useAnnotationLayers() {
     }
 
     const updateLayerColor = async (layerId, newColor, activeViewer) => {
+        if (!activeViewer?.content?.id) {
+            return null
+        }
+
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers/${layerId}?api_key=${token}`
@@ -189,6 +194,11 @@ export function useAnnotationLayers() {
     }
 
     const loadLayers = async (activeViewer, emit) => {
+        // Guard: ensure activeViewer has required properties
+        if (!activeViewer?.content?.id) {
+            return null
+        }
+
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers?api_key=${token}`

@@ -2,7 +2,8 @@
   <div class="ps-viewer data-explorer" :style="rootStyle">
     <div class="data-explorer-content">
       <!-- Query Panel -->
-      <div class="data-explorer-query-panel" v-if="isConnected">
+
+      <div class="query-panel" v-if="store.isConnected">
         <h3>SQL Query</h3>
         <div class="data-explorer-query-examples">
           <span>Quick queries:</span>
@@ -16,7 +17,7 @@
           </button>
         </div>
         <textarea
-          v-model="sqlQuery"
+          v-model="store.sqlQuery"
           placeholder="SELECT * FROM data;"
           class="data-explorer-query-textarea"
           rows="4"
@@ -24,37 +25,37 @@
         <button
           class="ps-btn-primary"
           @click="executeQuery"
-          :disabled="isQueryRunning || !sqlQuery"
+          :disabled="store.isQueryRunning || !store.sqlQuery"
         >
-          {{ isQueryRunning ? "Running..." : "Execute Query" }}
+          {{ store.isQueryRunning ? "Running..." : "Execute Query" }}
         </button>
       </div>
 
       <!-- Results Panel -->
-      <div class="data-explorer-results-panel" v-if="queryResults">
-        <h3>Results ({{ queryResults.length }} rows)</h3>
-        <div class="data-explorer-results-controls">
-          <div class="data-explorer-left-controls">
-            <button class="ps-btn-secondary" @click="exportToCsv">
+      <div class="results-panel" v-if="store.queryResults">
+        <h3>Results ({{ store.rowCount }} rows)</h3>
+        <div class="results-controls">
+          <div class="left-controls">
+            <button class="secondary-btn" @click="exportToCsv">
               Export to CSV
             </button>
           </div>
-          <div class="data-explorer-right-controls">
-            <div v-if="totalPages > 1" class="data-explorer-pagination">
+          <div class="right-controls">
+            <div v-if="store.totalPages > 1" class="pagination">
               <button
-                class="ps-btn-secondary ps-btn--sm"
-                :disabled="currentPage <= 1"
-                @click="handlePageChange(currentPage - 1)"
+                class="page-btn"
+                :disabled="store.currentPage <= 1"
+                @click="store.prevPage()"
               >
                 Prev
               </button>
-              <span class="data-explorer-page-info"
-                >{{ currentPage }} / {{ totalPages }}</span
+              <span class="page-info"
+                >{{ store.currentPage }} / {{ store.totalPages }}</span
               >
               <button
-                class="ps-btn-secondary ps-btn--sm"
-                :disabled="currentPage >= totalPages"
-                @click="handlePageChange(currentPage + 1)"
+                class="page-btn"
+                :disabled="store.currentPage >= store.totalPages"
+                @click="store.nextPage()"
               >
                 Next
               </button>
@@ -63,38 +64,38 @@
         </div>
 
         <!-- Table View -->
-        <div v-if="displayMode === 'table'" class="ps-table-container">
-          <table class="ps-table">
+        <div v-if="store.displayMode === 'table'" class="table-container">
+          <table class="results-table">
             <thead>
               <tr>
-                <th v-for="column in tableColumns" :key="column">
+                <th v-for="column in store.tableColumns" :key="column">
                   {{ column }}
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, index) in paginatedResults" :key="index">
-                <td v-for="column in tableColumns" :key="column">
+              <tr v-for="(row, index) in store.paginatedResults" :key="index">
+                <td v-for="column in store.tableColumns" :key="column">
                   {{ formatCellValue(row[column]) }}
                 </td>
               </tr>
             </tbody>
           </table>
 
-          <!-- Bottom Pagination -->
-          <div v-if="totalPages > 1" class="data-explorer-bottom-pagination">
+          <!-- Bottom Pagination for large datasets -->
+          <div v-if="store.totalPages > 1" class="bottom-pagination">
             <button
-              class="ps-btn-secondary ps-btn--sm"
-              :disabled="currentPage <= 1"
-              @click="handlePageChange(currentPage - 1)"
+              class="page-btn"
+              :disabled="store.currentPage <= 1"
+              @click="store.prevPage()"
             >
               Prev
             </button>
-            <span class="data-explorer-page-info">{{ currentPage }} / {{ totalPages }}</span>
+            <span class="page-info">{{ store.currentPage }} / {{ store.totalPages }}</span>
             <button
-              class="ps-btn-secondary ps-btn--sm"
-              :disabled="currentPage >= totalPages"
-              @click="handlePageChange(currentPage + 1)"
+              class="page-btn"
+              :disabled="store.currentPage >= store.totalPages"
+              @click="store.nextPage()"
             >
               Next
             </button>
@@ -102,65 +103,87 @@
         </div>
 
         <!-- JSON View -->
-        <div v-else class="data-explorer-json-container">
-          <pre>{{ JSON.stringify(queryResults.slice(0, 100), null, 2) }}</pre>
+        <div v-else class="json-container">
+          <pre>{{ JSON.stringify(store.queryResults.slice(0, 100), null, 2) }}</pre>
         </div>
       </div>
 
       <!-- Error Display -->
-      <div v-if="error" class="ps-error">
+      <div v-if="store.error" class="error-panel">
         <h3>Error</h3>
-        <p>{{ error }}</p>
-        <button @click="clearError" class="ps-btn-danger">Clear</button>
+        <p>{{ store.error }}</p>
+        <button @click="store.clearError()" class="clear-error-btn">Clear</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import { useDuckDBStore } from "../duckdb";
-import { useViewerStyle, type ViewerStyleOverrides } from "../composables/useViewerStyle";
 
-const props = defineProps<{
-  url?: string
-  fileType?: string
-  viewerId?: string
-  fileId?: string | null
-  customStyle?: ViewerStyleOverrides
-}>();
+import { computed, onMounted, onUnmounted, watch, provide, inject } from "vue";
+import type { DuckDBStoreInterface } from "../duckdb";
+import { createDataExplorerStore, clearDataExplorerStore } from "./dataExplorerStore";
 
-const { rootStyle } = useViewerStyle(() => props.customStyle);
+const props = defineProps({
+  instanceId: {
+    type: String,
+    default: 'default',
+  },
+  url: {
+    type: String,
+    default: "",
+  },
+  fileType: {
+    type: String,
+    default: "parquet",
+    validator: (value: string) => ["parquet", "csv"].includes(value),
+  },
+  viewerId: {
+    type: String,
+    default: () =>
+      `viewer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  },
+  fileId: {
+    type: String,
+    default: null,
+  },
+});
 
 const emit = defineEmits(["query-results"]);
 
-const duckDBStore = useDuckDBStore();
+// Create instance-specific store
+const effectiveInstanceId = computed(() => props.instanceId || 'default')
+const store = createDataExplorerStore(effectiveInstanceId.value)
 
-const csvOptions = ref({
-  header: true,
-  dynamicTyping: true,
-  delimiter: ",",
-});
+// Provide store to child components (for future use)
+provide('dataExplorerStore', store)
+provide('dataExplorerInstanceId', effectiveInstanceId.value)
 
-const isLoading = ref(false);
-const isQueryRunning = ref(false);
-const s3Url = ref(props.url ?? "");
-const tableName = ref<string | null>(null);
-const sqlQuery = ref("");
-const queryResults = ref<any[] | null>(null);
-const error = ref("");
-const displayMode = ref("table");
-const currentPage = ref(1);
-const itemsPerPage = ref(50);
-const connectionId = ref<string | null>(null);
-const isFileLoading = ref(false);
-const localViewerId = props.viewerId ?? `viewer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-const localFileType = computed(() => props.fileType ?? "parquet");
+// Use DuckDB store (provided by host app via provide/inject)
+const _injectedDuckDB = inject<DuckDBStoreInterface>('duckdb')
+if (!_injectedDuckDB) {
+  throw new Error(
+    '[@pennsieve-viz/core] DuckDB store not provided. ' +
+    'Please provide a DuckDB store via app.provide("duckdb", store)'
+  )
+}
+const duckDBStore: DuckDBStoreInterface = _injectedDuckDB
+
+// Initialize source info from props
+store.setSourceInfo({
+  url: props.url,
+  fileType: props.fileType as 'csv' | 'parquet',
+  fileId: props.fileId,
+  viewerId: props.viewerId,
+})
+
+// Computed for stable ID
+const stableId = computed(() => duckDBStore.formatIdFromUrl(props.url));
 
 watch(
   () => props.url,
   async (newValue) => {
-    s3Url.value = newValue ?? "";
+    store.setSourceInfo({ url: newValue })
     if (newValue) {
       try {
         await ensureConnection();
@@ -172,29 +195,6 @@ watch(
   },
   { immediate: true }
 );
-
-const isConnected = computed(() => {
-  return duckDBStore.isReady && connectionId.value && !isLoading.value;
-});
-const stableId = computed(() => duckDBStore.formatIdFromUrl(props.url ?? ""));
-
-const tableColumns = computed(() => {
-  if (!queryResults.value || !Array.isArray(queryResults.value) || queryResults.value.length === 0)
-    return [];
-  return Object.keys(queryResults.value[0] || {});
-});
-
-const totalPages = computed(() => {
-  if (!queryResults.value || !Array.isArray(queryResults.value)) return 0;
-  return Math.ceil(queryResults.value.length / itemsPerPage.value);
-});
-
-const paginatedResults = computed(() => {
-  if (!queryResults.value || !Array.isArray(queryResults.value)) return [];
-  const start = (currentPage.value - 1) * itemsPerPage.value;
-  const end = start + itemsPerPage.value;
-  return queryResults.value.slice(start, end);
-});
 
 const queryExamples = computed(() => {
   return [
@@ -210,99 +210,131 @@ const queryExamples = computed(() => {
                                   ORDER BY column1, column2
                                   LIMIT 20;`,
     },
-    { name: "Describe", query: `DESCRIBE data;` },
     { name: "Sample", query: `SELECT * FROM data USING SAMPLE 10;` },
-    { name: "Columns", query: `PRAGMA table_info(data);` },
   ];
 });
 
 async function ensureConnection() {
-  if (connectionId.value) return;
-  const { connectionId: cid } = await duckDBStore.createConnection(localViewerId);
-  connectionId.value = cid;
+  if (store.connectionId) return;
+  const { connectionId: cid } = await duckDBStore.createConnection(
+    `dataExplorer_${effectiveInstanceId.value}_${props.viewerId}`
+  );
+  store.setConnectionId(cid);
 }
 
+// Initialize connection and load file
+const initialize = async () => {
+  try {
+    if (!store.connectionId) await ensureConnection();
+
+    // Load file if URL is provided
+    if (store.sourceInfo.url) {
+      await loadFile();
+    }
+  } catch (err: any) {
+    console.error("Failed to initialize viewer:", err);
+    store.setError(`Failed to initialize: ${err.message}`);
+  }
+};
+
+// Load file using the store
 const loadFile = async () => {
-  if (!s3Url.value) {
-    error.value = "Please provide a valid S3 URL";
+  if (!store.sourceInfo.url) {
+    store.setError("Please provide a valid S3 URL");
     return;
   }
 
-  if (isFileLoading.value) return;
 
-  isFileLoading.value = true;
-  isLoading.value = true;
-  error.value = "";
-  tableName.value = null;
+  // Prevent double-loading
+  if (store.isFileLoading) {
+    return;
+  }
+
+  store.setFileLoading(true);
+  store.setLoading(true);
+  store.clearError();
+  store.setTableName(null); // Reset table name before loading
 
   try {
     const tableId = props.fileId ? `file_${props.fileId}` : `data_${Date.now()}`;
 
     const loadedTableName = await duckDBStore.loadFile(
-      s3Url.value,
-      localFileType.value as "csv" | "parquet",
+      store.sourceInfo.url,
+      props.fileType as "csv" | "parquet",
       tableId,
-      csvOptions.value,
-      localViewerId,
+      store.csvOptions,
+      props.viewerId,
       stableId.value
     );
 
-    tableName.value = loadedTableName;
+    store.setTableName(loadedTableName);
+
+    // Auto-execute a sample query using "data"
     setQuery(`SELECT * FROM data;`);
   } catch (err: any) {
     console.error("Failed to load file:", err);
-    error.value = `Failed to load file: ${err.message}`;
-    tableName.value = null;
+    store.setError(`Failed to load file: ${err.message}`);
+    store.setTableName(null);
   } finally {
-    isLoading.value = false;
-    isFileLoading.value = false;
+    store.setLoading(false);
+    store.setFileLoading(false);
   }
 };
 
-const interceptQuery = (query: string) => {
-  if (!tableName.value || !query) return query;
-  return query
-    .replace(/\bFROM\s+data\b/gi, `FROM ${tableName.value}`)
-    .replace(/\bJOIN\s+data\b/gi, `JOIN ${tableName.value}`)
-    .replace(/\bUPDATE\s+data\b/gi, `UPDATE ${tableName.value}`)
-    .replace(/\bINSERT\s+INTO\s+data\b/gi, `INSERT INTO ${tableName.value}`)
-    .replace(/\bINTO\s+data\b/gi, `INTO ${tableName.value}`)
-    .replace(/\btable_info\(\s*data\s*\)/gi, `table_info(${tableName.value})`)
-    .replace(/\bDESCRIBE\s+data\b/gi, `DESCRIBE ${tableName.value}`)
-    .replace(/\bPRAGMA\s+table_info\(\s*data\s*\)/gi, `PRAGMA table_info(${tableName.value})`);
-};
+
+// Execute SQL query using store
 
 const executeQuery = async () => {
-  if (!sqlQuery.value || !connectionId.value) {
-    error.value = "Please provide a valid SQL query";
-    return;
-  }
-  if (!tableName.value) {
-    error.value = "No data table loaded";
+  if (!store.sqlQuery || !store.connectionId) {
+    store.setError("Please provide a valid SQL query");
     return;
   }
 
-  isQueryRunning.value = true;
-  error.value = "";
-  currentPage.value = 1;
+  if (!store.tableName) {
+    store.setError("No data table loaded");
+    return;
+  }
+
+  store.setQueryRunning(true);
+  store.clearError();
+  store.setCurrentPage(1);
 
   try {
-    const transformedQuery = interceptQuery(sqlQuery.value.trim());
-    queryResults.value = await duckDBStore.executeQuery(transformedQuery, connectionId.value);
-    await duckDBStore.publishViewFromQuery("umap_result", transformedQuery, connectionId.value);
-    emit("query-results", { results: queryResults.value, query: transformedQuery });
+    // Intercept and transform the query
+    const transformedQuery = store.interceptQuery(store.sqlQuery.trim());
+
+    const results = await duckDBStore.executeQuery(
+      transformedQuery,
+      store.connectionId
+    );
+    store.setQueryResults(results);
+    store.addToQueryHistory(store.sqlQuery);
+
+    await duckDBStore.publishViewFromQuery(
+      "umap_result",
+      transformedQuery,
+      store.connectionId
+    );
+
+    emit("query-results", {
+      results: store.queryResults,
+      query: transformedQuery,
+    });
   } catch (err: any) {
     console.error("Query execution failed:", err);
-    error.value = `Query execution failed: ${err.message}`;
-    queryResults.value = null;
+    store.setError(`Query execution failed: ${err.message}`);
+    store.setQueryResults(null);
   } finally {
-    isQueryRunning.value = false;
+    store.setQueryRunning(false);
   }
 };
 
-const handlePageChange = (page: number) => { currentPage.value = page; };
-const setQuery = (query: string) => { sqlQuery.value = query; };
+// Set predefined query
+const setQuery = (query: string) => {
+  store.setQuery(query);
+};
 
+// Format cell values for display
 const formatCellValue = (value: any) => {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "number") return Number.isInteger(value) ? value.toString() : value.toFixed(4);
@@ -311,16 +343,20 @@ const formatCellValue = (value: any) => {
 };
 
 const exportToCsv = () => {
-  if (!queryResults.value || queryResults.value.length === 0) return;
-  const headers = Object.keys(queryResults.value[0]);
+  if (!store.queryResults || store.queryResults.length === 0) return;
+
+  const headers = Object.keys(store.queryResults[0]);
   const csvContent = [
     headers.join(","),
-    ...queryResults.value.map((row) =>
-      headers.map((header) => {
-        const value = row[header];
-        const stringValue = value === null || value === undefined ? "" : value.toString();
-        return stringValue.includes(",") ? `"${stringValue}"` : stringValue;
-      }).join(",")
+    ...store.queryResults.map((row) =>
+      headers
+        .map((header) => {
+          const value = row[header];
+          const stringValue =
+            value === null || value === undefined ? "" : value.toString();
+          return stringValue.includes(",") ? `"${stringValue}"` : stringValue;
+        })
+        .join(",")
     ),
   ].join("\n");
 
@@ -333,11 +369,22 @@ const exportToCsv = () => {
   URL.revokeObjectURL(url);
 };
 
-const clearError = () => { error.value = ""; };
+
+// Lifecycle hooks
+onMounted(async () => {
+  await ensureConnection();
+});
 
 onMounted(async () => { await ensureConnection(); });
 onUnmounted(async () => {
-  if (connectionId.value) await duckDBStore.closeConnection(connectionId.value);
+
+  // Close DuckDB connection
+  if (store.connectionId) {
+    await duckDBStore.closeConnection(store.connectionId);
+  }
+  // Clear store instance
+  clearDataExplorerStore(effectiveInstanceId.value);
+
 });
 </script>
 

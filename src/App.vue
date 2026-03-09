@@ -4,6 +4,13 @@
   <!-- <div style="height: 400px;width:400px;">
         <ProportionPlot src-url="https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/"></ProportionPlot>
     </div> -->
+  <div style="height: 600px; width: 100%">
+    <OrthogonalViewer
+      :source="zarrSource"
+      @ready="() => console.log('[OrthogonalViewer] Ready')"
+      @error="(e) => console.error('[OrthogonalViewer] Error:', e)"
+    />
+  </div>
   <div style="height: 400px; width: 400px">
     <Markdown
       mode="preview"
@@ -40,8 +47,10 @@ hello_world()"
   </div>
 </template>
 <script setup lang="ts">
-import { Markdown } from "./index";
+import { Markdown, OrthogonalViewer } from "./index";
 import { onBeforeMount, ref } from "vue";
+
+const zarrSource = 'https://pennsieve-dev-zarr-test-use1.s3.us-east-1.amazonaws.com/ddb6cb43-3749-4e9d-9c59-e2d4a8aa7f5a';
 
 onBeforeMount(async () => {
   // const text = await fetch('/src/local/test.csv').then(r => r.text())

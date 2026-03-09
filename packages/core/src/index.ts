@@ -6,33 +6,32 @@ export { useGetToken } from './composables/useGetToken'
 export { useViewerStyle, type ViewerStyleOverrides } from './composables/useViewerStyle'
 export { default as EditIcon } from './icons/EditIcon.vue'
 
-// DuckDB store
-export { useDuckDBStore } from './duckdb'
+// DuckDB interface (app provides the store via provide/inject)
+export type { DuckDBStoreInterface } from './duckdb'
 
 // Direct exports from component modules
 export * from './csv-viewer'
+
+// =============================================================================
+// Production-ready components
+// =============================================================================
 export * from './data-explorer'
 export * from './umap'
-export * from './proportion-plot'
 export * from './markdown'
 export * from './text-viewer'
-export * from './ai-plotly'
 
 // Lazy-loaded component exports for tree-shaking (internal components)
 export const CSVViewerLazy = defineAsyncComponent(
   () => import('./csv-viewer').then(m => m.CSVViewer)
 )
 
+// Lazy-loaded versions for tree-shaking
 export const DataExplorerLazy = defineAsyncComponent(
   () => import('./data-explorer').then(m => m.DataExplorer)
 )
 
 export const UMAPLazy = defineAsyncComponent(
   () => import('./umap').then(m => m.UMAP)
-)
-
-export const ProportionPlotLazy = defineAsyncComponent(
-  () => import('./proportion-plot').then(m => m.ProportionPlot)
 )
 
 export const MarkdownLazy = defineAsyncComponent(
@@ -43,7 +42,16 @@ export const TextViewerLazy = defineAsyncComponent(
   () => import('./text-viewer').then(m => m.TextViewer)
 )
 
-export const AiPlotlyLazy = defineAsyncComponent(
+// =============================================================================
+// Beta components - not part of public API, but available for testing
+// Import directly: import { ProportionPlot } from '@pennsieve-viz/core/src/proportion-plot'
+// Or use the lazy exports below
+// =============================================================================
+export const ProportionPlotBeta = defineAsyncComponent(
+  () => import('./proportion-plot').then(m => m.ProportionPlot)
+)
+
+export const AiPlotlyBeta = defineAsyncComponent(
   () => import('./ai-plotly').then(m => m.AiPlotly)
 )
 
@@ -59,3 +67,10 @@ export const OmeViewer = defineAsyncComponent(
 export const TiffViewer = defineAsyncComponent(
   () => import('@pennsieve-viz/micro-ct').then(m => m.TiffViewer)
 )
+
+export const OrthogonalViewer = defineAsyncComponent(
+  () => import('@pennsieve-viz/orthogonal').then(m => m.OrthogonalViewer)
+)
+
+// iframe-based wrapper — isolates neuroglancer from host app
+export { OrthogonalFrame } from './orthogonal'

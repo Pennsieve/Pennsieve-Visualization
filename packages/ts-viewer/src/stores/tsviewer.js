@@ -5,7 +5,39 @@ import { propEq, findIndex } from 'ramda'
 import { useToken } from '@/composables/useToken'
 import { useChannelDataRequest } from '@/composables/useChannelDataRequest';
 
-export const useViewerStore = defineStore('tsviewer', () => {
+// Store instance cache - maps instanceId to store instance
+const storeInstances = new Map()
+
+// Track if we've already shown warnings (to avoid spam)
+let hasShownDefaultWarning = false
+let hasShownDeprecationWarning = false
+
+/**
+ * Factory function to create or retrieve a viewer store instance.
+ * Each instanceId gets its own isolated store, enabling multiple
+ * independent TSViewer components on the same page.
+ *
+ * @param {string} instanceId - Unique identifier for the viewer instance
+ * @returns {Object} Pinia store instance for this viewer
+ */
+export function createViewerStore(instanceId = 'default') {
+    // Warn once if using default instanceId
+    if (instanceId === 'default' && !hasShownDefaultWarning) {
+        hasShownDefaultWarning = true
+        console.warn(
+            '[TSViewer] Using default store instance. ' +
+            'For multi-instance support, pass a unique instanceId prop to TSViewer. ' +
+            'Example: <TSViewer instance-id="viewer-1" />'
+        )
+    }
+
+    // Return cached instance if it exists
+    if (storeInstances.has(instanceId)) {
+        return storeInstances.get(instanceId)()
+    }
+
+    // Create a new store with a unique ID
+    const useStore = defineStore(`tsviewer-${instanceId}`, () => {
     const config = reactive({})
     const viewerChannels = ref([])
     const viewerMontageScheme = ref('NOT_MONTAGED')
@@ -19,7 +51,7 @@ export const useViewerStore = defineStore('tsviewer', () => {
     const viewerAnnotations = ref([])
     const activeAnnotationLayer = ref({})
     const activeAnnotation = ref({})
-    const viewerActiveTool = ref('POINTER')
+    const viewerActiveTool = ref('pointer')
 
     const { openConnection } = useChannelDataRequest()
 
@@ -150,7 +182,6 @@ export const useViewerStore = defineStore('tsviewer', () => {
         })
 
         viewerAnnotations.value = validatedAnnotations
-        console.log('Set annotations with validated structure:', validatedAnnotations)
     }
 
     const setActiveAnnotationLayer = (layerId) => {
@@ -168,7 +199,6 @@ export const useViewerStore = defineStore('tsviewer', () => {
         const layerIndex = findIndex(propEq('id', layerId), viewerAnnotations.value)
         if (layerIndex >= 0) {
             viewerAnnotations.value[layerIndex].selected = true
-            console.log('Successfully set active layer:', viewerAnnotations.value[layerIndex])
         } else {
             console.error('Layer with ID not found:', layerId, 'Available layers:', viewerAnnotations.value)
         }
@@ -222,7 +252,6 @@ export const useViewerStore = defineStore('tsviewer', () => {
         }
 
         viewerAnnotations.value.push(validatedLayer)
-        console.log('Created layer with validated structure:', validatedLayer)
     }
 
 
@@ -304,7 +333,7 @@ export const useViewerStore = defineStore('tsviewer', () => {
         viewerAnnotations.value = []
         activeAnnotationLayer.value = {}
         activeAnnotation.value = {}
-        viewerActiveTool.value = 'POINTER'
+        viewerActiveTool.value = 'pointer'
         activeViewer.value = {}
         Object.keys(config).forEach(key => {
           delete config[key]
@@ -372,4 +401,52 @@ export const useViewerStore = defineStore('tsviewer', () => {
         setActiveViewer,
         setViewerConfig
     }
-})
+    })
+
+    // Cache the store factory function
+    storeInstances.set(instanceId, useStore)
+
+    // Return the store instance
+    return useStore()
+}
+
+/**
+ * Clears a specific viewer store instance from the cache.
+ * Call this when unmounting a TSViewer to clean up resources.
+ *
+ * @param {string} instanceId - The instance ID to clear
+ */
+export function clearViewerStore(instanceId) {
+    if (storeInstances.has(instanceId)) {
+        const store = storeInstances.get(instanceId)()
+        store.resetViewer()
+        storeInstances.delete(instanceId)
+    }
+}
+
+/**
+ * Clears all viewer store instances from the cache.
+ */
+export function clearAllViewerStores() {
+    storeInstances.forEach((useStore, instanceId) => {
+        const store = useStore()
+        store.resetViewer()
+    })
+    storeInstances.clear()
+}
+
+/**
+ * @deprecated Use createViewerStore(instanceId) instead for multi-instance support.
+ * This export is kept for backwards compatibility with existing code.
+ * Returns the default singleton store instance.
+ */
+export function useViewerStore() {
+    if (!hasShownDeprecationWarning) {
+        hasShownDeprecationWarning = true
+        console.warn(
+            '[TSViewer] useViewerStore() is deprecated. ' +
+            'Use createViewerStore(instanceId) for multi-instance support.'
+        )
+    }
+    return createViewerStore('default')
+}

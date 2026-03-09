@@ -12,6 +12,15 @@ export default defineConfig({
       entryRoot: "src",
     }),
   ],
+  esbuild: {
+    target: "es2022",
+  },
+  worker: {
+    format: "es",
+  },
+  optimizeDeps: {
+    entries: ["index.html"],
+  },
   build: {
     cssCodeSplit: false,
     lib: {
@@ -28,6 +37,7 @@ export default defineConfig({
         "@aws-amplify/auth",
         "@pennsieve-viz/tsviewer",
         "@pennsieve-viz/micro-ct",
+        "@pennsieve-viz/orthogonal",
       ],
       output: {
         globals: {

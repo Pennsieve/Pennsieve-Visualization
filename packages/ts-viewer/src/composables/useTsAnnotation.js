@@ -1,14 +1,19 @@
 // composables/useTsAnnotation.js - Updated to use Pinia store
 
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHandleXhrError } from '@/mixins/request/request_composable'
 import { useToken } from '@/composables/useToken'
-import { useViewerStore } from '../stores/tsviewer' // Import Pinia store
+import { createViewerStore } from '../stores/tsviewer'
 
-export function useTsAnnotation() {
-    const viewerStore = useViewerStore() // Add Pinia store
-    const { viewerChannels, viewerAnnotations } = storeToRefs(viewerStore) // Get reactive refs
+/**
+ * Composable for annotation CRUD operations.
+ * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ */
+export function useTsAnnotation(storeInstance = null) {
+    // Use provided store, inject from parent, or fall back to default
+    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
+    const { viewerChannels, viewerAnnotations } = storeToRefs(viewerStore)
 
     // Helper function to get channel ID
     const getChannelId = (channel) => {
@@ -29,8 +34,6 @@ export function useTsAnnotation() {
     const addAnnotation = async (annotation = null) => {
         // Use passed annotation or fall back to store
         const annotationData = annotation || activeAnnotation.value
-
-        console.log('🔧 useTsAnnotation: addAnnotation called with:', annotationData)
 
         // Validate annotation data
         if (!annotationData || !annotationData.layer_id) {
@@ -65,41 +68,27 @@ export function useTsAnnotation() {
         // FIX: Use Pinia store for channelIds logic
         let channelIds = []
 
-        console.log('🔧 useTsAnnotation: Processing channelIds...', {
-            hasChannelIds: annotationData.channelIds && Array.isArray(annotationData.channelIds),
-            allChannels: annotationData.allChannels,
-            providedChannelIds: annotationData.channelIds,
-            availableChannels: viewerChannels.value.length // Now from Pinia
-        })
-
         if (annotationData.allChannels) {
             // When allChannels is true, include all channels (even if they are currently not visible)
-            console.log('🔧 useTsAnnotation: allChannels=true, adding all visible channels')
             const allChannels = viewerStore.activeViewer.value.channels
             for (let ch = 0; ch < allChannels.length; ch++) {
-                const curChannel = allChannels[ch] // Now from Pinia
+                const curChannel = allChannels[ch]
                 const id = curChannel.content.id
                 channelIds.push(id)
-                console.log('🔧 useTsAnnotation: Added channel ID:', id)
             }
         } else if (annotationData.channelIds && Array.isArray(annotationData.channelIds) && annotationData.channelIds.length > 0) {
             // Use provided channelIds if they exist and are not empty
             channelIds = annotationData.channelIds
-            console.log('🔧 useTsAnnotation: Using provided channelIds:', channelIds)
         } else {
             // Fallback: compute from selected channels
-            console.log('🔧 useTsAnnotation: Computing from selected channels')
             for (let ch = 0; ch < viewerChannels.value.length; ch++) {
-                const curChannelView = viewerChannels.value[ch] // Now from Pinia
+                const curChannelView = viewerChannels.value[ch]
                 if (curChannelView.selected && curChannelView.visible) {
                     const id = getChannelId(curChannelView)
                     channelIds.push(id)
-                    console.log('🔧 useTsAnnotation: Added selected channel ID:', id)
                 }
             }
         }
-
-        console.log('🔧 useTsAnnotation: Final channelIds:', channelIds)
 
         // Create API payload that matches server expectations
         const apiPayload = {
@@ -111,13 +100,9 @@ export function useTsAnnotation() {
             channelIds: channelIds
         }
 
-        console.log('🔧 useTsAnnotation: API payload:', apiPayload)
-
         // Use correct property for timeseries ID
         const timeseriesId = viewerStore.activeViewer.value.content.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${layer_id}/annotations`
-
-        console.log('🔧 useTsAnnotation: API URL:', url)
 
         try {
             // Use useToken() directly
@@ -138,7 +123,6 @@ export function useTsAnnotation() {
             }
 
             const result = await response.json()
-            console.log('🔧 useTsAnnotation: API success:', result)
 
             const newAnn = {
                 name: '',
@@ -189,8 +173,6 @@ export function useTsAnnotation() {
         // Use passed annotation or fall back to store
         const annotationData = annotation || activeAnnotation.value
 
-        console.log('🔧 useTsAnnotation: updateAnnotation called with:', annotationData)
-
         if (!annotationData.id) {
             throw new TypeError("Trying to update an annotation that doesn't exist on server", annotationData.id)
         }
@@ -217,12 +199,8 @@ export function useTsAnnotation() {
             channelIds: annotationData.channelIds || []
         }
 
-        console.log('🔧 useTsAnnotation: Update API payload:', apiPayload)
-
         const timeseriesId = viewerStore.activeViewer.value.content.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${annotationData.layer_id}/annotations/${annotationData.id}`
-
-        console.log('🔧 useTsAnnotation: Update API URL:', url)
 
         try {
             const token = await useToken()
@@ -242,7 +220,6 @@ export function useTsAnnotation() {
             }
 
             const result = await response.json()
-            console.log('🔧 useTsAnnotation: Update API success:', result)
 
             // Update the annotation with server response
             const updatedAnnotation = {
@@ -281,8 +258,6 @@ export function useTsAnnotation() {
         const timeseriesId = viewerStore.activeViewer.value.content.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${annLayerId}/annotations/${annotation.id}`
 
-        console.log('🔧 useTsAnnotation: Delete API URL:', url)
-
         try {
             const token = await useToken()
 
@@ -297,8 +272,6 @@ export function useTsAnnotation() {
                 const errorText = await response.text()
                 throw new Error(`HTTP ${response.status}: ${errorText}`)
             }
-
-            console.log('🔧 useTsAnnotation: Delete API success')
 
             // Use Pinia store method
             viewerStore.deleteAnnotation(annotation)

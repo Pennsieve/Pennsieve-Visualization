@@ -99,19 +99,15 @@ export default {
         })
       } // logout
       else if (status === 401) {
-
-        console.log(err)
         // return this.handleLogout()
       } // unauthorized
       else if (status === 403) {
-        console.log(err)
         if (this.$router) {
           return this.$router.replace({name: 'datasets-list'})
         }
       }
       else {
         // emit ajaxError
-        console.log(err)
         // EventBus.$emit('ajaxError', err) TODO
       }
     }

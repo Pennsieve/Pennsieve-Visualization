@@ -23,9 +23,9 @@
 </template>
 
 <script setup>
-import { computed, watch, onMounted, onUnmounted, reactive, ref,nextTick } from 'vue'
+import { computed, watch, onMounted, onUnmounted, reactive, ref, nextTick, inject } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useViewerStore } from '../../stores/tsviewer'
+import { createViewerStore } from '../../stores/tsviewer'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useCanvasRenderer } from '@/composables/useCanvasRenderer'
 import { useTimeSeriesData } from '@/composables/useTimeSeriesData'
@@ -52,8 +52,9 @@ const emit = defineEmits(['channelsInitialized', 'setGlobalZoom'])
 const activeViewer = computed( () => props.activeViewer || {})
 const baseChannels = computed(() => activeViewer.value?.channels || [])
 
-// Pinia Store
-const viewerStore = useViewerStore()
+// Store - inject from parent TSViewer component
+// Falls back to default store for backwards compatibility
+const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
 const {
   viewerChannels,
   viewerMontageScheme,
@@ -192,7 +193,6 @@ const renderDataInternal = () => {
 
   try {
     if (!channelsReady.value) {
-      console.log('⏳ Render skipped - channels not ready')
       return
     }
 
@@ -319,7 +319,6 @@ const monitorPrefetchActivity = () => {
       // Clean up stuck requests
       stuckRequests.forEach(req => {
         requestedPages.value.delete(req.pageStart)
-        console.log('🧹 Removed stuck request for pageStart:', req.pageStart)
       })
       
       // Decrement stale counter to allow retries
@@ -407,7 +406,6 @@ const generateAndProcessRequests = async () => {
   // ✅ RACE CONDITION PROTECTION: Only one dump at a time
   if (shouldDumpBuffer && !isDumpingBuffer.value) {
     isDumpingBuffer.value = true
-    console.log('🚨 Dumping server buffer before new requests:', dumpReason)
 
     try {
       if (sendDumpBufferRequest()) {
@@ -424,7 +422,6 @@ const generateAndProcessRequests = async () => {
     }
   } else if (shouldDumpBuffer && isDumpingBuffer.value) {
     // Another dump is already in progress, skip this one
-    console.log('⏭️ Skipping duplicate dump request (already in progress)')
     return
   }
 
@@ -512,8 +509,6 @@ watch(() => props.duration, (newDuration, oldDuration) => {
 watch(() => viewerMontageScheme.value, (newScheme) => {
 
   if (websocket.value && websocket.value.readyState === 1) {
-    console.log('🔄 Montage changing to:', newScheme)
-
     // Clear all pending requests and data
     requestedPages.value.clear()
     clearRequests()
@@ -530,7 +525,6 @@ watch(() => viewerMontageScheme.value, (newScheme) => {
 
     // Create the proper payload using createMontagePayload
     const montagePayload = createMontagePayload(newScheme)
-    console.log('📡 Sending montage payload:', montagePayload)
 
     if (montagePayload) {
       send(montagePayload)
@@ -615,15 +609,6 @@ onEvent((eventData) => {
 })
 
 onChannelDetails((channelDetails) => {
-  console.log('📡 RECEIVED CHANNEL DETAILS:', {
-    channelCount: channelDetails.length,
-    channels: channelDetails.map(ch => ({
-      id:ch?.id,
-      name:ch?.name,
-      type:ch?.channelType
-    }))
-  })
-
   // Remove the extra baseChannels parameter - it's already available in the composable
   const virtualChannels = processChannelData(channelDetails)
 
@@ -674,8 +659,6 @@ const initPlotCanvas = async () => {
 
   if (activeViewer.value?.content?.id) {
     try {
-      console.log('🔄 Opening WebSocket connection for package:', activeViewer.value.content.id)
-
       // Make sure this waits for the connection to complete
       await openWebsocket(
         viewerStore.config.timeseriesDiscoverApi,
@@ -683,30 +666,15 @@ const initPlotCanvas = async () => {
         userToken,
       )
 
-      console.log('✅ WebSocket connection established')
-
       // Only start monitoring after successful connection
       monitorPrefetchActivity()
 
     } catch (error) {
-      console.error('❌ Failed to establish WebSocket connection:', error)
+      console.error('Failed to establish WebSocket connection:', error)
       // Handle connection failure gracefully
       return
     }
   }
-
-  console.log('🚀 TSPlotCanvas mounted with config:', {
-    activeViewerId: activeViewer.value?.content?.id,
-    initialMontage: viewerMontageScheme.value,
-    baseChannelCount: baseChannels.value?.length || 0,
-    viewport: {
-      start: props.start,
-      duration: props.duration,
-      width: props.cWidth,
-      height: props.cHeight,
-      rsPeriod: props.rsPeriod
-    }
-  })
 }
 // Lifecycle (from original mounted/unmounted logic)
 onMounted(async () => {

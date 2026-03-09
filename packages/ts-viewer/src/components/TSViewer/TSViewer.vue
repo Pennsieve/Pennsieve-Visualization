@@ -51,6 +51,7 @@
 
       <!--       Timeseries viewport-->
       <TimeseriesViewerCanvas
+        v-if="activeViewer?.content?.id"
         ref="viewerCanvas"
         :window_height="window_height"
         :window_width="window_width"
@@ -131,7 +132,8 @@ import {
   nextTick,
   onMounted,
   onBeforeUnmount,
-  defineAsyncComponent
+  defineAsyncComponent,
+  provide
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
@@ -139,7 +141,7 @@ import {
   isEmpty
 } from 'ramda'
 
-import { useViewerStore } from "../../stores/tsviewer"
+import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
 
 // Component imports (required for <script setup>)
@@ -186,19 +188,32 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  /**
+   * Unique identifier for this viewer instance.
+   * Required when running multiple TSViewer components on the same page.
+   * Each instance should have a unique ID to ensure isolated state.
+   */
+  instanceId: {
+    type: String,
+    default: 'default'
+  }
 })
 
-// Store setup
-const viewerStore = useViewerStore()
+// Store setup - create instance-specific store
+const viewerStore = createViewerStore(props.instanceId)
 const { viewerChannels, needsRerender } = storeToRefs(viewerStore)
 
-// TsAnnotation composable setup
+// Provide store and instanceId to child components
+provide('viewerStore', viewerStore)
+provide('viewerInstanceId', props.instanceId)
+
+// TsAnnotation composable setup - pass the store instance
 const {
   addAnnotation,
   updateAnnotation,
   removeAnnotation,
   getChannelId: getChannelIdFromAnnotation,
-} = useTsAnnotation()
+} = useTsAnnotation(viewerStore)
 
 // Template refs
 const ts_viewer = ref(null)
@@ -255,7 +270,6 @@ const nrVisChannels = computed(() => {
 
 // Methods that need to be defined early (used in watchers)
 const onResize = async () => {
-  console.log('onresize...')
   if (!ts_viewer.value) {
     return
   }
@@ -312,7 +326,6 @@ watch( () => activeViewer.value, async (newValue, oldValue ) => {
 // Watch for changes in number of visible channels
 watch(nrVisChannels, (newCount, oldCount) => {
   if (oldCount !== undefined && newCount !== oldCount) {
-    console.log(`Number of visible channels changed from ${oldCount} to ${newCount}`)
     // Add a small delay to ensure DOM has updated
     setTimeout(() => {
       onResize()
@@ -332,8 +345,6 @@ const openEditAnnotationDialog = (annotation) => {
 
 watch(needsRerender, (renderData) => {
   if (renderData) {
-    console.log(`TSViewer: Re-rendering due to: ${renderData.cause} (${renderData.timestamp})`)
-
     nextTick(() => {
       // If channels visibility changed, we need to recalculate layout
       if (renderData.cause === 'channel-visibility') {
@@ -361,16 +372,14 @@ const onUpdateAnnotation = (annotation) => {
 }
 
 const onCreateUpdateAnnotation = async (annotation) => {
-  console.log('📍 TSViewer: onCreateUpdateAnnotation received:', annotation)
-
   if (!annotation || Object.keys(annotation).length === 0) {
-    console.error('🚨 TSViewer: Received empty annotation!')
+    console.error('TSViewer: Received empty annotation!')
     return
   }
 
   // Validate required fields
   if (!annotation.layer_id) {
-    console.error('🚨 TSViewer: annotation.layer_id is missing!', annotation)
+    console.error('TSViewer: annotation.layer_id is missing!', annotation)
     return
   }
 
@@ -378,21 +387,14 @@ const onCreateUpdateAnnotation = async (annotation) => {
 
   try {
     if (annotation.id) {
-      // FIX: Pass annotation parameter to composable
-      console.log('📍 TSViewer: Updating annotation via composable')
-      await updateAnnotation(annotation)  // ✅ Pass the annotation!
+      await updateAnnotation(annotation)
       onAnnotationUpdated()
     } else {
-      // FIX: Pass annotation parameter to composable
-      console.log('📍 TSViewer: Creating annotation via composable')
-      await addAnnotation(annotation)     // ✅ Pass the annotation!
+      await addAnnotation(annotation)
       onAnnotationCreated()
     }
-
-    console.log('📍 TSViewer: Annotation operation completed successfully')
-
   } catch (error) {
-    console.error('📍 TSViewer: Error creating/updating annotation:', error)
+    console.error('TSViewer: Error creating/updating annotation:', error)
 
     // Re-open modal on error so user can retry
     annotationWindowOpen.value = true
@@ -411,13 +413,10 @@ const confirmDeleteAnnotation = (annotation) => {
 const deleteAnnotation = async (annotation) => {
   isTsAnnotationDeleteDialogVisible.value = false
   try {
-    // FIX: The composable now has better validation
     await removeAnnotation(annotation)
     onAnnotationDeleted()
-    console.log('📍 TSViewer: Annotation deleted successfully')
   } catch (error) {
-    console.error('📍 TSViewer: Error deleting annotation:', error)
-    // Show error to user
+    console.error('TSViewer: Error deleting annotation:', error)
   }
 }
 
@@ -426,10 +425,6 @@ const onAnnotationDeleted = () => {
 }
 
 const onAddAnnotation = (startTime, duration, allChannels, label, description, layer) => {
-  console.log('📍 TSViewer: onAddAnnotation called with:', {
-    startTime, duration, allChannels, label, description, layer
-  })
-
   // Validate inputs
   if (!layer || !layer.id) {
     console.error('Invalid layer provided to onAddAnnotation:', layer)
@@ -455,17 +450,11 @@ const onAddAnnotation = (startTime, duration, allChannels, label, description, l
     userId: null
   }
 
-  console.log('📍 TSViewer: Created annotation object:', annotation)
-
   // Set the annotation in the store
   viewerStore.setActiveAnnotation(annotation)
 
-  // Verify it was set
-  console.log('📍 TSViewer: Store now contains:', viewerStore.activeAnnotation)
-
   // Open the modal
   annotationWindowOpen.value = true
-  console.log('📍 TSViewer: Modal opened with annotation data')
 }
 
 const onAnnotationCreated = () => {
@@ -529,8 +518,6 @@ const onChannelsInitialized = () => {
 }
 
 const onPageBack = () => {
-  console.log('Page forward triggered from toolbar')
-
   // Calculate new start position (go back by current duration)
   const newStart = Math.max(
     start.value - (3/4) * duration.value,
@@ -546,15 +533,11 @@ const onPageBack = () => {
 }
 
 const onPageForward = () => {
-  console.log('Page forward triggered from toolbar')
-
   // Calculate new start position
   const newStart = Math.min(
     start.value + (3/4) * duration.value,
     ts_end.value - duration.value
   )
-
-  console.log(`Moving from ${start.value} to ${newStart}`)
 
   // Update start position
   updateStart(newStart)
@@ -645,7 +628,6 @@ const _computeLabelInfo = (item, globalZoomMult, rowscale) => {
 
 const initTimeRange = () => {
   const channels = activeViewer.value?.channels
-  console.log('🔄 initTimeRange called with channels:', channels?.length || 0)
 
   if (channels && channels.length > 0) {
     // Find Global start and end from channel data
@@ -662,20 +644,7 @@ const initTimeRange = () => {
     }
 
     // Set the initial viewport to the actual data start time
-    const oldStart = start.value
     start.value = ts_start.value
-
-    console.log('📅 Time range initialized:', {
-      ts_start: ts_start.value,
-      ts_end: ts_end.value,
-      oldStart: oldStart,
-      newStart: start.value,
-      duration: duration.value,
-      startDate: new Date(ts_start.value / 1000).toISOString(),
-      endDate: new Date(ts_end.value / 1000).toISOString()
-    })
-  } else {
-    console.warn('⚠️ initTimeRange: No channels found in activeViewer')
   }
 }
 
@@ -751,6 +720,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
+  // Clean up the store instance when the component is unmounted
+  clearViewerStore(props.instanceId)
 })
 
 // Expose methods that might be called from parent components

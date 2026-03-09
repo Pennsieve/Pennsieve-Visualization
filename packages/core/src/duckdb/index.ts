@@ -1,1 +1,1 @@
-export { useDuckDBStore } from './duckdbStore'
+export type { DuckDBStoreInterface } from './types'
