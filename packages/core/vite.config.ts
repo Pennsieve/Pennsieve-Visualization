@@ -34,6 +34,7 @@ export default defineConfig({
         "vue",
         "pinia",
         "plotly.js",
+        "plotly.js-dist",
         "@aws-amplify/auth",
         "@pennsieve-viz/tsviewer",
         "@pennsieve-viz/micro-ct",
