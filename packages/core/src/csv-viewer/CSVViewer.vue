@@ -1,4 +1,4 @@
-<!-- CSVViewer.vue - Simple CSV/Tabular data viewer with DuckDB-powered pagination -->
+<!-- CSVViewer.vue - Simple CSV/Tabular data viewer with client-side pagination -->
 <template>
   <div class="ps-viewer csv-viewer" :style="rootStyle">
     <!-- Loading State -->
@@ -15,19 +15,18 @@
     </div>
 
     <!-- Data View -->
-    <div v-else-if="isConnected && queryResults" class="csv-viewer-data">
+    <div v-else-if="rows.length > 0" class="csv-viewer-data">
       <!-- Info Bar -->
       <div class="ps-info-bar">
         <span class="ps-info-bar-label">
-          {{ paginatedResults.length }} of {{ totalRowsDisplay }} rows
+          {{ paginatedRows.length }} of {{ rows.length }} rows
         </span>
         <div class="ps-info-bar-controls">
           <el-pagination
             v-model:current-page="currentPage"
             :page-size="pageSize"
-            :total="totalRowsDisplay"
+            :total="rows.length"
             layout="prev, pager, next"
-            @current-change="handlePageChange"
             hide-on-single-page
           />
         </div>
@@ -38,14 +37,14 @@
         <table class="ps-table">
           <thead>
             <tr>
-              <th v-for="column in tableColumns" :key="column">
+              <th v-for="column in columns" :key="column">
                 {{ column }}
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, index) in paginatedResults" :key="index">
-              <td v-for="column in tableColumns" :key="column">
+            <tr v-for="(row, index) in paginatedRows" :key="index">
+              <td v-for="column in columns" :key="column">
                 {{ formatCellValue(row[column]) }}
               </td>
             </tr>
@@ -57,117 +56,103 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import { useDuckDBStore } from "../duckdb";
+import { ref, computed, onMounted, watch } from "vue";
 import { useViewerStyle, type ViewerStyleOverrides } from "../composables/useViewerStyle";
 
 const props = defineProps<{
   url: string
-  fileType?: string
   rowsPerPage?: number
   autoLoad?: boolean
-  fileId?: string | null
   customStyle?: ViewerStyleOverrides
 }>();
 
 const { rootStyle } = useViewerStyle(() => props.customStyle);
 
-const duckDBStore = useDuckDBStore();
-
 const isLoading = ref(false);
 const error = ref("");
-const connectionId = ref<string | null>(null);
-const tableName = ref("");
-const queryResults = ref<any[] | null>(null);
-const totalRows = ref<number | bigint>(0);
+const columns = ref<string[]>([]);
+const rows = ref<Record<string, string>[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(props.rowsPerPage ?? 25);
-const viewerId = `csv_viewer_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-const fileType = computed(() => props.fileType ?? "csv");
 
-const csvOptions = ref({
-  header: true,
-  delimiter: ",",
+const paginatedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return rows.value.slice(start, start + pageSize.value);
 });
 
-const isConnected = computed(() => {
-  return duckDBStore.isReady && connectionId.value && !isLoading.value && !error.value;
-});
+function parseCSV(text: string): { columns: string[]; rows: Record<string, string>[] } {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
+  if (lines.length === 0) return { columns: [], rows: [] };
 
-const totalRowsDisplay = computed(() => {
-  return typeof totalRows.value === "bigint"
-    ? Number(totalRows.value)
-    : totalRows.value;
-});
+  const parseLine = (line: string): string[] => {
+    const fields: string[] = [];
+    let current = "";
+    let inQuotes = false;
 
-const tableColumns = computed(() => {
-  if (!queryResults.value || !Array.isArray(queryResults.value) || queryResults.value.length === 0) {
-    return [];
-  }
-  return Object.keys(queryResults.value[0] || {});
-});
-
-const paginatedResults = computed(() => {
-  if (!queryResults.value || !Array.isArray(queryResults.value)) {
-    return [];
-  }
-  return queryResults.value;
-});
-
-const initialize = async () => {
-  try {
-    isLoading.value = true;
-    error.value = "";
-
-    if (!duckDBStore.isReady) {
-      await duckDBStore.initDuckDB();
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          fields.push(current.trim());
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
     }
+    fields.push(current.trim());
+    return fields;
+  };
 
-    const { connectionId: connId } = await duckDBStore.createConnection(viewerId);
-    connectionId.value = connId;
+  const headers = parseLine(lines[0]);
+  const parsed: Record<string, string>[] = [];
 
-    if ((props.autoLoad ?? true) && props.url) {
-      await loadCSVFile();
-    } else {
-      isLoading.value = false;
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseLine(lines[i]);
+    const row: Record<string, string> = {};
+    for (let j = 0; j < headers.length; j++) {
+      row[headers[j]] = values[j] ?? "";
     }
-  } catch (err: any) {
-    error.value = `Failed to initialize: ${err.message}`;
-    isLoading.value = false;
+    parsed.push(row);
   }
-};
+
+  return { columns: headers, rows: parsed };
+}
 
 const loadCSVFile = async () => {
   if (!props.url) {
     error.value = "No URL provided";
-    isLoading.value = false;
     return;
   }
 
   try {
-    const stableKey = props.fileId || props.url;
-    const existingFile = duckDBStore.getLoadedFile(stableKey);
-    if (existingFile && !existingFile.isLoading && !existingFile.error) {
-      tableName.value = existingFile.tableName;
-      await getTotalRowCount();
-      await loadPage(1);
-      isLoading.value = false;
-      return;
+    isLoading.value = true;
+    error.value = "";
+
+    const response = await fetch(props.url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
     }
 
-    const tableId = props.fileId ? `file_${props.fileId}` : `csv_data_${Date.now()}`;
+    const text = await response.text();
+    const parsed = parseCSV(text);
 
-    tableName.value = await duckDBStore.loadFile(
-      props.url,
-      fileType.value as "csv" | "parquet",
-      tableId,
-      csvOptions.value,
-      viewerId,
-      props.fileId ?? null
-    );
-
-    await getTotalRowCount();
-    await loadPage(1);
+    columns.value = parsed.columns;
+    rows.value = parsed.rows;
+    currentPage.value = 1;
   } catch (err: any) {
     error.value = `Failed to load file: ${err.message}`;
   } finally {
@@ -175,59 +160,22 @@ const loadCSVFile = async () => {
   }
 };
 
-const getTotalRowCount = async () => {
-  try {
-    const countQuery = `SELECT COUNT(*) as total_count FROM ${tableName.value}`;
-    const result = await duckDBStore.executeQuery(countQuery, connectionId.value!);
-    const count = result[0]?.total_count || 0;
-    totalRows.value = typeof count === "bigint" ? Number(count) : count;
-  } catch (err: any) {
-    totalRows.value = 0;
-    throw err;
-  }
-};
-
-const loadPage = async (page: number) => {
-  if (!tableName.value || !connectionId.value) return;
-
-  try {
-    const offset = (page - 1) * pageSize.value;
-    const query = `SELECT * FROM ${tableName.value} LIMIT ${pageSize.value} OFFSET ${offset}`;
-    queryResults.value = await duckDBStore.executeQuery(query, connectionId.value);
-    currentPage.value = page;
-  } catch (err: any) {
-    error.value = `Failed to load page: ${err.message}`;
-    throw err;
-  }
-};
-
-const handlePageChange = async (page: number) => {
-  await loadPage(page);
-};
-
 const formatCellValue = (value: any) => {
   if (value === null || value === undefined) return "NULL";
-  if (typeof value === "number") {
-    return Number.isInteger(value) ? value.toString() : value.toFixed(4);
-  }
   if (typeof value === "string" && value.length > 100) {
     return value.substring(0, 100) + "...";
   }
-  return value.toString();
+  return String(value);
 };
 
 const retryLoad = async () => {
-  error.value = "";
-  isLoading.value = true;
   await loadCSVFile();
 };
 
 watch(
   () => props.url,
   async (newUrl) => {
-    if (newUrl && connectionId.value) {
-      isLoading.value = true;
-      error.value = "";
+    if (newUrl) {
       currentPage.value = 1;
       await loadCSVFile();
     }
@@ -235,12 +183,8 @@ watch(
 );
 
 onMounted(async () => {
-  await initialize();
-});
-
-onUnmounted(async () => {
-  if (connectionId.value) {
-    await duckDBStore.closeConnection(connectionId.value);
+  if ((props.autoLoad ?? true) && props.url) {
+    await loadCSVFile();
   }
 });
 </script>
