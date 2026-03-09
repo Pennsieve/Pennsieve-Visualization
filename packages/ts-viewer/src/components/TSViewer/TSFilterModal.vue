@@ -1,6 +1,6 @@
 <template>
   <el-dialog class="timeseries-filter-modal" ref="filter-modal" title="Set Filter" :modelValue="visible"
-    @update:modelValue="visible = $event" @close='close'>
+    @update:modelValue="$emit('update:visible', $event)" @close='close'>
 
     <template #default>
       <div slot="body">
@@ -65,15 +65,17 @@
 <script>
 
 import IconSelection from "../icons/IconSelection.vue"
+import BfLibraryButton from "../Shared/bf-library-button/BFLibraryButton.vue";
 
 export default {
   name: 'TimeseriesFilterModal',
 
   components: {
-    'bf-library-button': () => import('@/components/shared/bf-library-button/BfLibraryButton.vue'),
+    BfLibraryButton,
     IconSelection
   },
 
+  emits: ['closeWindow', 'update:visible'],
   mixins: [
   ],
   watch: {

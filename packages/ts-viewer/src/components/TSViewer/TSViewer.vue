@@ -82,6 +82,7 @@
       :constants="constants"
       :duration="duration"
       :start="start"
+      v-model:globalZoomMult="globalZoomMult"
       @pageBack="onPageBack"
       @pageForward="onPageForward"
       @incrementZoom="onIncrementZoom"
@@ -143,6 +144,7 @@ import {
 
 import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
+import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
 
 // Component imports (required for <script setup>)
 const TimeseriesScrubber = defineAsyncComponent(() => import('@/components/TSViewer/TSScrubber.vue'))
@@ -206,6 +208,9 @@ const { viewerChannels, needsRerender } = storeToRefs(viewerStore)
 // Provide store and instanceId to child components
 provide('viewerStore', viewerStore)
 provide('viewerInstanceId', props.instanceId)
+
+// Global message handler for toast/error events
+useGlobalMessageHandler()
 
 // TsAnnotation composable setup - pass the store instance
 const {
@@ -337,10 +342,9 @@ watch(nrVisChannels, (newCount, oldCount) => {
 })
 
 const openEditAnnotationDialog = (annotation) => {
-  store.dispatch('viewerModule/setActiveAnnotation', annotation).then(() => {
-    viewerCanvas.value.renderAnnotationCanvas()
-    annotationWindowOpen.value = true
-  })
+  viewerStore.setActiveAnnotation(annotation)
+  viewerCanvas.value.renderAnnotationCanvas()
+  annotationWindowOpen.value = true
 }
 
 watch(needsRerender, (renderData) => {
@@ -662,6 +666,8 @@ const openFilterWindow = (payload) => {
   const channels = propOr([], 'channels', payload)
   const filter = propOr('', 'filter', payload)
   const filterWindowRef = filterWindow.value
+  if (!filterWindowRef) return
+
   filterWindowRef.onChannels = channels
 
   if (!isEmpty(filter)) {

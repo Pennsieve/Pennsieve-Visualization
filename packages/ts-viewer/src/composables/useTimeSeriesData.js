@@ -17,6 +17,7 @@ export const useTimeSeriesData = () => {
     const autoScale = ref(0)
     const globalGaps = ref(null)
     const currentRequestedSamplePeriod = ref(1)
+    const isSwitchingMontage = ref(false)
 
     // Configuration from original
     const pageSize = 15000000
@@ -166,34 +167,24 @@ export const useTimeSeriesData = () => {
 
     // Data callback (from original)
     const dataCallback = (obj) => {
+        // During montage transitions, silently discard stale data from previous config
+        if (isSwitchingMontage.value) {
+            return
+        }
+
         let curChData = null
         const serverResponseId = obj.data.chId || obj.data.source
         const serverResponseName = obj.data.label || obj.data.name
 
-        // ✅ ROBUST MATCHING: Find exact match first (serverId + label)
+        // ROBUST MATCHING: Find exact match first (serverId + label)
         curChData = chData.value.find(channel =>
             channel.serverId === serverResponseId &&
             channel.label === serverResponseName
         )
 
-        if (curChData) {
-            // console.log('✅ EXACT MATCH found:', curChData.id)
-        } else {
-            // ❌ REJECT serverId-only matches for safety
-            console.error('❌ NO EXACT MATCH - rejecting to prevent data corruption:', {
-                serverResponseId,
-                serverResponseName,
-                availableChannels: chData.value.map(ch => ({
-                    id: ch.id,
-                    serverId: ch.serverId,
-                    label: ch.label,
-                    matches: {
-                        serverId: ch.serverId === serverResponseId,
-                        label: ch.label === serverResponseName
-                    }
-                }))
-            })
-            return // 🚨 STOP here to prevent wrong data attribution
+        if (!curChData) {
+            // Stale response from a previous channel config — discard silently
+            return
         }
 
         // ✅ PROCESS THE DATA (existing logic)
@@ -361,6 +352,7 @@ export const useTimeSeriesData = () => {
         pageSize,
         prefetchPages,
         currentRequestedSamplePeriod,
+        isSwitchingMontage,
 
         // Methods
         initChannels,

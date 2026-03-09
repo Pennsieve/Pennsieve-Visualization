@@ -177,13 +177,8 @@ watch(() => viewerStore.viewerChannels, (newChannels, oldChannels) => {
 }, { deep: true })
 
 // Watch for changes in viewer annotations (only if not currently initializing)
-watch(() => viewerStore.viewerAnnotations, (newAnnotations, oldAnnotations) => {
-  if (newAnnotations && newAnnotations !== oldAnnotations && !isInitializing.value) {
-    nextTick(() => {
-      getAnnotations()
-    })
-  } else if (newAnnotations && newAnnotations.length > 0 && !oldAnnotations && props.activeViewer?.content.id) {
-    // Special case: annotation layers just became available and we have an active viewer
+watch(() => viewerStore.viewerAnnotations, (newAnnotations) => {
+  if (newAnnotations && !isInitializing.value) {
     nextTick(() => {
       getAnnotations()
     })

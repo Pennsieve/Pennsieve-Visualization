@@ -3,7 +3,6 @@
     class="simple"
     :modelValue="visible"
     @update:modelValue="visible = $event"
-    :show-close="false"
     @close="close"
     @closed="onClosed"
   >
@@ -16,19 +15,6 @@
           color="#C14D49"
         />
       <h2>Delete annotation?</h2>
-      <template v-if="deleteDiscussions">
-        <p>
-          {{ annotationDescription }} - {{ annotationDateTime}}
-        </p>
-        <hr />
-        <p>
-          Deleting this annotation will also remove any associated discussions and cannot be undone.
-        </p>
-        <p>
-          Are you sure you would like to remove this annotation?
-        </p>
-      </template>
-
       <div class="dialog-simple-buttons">
         <bf-library-button
           class="secondary"
@@ -41,7 +27,7 @@
           :processing="isProcessing"
           @click="removeAnnotation"
         >
-          {{ btnDeleteCopy }}
+          Delete
         </bf-library-button>
       </div>
     </dialog-body>
@@ -75,12 +61,7 @@ export default {
     },
     deleteAnnotation: {
       type: Object,
-      default: () => {
-        return {
-          annotation: {},
-          withDiscussions: false
-        }
-      }
+      default: () => ({})
     }
   },
 
@@ -90,36 +71,9 @@ export default {
     }
   },
 
-  computed: {
-    /**
-     * Compute the annotation's name
-     * @returns {String}
-     */
-    annotationDescription: function() {
-      return pathOr('', ['annotation', 'label'], this.deleteAnnotation)
-    },
-    annotationDateTime: function() {
-        const deleteAnnStart = pathOr('', ['annotation', 'start'], this.deleteAnnotation)
-        return this.getUTCDateString(deleteAnnStart) + ' ' + this.getUTCTimeString(deleteAnnStart);
-    },
-    deleteDiscussions: function() {
-      return propOr(false, 'withDiscussions', this.deleteAnnotation)
-    },
-    /**
-     * Compute copy for the delete button
-     * @returns {String}
-     */
-    btnDeleteCopy: function (){
-      return this.deleteDiscussions
-        ? `Yes, I'm sure`
-        : 'Delete'
-    },
-
-  },
-
   methods: {
     removeAnnotation: function() {
-      this.$emit('delete', this.deleteAnnotation.annotation)
+      this.$emit('delete', this.deleteAnnotation)
     },
     /**
      * Emit event to update the synced property
@@ -134,10 +88,7 @@ export default {
      */
     onClosed: function() {
       this.isProcessing = false
-      this.$emit('update:delete-annotation', {
-        annotation: {},
-        withDiscussions: false
-      })
+      this.$emit('update:delete-annotation', {})
     },
     getUTCDateString: function(d) {
       if(d > 0) {
@@ -164,6 +115,15 @@ export default {
 
 .mb-16 {
   color: $red_1
+}
+
+.dialog-simple-buttons {
+  display: flex;
+  margin-top: 16px;
+  justify-content: center;
+  .bf-library-button {
+    margin-left: 8px;
+  }
 }
 
 h2 {

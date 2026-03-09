@@ -104,7 +104,8 @@ const {
   segmIndexOf,
   updateCurrentRequestedSamplePeriod,
   currentRequestedSamplePeriod,
-  isDataCurrentForViewport
+  isDataCurrentForViewport,
+  isSwitchingMontage
 } = useTimeSeriesData()
 
 const {
@@ -508,27 +509,37 @@ watch(() => props.duration, (newDuration, oldDuration) => {
 
 watch(() => viewerMontageScheme.value, (newScheme) => {
 
-  if (websocket.value && websocket.value.readyState === 1) {
-    // Clear all pending requests and data
-    requestedPages.value.clear()
-    clearRequests()
-    invalidate()
+  if (!websocket.value || websocket.value.readyState !== 1) {
+    console.warn('Cannot switch montage — WebSocket not connected')
+    return
+  }
 
-    // Reset stale data tracking
-    staleDataCounter.value = 0
-    lastRequestedSamplePeriod.value = null
-    lastRequestStart.value = null
-    lastRequestDuration.value = null
+  // Flag that we're transitioning — silently discard stale in-flight responses
+  isSwitchingMontage.value = true
 
-    // Clear channels to force re-initialization
-    channelsReady.value = false
+  // Clear all pending requests and data
+  requestedPages.value.clear()
+  clearRequests()
+  invalidate()
 
-    // Create the proper payload using createMontagePayload
-    const montagePayload = createMontagePayload(newScheme)
+  // Reset stale data tracking
+  staleDataCounter.value = 0
+  lastRequestedSamplePeriod.value = null
+  lastRequestStart.value = null
+  lastRequestDuration.value = null
 
-    if (montagePayload) {
-      send(montagePayload)
-    }
+  // Clear channels to force re-initialization
+  channelsReady.value = false
+
+  // Create the proper payload using createMontagePayload
+  const montagePayload = createMontagePayload(newScheme)
+
+  if (montagePayload) {
+    send(montagePayload)
+  } else {
+    // Montage not found in workspace montages — abort transition
+    console.warn('Montage definition not found for:', newScheme)
+    isSwitchingMontage.value = false
   }
 })
 
@@ -609,15 +620,31 @@ onEvent((eventData) => {
 })
 
 onChannelDetails((channelDetails) => {
-  // Remove the extra baseChannels parameter - it's already available in the composable
-  const virtualChannels = processChannelData(channelDetails)
+  // Montage transition complete — new channels are here, accept data again
+  isSwitchingMontage.value = false
 
-  initChannels(virtualChannels, viewerStore, getChannelId)
-    .then(() => {
-      invalidate()
-      renderAll()
-      emit('channelsInitialized')
-    })
+  try {
+    const virtualChannels = processChannelData(channelDetails)
+
+    if (!virtualChannels || virtualChannels.length === 0) {
+      console.warn('No valid channels after processing channel details')
+      return
+    }
+
+    initChannels(virtualChannels, viewerStore, getChannelId)
+      .then(() => {
+        invalidate()
+        renderAll()
+        emit('channelsInitialized')
+      })
+      .catch((err) => {
+        console.error('Failed to initialize channels:', err)
+        viewerStore.setViewerErrors({ error: 'Failed to initialize channels after montage switch' })
+      })
+  } catch (err) {
+    console.error('Error processing channel details:', err)
+    viewerStore.setViewerErrors({ error: 'Error processing channel details' })
+  }
 })
 
 onError((error) => {
