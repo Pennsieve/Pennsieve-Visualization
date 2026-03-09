@@ -1,45 +1,30 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { useViewerStyle, type ViewerStyleOverrides } from "../composables/useViewerStyle";
 
-/**
- * TextViewer - Display text-based files with syntax highlighting
- * Supports: .txt, .csv, .json, .xml, .log, .yml, .yaml, etc.
- */
-const props = defineProps({
-  src: {
-    type: String,
-    default: null,
-  },
-  content: {
-    type: String,
-    default: null,
-  },
-  fileType: {
-    type: String,
-    default: "text",
-    validator: (value: string) =>
-      ["text", "json", "csv", "xml", "yaml", "yml", "log"].includes(value),
-  },
-  maxHeight: {
-    type: String,
-    default: "600px",
-  },
-  showLineNumbers: {
-    type: Boolean,
-    default: true,
-  },
-  wrapText: {
-    type: Boolean,
-    default: false,
-  },
-});
+const props = defineProps<{
+  src?: string | null
+  content?: string | null
+  fileType?: string
+  maxHeight?: string
+  showLineNumbers?: boolean
+  wrapText?: boolean
+  customStyle?: ViewerStyleOverrides
+}>();
+
+const { rootStyle } = useViewerStyle(() => props.customStyle);
 
 const text = ref("");
 const loading = ref(false);
 const error = ref<string | null>(null);
 
+const localFileType = computed(() => props.fileType ?? "text");
+const localMaxHeight = computed(() => props.maxHeight ?? "600px");
+const localShowLineNumbers = computed(() => props.showLineNumbers ?? true);
+const localWrapText = computed(() => props.wrapText ?? false);
+
 const formattedContent = computed(() => {
-  if (props.fileType === "json") {
+  if (localFileType.value === "json") {
     try {
       const parsed = JSON.parse(text.value);
       return JSON.stringify(parsed, null, 2);
@@ -64,12 +49,12 @@ const languageClass = computed(() => {
     log: "language-log",
     text: "language-text",
   };
-  return languageMap[props.fileType] || "language-text";
+  return languageMap[localFileType.value] || "language-text";
 });
 
 const fileStats = computed(() => {
   return {
-    type: props.fileType.toUpperCase(),
+    type: localFileType.value.toUpperCase(),
     lines: lines.value.length,
     characters: formattedContent.value.length,
   };
@@ -118,7 +103,7 @@ watch(
 </script>
 
 <template>
-  <div class="text-viewer">
+  <div class="ps-viewer text-viewer" :style="rootStyle">
     <div v-if="loading" class="text-viewer__loading">Loading content...</div>
 
     <div v-else-if="error" class="text-viewer__error">
@@ -131,12 +116,12 @@ watch(
       <div
         class="text-viewer__content"
         :style="{
-          maxHeight: maxHeight,
-          whiteSpace: wrapText ? 'pre-wrap' : 'pre',
+          maxHeight: localMaxHeight,
+          whiteSpace: localWrapText ? 'pre-wrap' : 'pre',
         }"
       >
         <div class="text-viewer__code-wrapper">
-          <div v-if="showLineNumbers" class="text-viewer__line-numbers">
+          <div v-if="localShowLineNumbers" class="text-viewer__line-numbers">
             <div
               v-for="(_, index) in lines"
               :key="index"
@@ -165,21 +150,23 @@ watch(
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use "../styles/viewer-theme" as vt;
+
 .text-viewer {
+  @include vt.viewer-base;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e1e4e8;
-  border-radius: 6px;
-  background-color: #ffffff;
-  font-family: system-ui, -apple-system, sans-serif;
+  border: 1px solid var(--ps-color-border);
+  border-radius: var(--ps-radius-lg);
+  background-color: var(--ps-color-bg);
   overflow: hidden;
 }
 
 .text-viewer__content {
   overflow: auto;
-  background-color: #f6f8fa;
-  padding: 16px 0;
+  background-color: var(--ps-color-bg-secondary);
+  padding: var(--ps-space-lg) 0;
 }
 
 .text-viewer__code-wrapper {
@@ -190,14 +177,13 @@ watch(
 .text-viewer__line-numbers {
   user-select: none;
   text-align: right;
-  padding-right: 16px;
-  padding-left: 16px;
-  color: #6e7781;
-  font-size: 12px;
+  padding-right: var(--ps-space-lg);
+  padding-left: var(--ps-space-lg);
+  color: var(--ps-color-text-secondary);
+  font-size: var(--ps-font-size-sm);
   line-height: 20px;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
-  border-right: 1px solid #d0d7de;
+  font-family: var(--ps-font-family-mono);
+  border-right: 1px solid var(--ps-color-border);
 }
 
 .text-viewer__line-number {
@@ -206,12 +192,11 @@ watch(
 
 .text-viewer__code-block {
   margin: 0;
-  padding: 0 16px;
-  font-size: 12px;
+  padding: 0 var(--ps-space-lg);
+  font-size: var(--ps-font-size-sm);
   line-height: 20px;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
-  color: #24292f;
+  font-family: var(--ps-font-family-mono);
+  color: var(--ps-color-text-dark);
   background-color: transparent;
   overflow: visible;
 }
@@ -220,50 +205,36 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
-  background-color: #ffffff;
-  border-top: 1px solid #e1e4e8;
-  font-size: 12px;
+  padding: var(--ps-space-sm) var(--ps-space-lg);
+  background-color: var(--ps-color-bg);
+  border-top: 1px solid var(--ps-color-border);
+  font-size: var(--ps-font-size-sm);
 }
 
 .text-viewer__file-info {
-  color: #6e7781;
+  color: var(--ps-color-text-secondary);
 }
 
 .text-viewer__copy-button {
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #24292f;
-  background-color: #f6f8fa;
-  border: 1px solid #d0d7de;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.text-viewer__copy-button:hover {
-  background-color: #eaeef2;
-}
-
-.text-viewer__copy-button:active {
-  background-color: #dde2e8;
+  @include vt.ps-btn-secondary;
+  padding: var(--ps-space-xs) var(--ps-space-md);
+  font-size: var(--ps-font-size-sm);
 }
 
 .text-viewer__loading,
 .text-viewer__error,
 .text-viewer__empty {
-  padding: 48px;
+  padding: var(--ps-space-2xl);
   text-align: center;
 }
 
 .text-viewer__loading,
 .text-viewer__empty {
-  color: #6e7781;
+  color: var(--ps-color-text-secondary);
 }
 
 .text-viewer__error {
-  color: #cf222e;
-  background-color: #ffebe9;
+  color: var(--ps-color-error-dark);
+  background-color: var(--ps-color-error-tint);
 }
 </style>

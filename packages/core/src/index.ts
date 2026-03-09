@@ -3,10 +3,14 @@ import { defineAsyncComponent } from 'vue'
 
 // Composables & utilities
 export { useGetToken } from './composables/useGetToken'
+export { useViewerStyle, type ViewerStyleOverrides } from './composables/useViewerStyle'
 export { default as EditIcon } from './icons/EditIcon.vue'
 
 // DuckDB interface (app provides the store via provide/inject)
 export type { DuckDBStoreInterface } from './duckdb'
+
+// Direct exports from component modules
+export * from './csv-viewer'
 
 // =============================================================================
 // Production-ready components
@@ -15,6 +19,11 @@ export * from './data-explorer'
 export * from './umap'
 export * from './markdown'
 export * from './text-viewer'
+
+// Lazy-loaded component exports for tree-shaking (internal components)
+export const CSVViewerLazy = defineAsyncComponent(
+  () => import('./csv-viewer').then(m => m.CSVViewer)
+)
 
 // Lazy-loaded versions for tree-shaking
 export const DataExplorerLazy = defineAsyncComponent(

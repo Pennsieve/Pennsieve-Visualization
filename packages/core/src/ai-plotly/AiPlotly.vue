@@ -1,3 +1,4 @@
+
 <script setup>
 import { ref, onMounted, watch } from "vue";
 import { ElMessage } from "element-plus";
@@ -908,6 +909,7 @@ onMounted(async () => {
 });
 </script>
 <template>
+
   <div class="ai-plot-widget">
     <!-- Header section -->
     <div class="widget-header">

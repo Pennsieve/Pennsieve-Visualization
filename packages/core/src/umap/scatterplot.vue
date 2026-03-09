@@ -626,11 +626,11 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .scatterplot-container {
   width: 100%;
   height: 100%;
-  background: #f0f0f0;
+  background: var(--ps-color-bg-secondary, #F7F7F7);
 }
 
 canvas {
@@ -644,10 +644,11 @@ canvas {
 #tooltip {
   position: absolute;
   background: rgba(0, 0, 0, .8);
-  color: #fff;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 14px;
+  color: var(--ps-color-text-inverse, #fff);
+  padding: var(--ps-space-sm, 8px) var(--ps-space-md, 12px);
+  border-radius: var(--ps-radius, 4px);
+  font-size: var(--ps-font-size-md, 14px);
+  font-family: var(--ps-font-family, inherit);
   pointer-events: none;
   opacity: 0;
   transition: opacity .2s;
@@ -660,8 +661,8 @@ canvas {
   bottom: 20px;
   right: 20px;
   background: rgba(255, 255, 255, .8);
-  padding: 10px;
-  border-radius: 5px;
-  font-family: monospace;
+  padding: var(--ps-space-md, 10px);
+  border-radius: var(--ps-radius, 5px);
+  font-family: var(--ps-font-family-mono, monospace);
 }
 </style>

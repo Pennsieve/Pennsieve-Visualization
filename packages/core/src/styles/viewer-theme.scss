@@ -1,0 +1,259 @@
+// Pennsieve Viewer Theme — CSS Custom Properties
+// These variables provide a consistent design system across all viewer components.
+// Consumers can override any variable via the `customStyle` prop on each viewer.
+//
+// Usage in components:
+//   color: var(--ps-color-text);
+//   font-family: var(--ps-font-family);
+
+@use "theme" as t;
+
+// Mixin that sets all default CSS custom properties.
+// Apply this on the root `.ps-viewer` element of each viewer.
+@mixin viewer-defaults {
+  // Typography
+  --ps-font-family: #{t.$system-font};
+  --ps-font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --ps-font-size-xs: 11px;
+  --ps-font-size-sm: 12px;
+  --ps-font-size: 13px;
+  --ps-font-size-md: 14px;
+  --ps-font-size-lg: 16px;
+
+  // Brand / primary
+  --ps-color-primary: #{t.$purple_3};
+  --ps-color-primary-light: #{t.$purple_2};
+  --ps-color-primary-tint: #{t.$purple_tint};
+
+  // Semantic
+  --ps-color-success: #{t.$green_1};
+  --ps-color-success-dark: #{t.$green_2};
+  --ps-color-error: #{t.$red_1};
+  --ps-color-error-dark: #{t.$red_2};
+  --ps-color-error-tint: #{t.$red_tint};
+  --ps-color-warning: #{t.$orange_1};
+  --ps-color-warning-tint: #{t.$orange_tint};
+
+  // Text
+  --ps-color-text: #{t.$gray_5};
+  --ps-color-text-secondary: #{t.$gray_4};
+  --ps-color-text-dark: #{t.$gray_6};
+  --ps-color-text-inverse: #{t.$white};
+
+  // Backgrounds
+  --ps-color-bg: #{t.$white};
+  --ps-color-bg-secondary: #{t.$gray_1};
+  --ps-color-bg-tertiary: #{t.$gray_0};
+  --ps-color-bg-hover: #{t.$gray_0};
+
+  // Borders
+  --ps-color-border: #{t.$gray_2};
+  --ps-color-border-light: #{t.$gray_1};
+  --ps-color-border-dark: #{t.$gray_3};
+
+  // Radii
+  --ps-radius: 4px;
+  --ps-radius-sm: 2px;
+  --ps-radius-lg: 6px;
+
+  // Spacing
+  --ps-space-xs: 4px;
+  --ps-space-sm: 8px;
+  --ps-space-md: 12px;
+  --ps-space-lg: 16px;
+  --ps-space-xl: 20px;
+  --ps-space-2xl: 24px;
+
+  // Table
+  --ps-table-header-bg: var(--ps-color-bg-secondary);
+  --ps-table-header-color: var(--ps-color-text-dark);
+  --ps-table-border: var(--ps-color-border);
+  --ps-table-row-hover: var(--ps-color-bg-hover);
+  --ps-table-row-alt: #{t.$gray_1};
+
+  // Buttons — primary
+  --ps-btn-primary-bg: var(--ps-color-primary);
+  --ps-btn-primary-color: var(--ps-color-text-inverse);
+  --ps-btn-primary-hover: var(--ps-color-primary-light);
+
+  // Buttons — secondary
+  --ps-btn-secondary-bg: var(--ps-color-bg-secondary);
+  --ps-btn-secondary-color: var(--ps-color-text-dark);
+  --ps-btn-secondary-border: var(--ps-color-border-dark);
+  --ps-btn-secondary-hover: var(--ps-color-border);
+
+  // Buttons — danger
+  --ps-btn-danger-bg: var(--ps-color-error);
+  --ps-btn-danger-color: var(--ps-color-text-inverse);
+  --ps-btn-danger-hover: var(--ps-color-error-dark);
+
+  // Inputs
+  --ps-input-bg: var(--ps-color-bg);
+  --ps-input-border: var(--ps-color-border);
+  --ps-input-focus-border: var(--ps-color-primary);
+
+  // Info bar (appears above data tables)
+  --ps-info-bar-bg: var(--ps-color-primary-tint);
+
+  // Loading spinner
+  --ps-spinner-track: var(--ps-color-border);
+  --ps-spinner-accent: var(--ps-color-primary);
+}
+
+// Base styles applied to every .ps-viewer root
+@mixin viewer-base {
+  @include viewer-defaults;
+  font-family: var(--ps-font-family);
+  font-size: var(--ps-font-size);
+  color: var(--ps-color-text);
+  line-height: 1.5;
+  box-sizing: border-box;
+
+  *, *::before, *::after {
+    box-sizing: inherit;
+  }
+}
+
+// Reusable component patterns
+
+@mixin ps-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--ps-space-xl) var(--ps-space-xl) var(--ps-space-2xl);
+  color: var(--ps-color-text-secondary);
+  font-size: var(--ps-font-size-md);
+}
+
+@mixin ps-spinner($size: 36px) {
+  width: $size;
+  height: $size;
+  border: 3px solid var(--ps-spinner-track);
+  border-top-color: var(--ps-spinner-accent);
+  border-radius: 50%;
+  animation: ps-spin 0.8s linear infinite;
+}
+
+@keyframes ps-spin {
+  to { transform: rotate(360deg); }
+}
+
+@mixin ps-error-panel {
+  background: var(--ps-color-error-tint);
+  border: 1px solid var(--ps-color-error);
+  border-radius: var(--ps-radius);
+  padding: var(--ps-space-lg);
+  margin: var(--ps-space-lg) 0;
+
+  h3 {
+    color: var(--ps-color-error-dark);
+    margin: 0 0 var(--ps-space-sm);
+    font-size: var(--ps-font-size-md);
+  }
+
+  p {
+    color: var(--ps-color-error-dark);
+    margin: 0 0 var(--ps-space-md);
+    font-size: var(--ps-font-size);
+  }
+}
+
+@mixin ps-btn-primary {
+  background: var(--ps-btn-primary-bg);
+  color: var(--ps-btn-primary-color);
+  border: none;
+  padding: var(--ps-space-sm) var(--ps-space-lg);
+  border-radius: var(--ps-radius);
+  cursor: pointer;
+  font-size: var(--ps-font-size);
+  font-family: var(--ps-font-family);
+  transition: background-color 0.15s;
+
+  &:hover:not(:disabled) { background: var(--ps-btn-primary-hover); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+@mixin ps-btn-secondary {
+  background: var(--ps-btn-secondary-bg);
+  color: var(--ps-btn-secondary-color);
+  border: 1px solid var(--ps-btn-secondary-border);
+  padding: var(--ps-space-sm) var(--ps-space-lg);
+  border-radius: var(--ps-radius);
+  cursor: pointer;
+  font-size: var(--ps-font-size);
+  font-family: var(--ps-font-family);
+  transition: background-color 0.15s;
+
+  &:hover:not(:disabled) { background: var(--ps-btn-secondary-hover); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+@mixin ps-btn-danger {
+  background: var(--ps-btn-danger-bg);
+  color: var(--ps-btn-danger-color);
+  border: none;
+  padding: var(--ps-space-sm) var(--ps-space-lg);
+  border-radius: var(--ps-radius);
+  cursor: pointer;
+  font-size: var(--ps-font-size);
+  font-family: var(--ps-font-family);
+  transition: background-color 0.15s;
+
+  &:hover:not(:disabled) { background: var(--ps-btn-danger-hover); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+@mixin ps-input {
+  width: 100%;
+  padding: var(--ps-space-sm) var(--ps-space-md);
+  border: 1px solid var(--ps-input-border);
+  border-radius: var(--ps-radius);
+  font-size: var(--ps-font-size-md);
+  font-family: var(--ps-font-family);
+  background: var(--ps-input-bg);
+  color: var(--ps-color-text);
+  transition: border-color 0.15s;
+
+  &:focus {
+    outline: none;
+    border-color: var(--ps-input-focus-border);
+  }
+}
+
+@mixin ps-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ps-font-size);
+
+  th, td {
+    border: 1px solid var(--ps-table-border);
+    padding: var(--ps-space-sm) var(--ps-space-md);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th:first-child, td:first-child { border-left: 0; }
+  th:last-child, td:last-child { border-right: 0; }
+
+  th {
+    background: var(--ps-table-header-bg);
+    color: var(--ps-table-header-color);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  tbody tr:hover { background: var(--ps-table-row-hover); }
+  tbody tr:nth-child(even) { background: var(--ps-table-row-alt); }
+}
+
+@mixin ps-info-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--ps-space-md) var(--ps-space-lg);
+  background: var(--ps-info-bar-bg);
+  font-size: var(--ps-font-size);
+  color: var(--ps-color-text);
+}

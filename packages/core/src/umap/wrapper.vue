@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container">
+  <div class="ps-viewer umap-container" :style="rootStyle">
     <WebGLScatterplot
       :data="store.pointData"
       :metaData="store.metaData"
@@ -43,6 +43,7 @@ const props = defineProps<{
   srcUrl?: string
   srcFileType?: 'csv' | 'parquet'
   srcFileId?: string
+
   /** Optional: accept pre-loaded data directly (skip URL loading) */
   data?: Array<Record<string, any>>
 }>()
@@ -571,11 +572,13 @@ onBeforeUnmount(async () => {
 })
 </script>
 
-<style scoped>
-.app-container {
+<style scoped lang="scss">
+@use "../styles/viewer-theme" as vt;
+
+.umap-container {
+  @include vt.viewer-base;
   height: 100%;
   position: relative;
-  height: 100%;
   overflow: hidden;
 }
 </style>
