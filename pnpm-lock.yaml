@@ -69,8 +69,8 @@ importers:
         specifier: ^7.9.0
         version: 7.9.0
       dompurify:
-        specifier: ^3.2.6
-        version: 3.3.1
+        specifier: ^3.3.2
+        version: 3.3.2
       element-plus:
         specifier: ^2.3.0
         version: 2.10.2(vue@3.5.26(typescript@5.9.3))
@@ -2795,8 +2795,9 @@ packages:
     resolution: {integrity: sha512-raigMkn7CJNNo6Ihro1fzG7wr3fHuYVytzquZKX5n0yizGsTcYgzdIUwj1X9pK0VvjeihV+XiclP+DjwbsSKug==}
     deprecated: Use your platform's native DOMException instead
 
-  dompurify@3.3.1:
-    resolution: {integrity: sha512-qkdCKzLNtrgPFP1Vo+98FRzJnBRGe4ffyCea9IwHB1fyxPOeNTHpLKYGd4Uk9xvNoH0ZoOjwZxNptyMwqrId1Q==}
+  dompurify@3.3.2:
+    resolution: {integrity: sha512-6obghkliLdmKa56xdbLOpUZ43pAR6xFy1uOrxBaIDjT+yaRuuybLjGS9eVBoSR/UPU5fq3OXClEHLJNGvbxKpQ==}
+    engines: {node: '>=20'}
 
   draco3d@1.5.7:
     resolution: {integrity: sha512-m6WCKt/erDXcw+70IJXnG7M3awwQPAsZvJGX5zY7beBqpELw6RDGkYVU0W43AFxye4pDZ5i2Lbyc/NNGqwjUVQ==}
@@ -2830,8 +2831,8 @@ packages:
   ecc-jsbn@0.1.2:
     resolution: {integrity: sha512-eh9O+hwRHNbG4BLTjEl3nw044CkGm5X6LoaCf7LPp7UU8Qrt47JYNi6nPX8xjW97TKGKm1ouctg0QSpZe9qrnw==}
 
-  editorconfig@1.0.4:
-    resolution: {integrity: sha512-L9Qe08KWTlqYMVvMcTIvMAdl1cDUubzRNYL+WfA4bLDMHe4nemKkpmYzkznE1FwLKu0EEmy6obgQKzMJrg4x9Q==}
+  editorconfig@1.0.7:
+    resolution: {integrity: sha512-e0GOtq/aTQhVdNyDU9e02+wz9oDDM+SIOQxWME2QRjzRX5yyLAuHDE+0aE8vHb9XRC8XD37eO2u57+F09JqFhw==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -3437,8 +3438,8 @@ packages:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
     engines: {node: '>= 4'}
 
-  ikonate@https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89:
-    resolution: {tarball: https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89}
+  ikonate@git+https://git@github.com:mikolajdobrucki/ikonate.git#a86b4107c6ec717e7877f880a930d1ccf0b59d89:
+    resolution: {commit: a86b4107c6ec717e7877f880a930d1ccf0b59d89, repo: git@github.com:mikolajdobrucki/ikonate.git, type: git}
     version: 1.1.1
 
   image-size@0.7.5:
@@ -3865,12 +3866,12 @@ packages:
   minimatch@3.1.2:
     resolution: {integrity: sha512-J7p63hRiAjw1NDEww1W7i37+ByIrOWO5XQQAzZ3VOcL0PNybwpfmV/N05zFAzwQ9USyEcX6t3UO+K5aqBQOIHw==}
 
-  minimatch@9.0.1:
-    resolution: {integrity: sha512-0jWhJpD/MdhPXwPuiRkCbfYfSKp2qnn2eOc279qI7f+osl/l+prKSrvhg157zSYvx/1nmgn2NqdT6k2Z7zSH9w==}
-    engines: {node: '>=16 || 14 >=14.17'}
-
   minimatch@9.0.5:
     resolution: {integrity: sha512-G6T0ZX48xgozx7587koeX9Ys2NYy6Gmv//P89sEte9V9whIapMNF4idKxnW2QtCcLiTWlb/wfCabAtAFWhhBow==}
+    engines: {node: '>=16 || 14 >=14.17'}
+
+  minimatch@9.0.9:
+    resolution: {integrity: sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg==}
     engines: {node: '>=16 || 14 >=14.17'}
 
   minimist@1.2.8:
@@ -4563,8 +4564,8 @@ packages:
   sax@1.4.3:
     resolution: {integrity: sha512-yqYn1JhPczigF94DMS+shiDMjDowYO6y9+wB/4WgO0Y19jWYk0lQ4tuG5KI7kj4FTp1wxPj5IFfcrz/s1c3jjQ==}
 
-  sax@1.4.4:
-    resolution: {integrity: sha512-1n3r/tGXO6b6VXMdFT54SHzT9ytu9yr7TaELowdYpMqY/Ao7EnlQGmAQ1+RatX7Tkkdm6hONI2owqNx2aZj5Sw==}
+  sax@1.5.0:
+    resolution: {integrity: sha512-21IYA3Q5cQf089Z6tgaUTr7lDAyzoTPx5HRtbhsME8Udispad8dC/+sziTNugOEx54ilvatQ9YCzl4KQLPcRHA==}
     engines: {node: '>=11.0.0'}
 
   schema-utils@4.3.3:
@@ -4718,8 +4719,8 @@ packages:
     resolution: {integrity: sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==}
     engines: {node: '>=8'}
 
-  strip-ansi@7.1.2:
-    resolution: {integrity: sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==}
+  strip-ansi@7.2.0:
+    resolution: {integrity: sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==}
     engines: {node: '>=12'}
 
   strip-bom@3.0.0:
@@ -6279,7 +6280,7 @@ snapshots:
     dependencies:
       string-width: 5.1.2
       string-width-cjs: string-width@4.2.3
-      strip-ansi: 7.1.2
+      strip-ansi: 7.2.0
       strip-ansi-cjs: strip-ansi@6.0.1
       wrap-ansi: 8.1.0
       wrap-ansi-cjs: wrap-ansi@7.0.0
@@ -7492,7 +7493,7 @@ snapshots:
 
   '@types/dompurify@3.2.0':
     dependencies:
-      dompurify: 3.3.1
+      dompurify: 3.3.2
 
   '@types/eslint-scope@3.7.7':
     dependencies:
@@ -8644,7 +8645,7 @@ snapshots:
     dependencies:
       webidl-conversions: 4.0.2
 
-  dompurify@3.3.1:
+  dompurify@3.3.2:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -8683,11 +8684,11 @@ snapshots:
       jsbn: 0.1.1
       safer-buffer: 2.1.2
 
-  editorconfig@1.0.4:
+  editorconfig@1.0.7:
     dependencies:
       '@one-ini/wasm': 0.1.1
       commander: 10.0.1
-      minimatch: 9.0.1
+      minimatch: 9.0.9
       semver: 7.7.4
 
   ee-first@1.1.1: {}
@@ -9260,7 +9261,7 @@ snapshots:
     dependencies:
       foreground-child: 3.3.1
       jackspeak: 3.4.3
-      minimatch: 9.0.5
+      minimatch: 9.0.9
       minipass: 7.1.3
       package-json-from-dist: 1.0.1
       path-scurry: 1.11.1
@@ -9453,7 +9454,7 @@ snapshots:
 
   ignore@5.3.2: {}
 
-  ikonate@https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89:
+  ikonate@git+https://git@github.com:mikolajdobrucki/ikonate.git#a86b4107c6ec717e7877f880a930d1ccf0b59d89:
     dependencies:
       jsdom: 11.10.0
       pretty: 2.0.0
@@ -9578,7 +9579,7 @@ snapshots:
   js-beautify@1.15.4:
     dependencies:
       config-chain: 1.1.13
-      editorconfig: 1.0.4
+      editorconfig: 1.0.7
       glob: 10.5.0
       js-cookie: 3.0.5
       nopt: 7.2.1
@@ -9616,7 +9617,7 @@ snapshots:
       pn: 1.1.0
       request: 2.88.2
       request-promise-native: 1.0.9(request@2.88.2)
-      sax: 1.4.4
+      sax: 1.5.0
       symbol-tree: 3.2.4
       tough-cookie: 2.5.0
       w3c-hr-time: 1.0.2
@@ -9876,11 +9877,11 @@ snapshots:
     dependencies:
       brace-expansion: 1.1.12
 
-  minimatch@9.0.1:
+  minimatch@9.0.5:
     dependencies:
       brace-expansion: 2.0.2
 
-  minimatch@9.0.5:
+  minimatch@9.0.9:
     dependencies:
       brace-expansion: 2.0.2
 
@@ -9967,7 +9968,7 @@ snapshots:
       core-js: 3.47.0
       crc-32: 1.2.2
       gl-matrix: 3.1.0
-      ikonate: https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89
+      ikonate: git+https://git@github.com:mikolajdobrucki/ikonate.git#a86b4107c6ec717e7877f880a930d1ccf0b59d89
       lodash-es: 4.17.22
       msgpackr: 1.11.8
       nifti-reader-js: 0.6.9
@@ -10678,7 +10679,7 @@ snapshots:
 
   sax@1.4.3: {}
 
-  sax@1.4.4: {}
+  sax@1.5.0: {}
 
   schema-utils@4.3.3:
     dependencies:
@@ -10838,7 +10839,7 @@ snapshots:
     dependencies:
       eastasianwidth: 0.2.0
       emoji-regex: 9.2.2
-      strip-ansi: 7.1.2
+      strip-ansi: 7.2.0
 
   string_decoder@0.10.31: {}
 
@@ -10850,7 +10851,7 @@ snapshots:
     dependencies:
       ansi-regex: 5.0.1
 
-  strip-ansi@7.1.2:
+  strip-ansi@7.2.0:
     dependencies:
       ansi-regex: 6.2.2
 
@@ -11324,7 +11325,7 @@ snapshots:
     dependencies:
       ansi-styles: 6.2.3
       string-width: 5.1.2
-      strip-ansi: 7.1.2
+      strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
 
