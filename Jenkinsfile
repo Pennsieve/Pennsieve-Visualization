@@ -1,7 +1,5 @@
 #!/usr/bin/env groovy
 
-// loaded by root Jenkinsfile
-
 ansiColor('xterm') {
   node('executor') {
     checkout scm
@@ -28,9 +26,10 @@ ansiColor('xterm') {
 
     // ── Build ──────────────────────────────────────────────────────────
     stage('Install') {
-      sh """
-        npm install -g pnpm
-        pnpm install
+      sh """#!/bin/bash -ex
+            . $HOME/.nvm/nvm.sh ; nvm use 18.17.1
+            npm install -g pnpm
+            pnpm install
       """
     }
 
