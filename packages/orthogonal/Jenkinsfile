@@ -1,5 +1,7 @@
 #!/usr/bin/env groovy
 
+// loaded by root Jenkinsfile
+
 ansiColor('xterm') {
   node('executor') {
     checkout scm
