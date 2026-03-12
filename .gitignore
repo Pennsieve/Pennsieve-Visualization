@@ -4,3 +4,4 @@ dist-embed
 src/local
 public
 .env
+.idea
