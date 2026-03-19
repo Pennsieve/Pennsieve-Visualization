@@ -211,9 +211,9 @@ const apiUrl = ref(
   "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
 );
 
-// CSV sample URL (update for real CSV data)
+// CSV sample URL (update for real CSV data, add to public folder)
 const csvUrl = ref(
-  "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
+  "/gene-locations.csv"
 );
 
 // OrthogonalViewer (Neuroglancer) — runs in iframe for full isolation
