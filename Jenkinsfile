@@ -2,6 +2,7 @@
 
 ansiColor('xterm') {
   node('executor') {
+    checkout scm
     load 'packages/orthogonal/Jenkinsfile'
   }
 }
