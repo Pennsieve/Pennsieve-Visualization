@@ -98,6 +98,8 @@ pnpm --filter @pennsieve-viz/orthogonal dev:embed
 pnpm dev
 ```
 
+The viewer will automatically be deployed to non-prod by Jenkins when a PR is merged into main. Prod deployments are handled manually by running a service-deploy job in Jenkins.
+
 ## Build
 
 ```bash
