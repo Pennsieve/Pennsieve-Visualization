@@ -46,8 +46,7 @@ ansiColor('xterm') {
 
         env.COMMIT_HASH = params.COMMIT_HASH?.trim() ?: ""
 
-        def BUCKET_NAME = "pennsieve-${envName}-${serviceName}-use1"
-
+        def BUCKET_NAME = "pennsieve-${env.ENVIRONMENT}-${env.SERVICE}-use1"
 
 
         // Get deployment details
@@ -100,7 +99,7 @@ ansiColor('xterm') {
           dir('infrastructure') {
             checkout([
                     $class                           : 'GitSCM',
-                    branches                         : [[name: '*/main']],
+                    branches                         : [[name: '*/868hq9wfx-non-prod-orthogonal-viewer']],
                     doGenerateSubmoduleConfigurations: false,
                     extensions                       : [],
                     submoduleCfg                     : [],
@@ -130,7 +129,6 @@ ansiColor('xterm') {
           echo ${env.BUCKET_NAME}
         """
         }
-
 
 
         if (env.ENVIRONMENT == "prod") {
