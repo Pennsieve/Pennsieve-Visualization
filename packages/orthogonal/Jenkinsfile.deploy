@@ -158,7 +158,7 @@ ansiColor('xterm') {
           slackSend(
                   channel: '#jenkins',
                   color: '#071540',
-                  message: "*Release Deployed*: <${env.BUILD_URL}|${env.SERVICE}>\n\t\t*Account:* ${env.ACCOUNT}\n\t\t*Region:* ${env.REGION}\n\t\t*VPC:* ${env.VPC}\n\t\t*Environment:* ${env.ENVIRONMENT}\n\t\t*Deployed Commit:* <https://github.com/Pennsieve/Pennsieve-Visualization/commit/${env.COMMIT_HASH}|${env.COMMIT_HASH}>"
+                  message: "*Orthogonal Viewer Deployed*: <${env.BUILD_URL}|${env.SERVICE}>\n\t\t*Account:* ${env.ACCOUNT}\n\t\t*Region:* ${env.REGION}\n\t\t*VPC:* ${env.VPC}\n\t\t*Environment:* ${env.ENVIRONMENT}\n\t\t*Deployed Commit:* <https://github.com/Pennsieve/Pennsieve-Visualization/commit/${env.COMMIT_HASH}|${env.COMMIT_HASH}>"
           )
         }
       }
