@@ -46,7 +46,7 @@ ansiColor('xterm') {
 
         env.COMMIT_HASH = params.COMMIT_HASH?.trim() ?: ""
 
-        def BUCKET_NAME = "pennsieve-${env.ENVIRONMENT}-${env.SERVICE}-use1"
+        def bucketName = "pennsieve-${env.ENVIRONMENT}-${env.SERVICE}-use1"
 
 
         // Get deployment details
@@ -99,7 +99,7 @@ ansiColor('xterm') {
           dir('infrastructure') {
             checkout([
                     $class                           : 'GitSCM',
-                    branches                         : [[name: '*/868hq9wfx-non-prod-orthogonal-viewer']],
+                    branches                         : [[name: '*/main']],
                     doGenerateSubmoduleConfigurations: false,
                     extensions                       : [],
                     submoduleCfg                     : [],
@@ -125,9 +125,32 @@ ansiColor('xterm') {
           unstash 'dist-embed'
 
           sh """
-          ls -la 
-          echo ${env.BUCKET_NAME}
-        """
+        aws s3 sync packages/orthogonal/dist-embed/ s3://${bucketName}/ \
+          --delete \
+          --cache-control "no-cache" \
+          --exclude "assets/*"
+
+        aws s3 sync packages/orthogonal/dist-embed/assets/ s3://${bucketName}/assets/ \
+          --cache-control "max-age=31536000, immutable"
+      """
+        }
+
+        stage('Invalidate CloudFront') {
+          def distributionId = sh(
+                  script: "aws cloudfront list-distributions --query \"DistributionList.Items[?contains(Origins.Items[0].DomainName, '${bucketName}.s3.amazonaws.com')].Id\" --output text",
+                  returnStdout: true
+          ).trim()
+
+          def response = sh(
+                  returnStdout: true,
+                  script: "aws cloudfront create-invalidation --distribution-id ${distributionId} --paths '/embed.html'"
+          ).trim()
+
+          println "${response}"
+
+          def responseMap = new groovy.json.JsonSlurperClassic().parseText(response)
+          def invalidation = responseMap.Invalidation
+          sh "aws cloudfront wait invalidation-completed --distribution-id ${distributionId} --id ${invalidation.Id}"
         }
 
 

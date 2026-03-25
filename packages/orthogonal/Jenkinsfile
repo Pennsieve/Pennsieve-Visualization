@@ -12,32 +12,36 @@ def changes = sh(
         returnStdout: true
 ).trim()
 
+def commitHash = sh(
+        script: "git rev-parse --short HEAD",
+        returnStdout: true
+).trim()
+
 if (!changes.contains('packages/orthogonal/')) {
   echo "No changes under packages/orthogonal/. Skipping build."
   currentBuild.result = 'NOT_BUILT'
   currentBuild.description = 'No orthogonal changes'
   return
+} else if (!isMain) {
+  echo "Not a push to main. Skipping non-prod deploy of packages/orthogonal/ viewer."
+  currentBuild.result = 'NOT_BUILT'
+  currentBuild.description = 'No non-prod deploy'
+  return
 }
 
-def commitHash = sh(
-        script: "git rev-parse --short HEAD",
-        returnStdout: true
-).trim()
 
 currentBuild.description = "commit: ${commitHash}"
 
 // ── Build ──────────────────────────────────────────────────────────
 try {
   stage('Non-prod Deploy') {
-    //if (isMain) {
     withEnv(["COMMIT_HASH=${commitHash}"]) {
       build job: "service-deploy/pennsieve-non-prod/us-east-1/dev-vpc-use1/dev/${serviceName}",
               parameters: [
                       string(name: 'COMMIT_HASH', value: commitHash),
-                      string(name: 'TERRAFORM_ACTION', value: 'plan')
+                      string(name: 'TERRAFORM_ACTION', value: 'apply')
               ]
     }
-    //}
   }
 } catch (e) {
   slackSend(color: '#b20000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL}) by ${authorName}")
