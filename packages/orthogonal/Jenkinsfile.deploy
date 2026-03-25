@@ -46,7 +46,7 @@ ansiColor('xterm') {
 
         env.COMMIT_HASH = params.COMMIT_HASH?.trim() ?: ""
 
-        def bucketName = "pennsieve-${env.ENVIRONMENT}-${env.SERVICE}-use1"
+        env.BUCKET_NAME = "pennsieve-${env.ENVIRONMENT}-${env.SERVICE}-use1"
 
 
         // Get deployment details
@@ -125,19 +125,19 @@ ansiColor('xterm') {
           unstash 'dist-embed'
 
           sh """
-        aws s3 sync packages/orthogonal/dist-embed/ s3://${bucketName}/ \
+        aws s3 sync packages/orthogonal/dist-embed/ s3://${env.BUCKET_NAME}/ \
           --delete \
           --cache-control "no-cache" \
           --exclude "assets/*"
 
-        aws s3 sync packages/orthogonal/dist-embed/assets/ s3://${bucketName}/assets/ \
+        aws s3 sync packages/orthogonal/dist-embed/assets/ s3://${env.BUCKET_NAME}/assets/ \
           --cache-control "max-age=31536000, immutable"
       """
         }
 
         stage('Invalidate CloudFront') {
           def distributionId = sh(
-                  script: "aws cloudfront list-distributions --query \"DistributionList.Items[?contains(Origins.Items[0].DomainName, '${bucketName}.s3.amazonaws.com')].Id\" --output text",
+                  script: "aws cloudfront list-distributions --query \"DistributionList.Items[?contains(Origins.Items[0].DomainName, '${env.BUCKET_NAME}.s3.amazonaws.com')].Id\" --output text",
                   returnStdout: true
           ).trim()
 
