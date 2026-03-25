@@ -24,15 +24,14 @@ def commitHash = sh(
 currentBuild.description = "commit: ${commitHash}"
 
 // ── Build ──────────────────────────────────────────────────────────
-stage('Install') {
+stage('Install and Build') {
   sh """#!/bin/bash -e
             . $HOME/.nvm/nvm.sh ; nvm use 18.17.1
-            which pnpm
+            DEBUG="corepack" corepack enable pnpm
+            DEBUG="corepack" pnpm install --frozen-lockfile
+            DEBUG="corepack" pnpm build:orthogonal-embed
       """
-}
-
-stage('Build Embed') {
-  sh "pnpm build:orthogonal-embed"
   stash includes: "packages/orthogonal/dist-embed/**", name: 'dist-embed'
 }
+
 
