@@ -1,0 +1,72 @@
+#!/usr/bin/env groovy
+
+ansiColor('xterm') {
+  try {
+    node('master') {
+      stage('determine deploy parameters') {
+
+        sh "[ ! -z \"${params.TERRAFORM_ACTION}\" ] || { echo -e \"\n\n\tERROR: Please specify a TERRAFORM_ACTION\n\n\" && exit 1; }"
+
+        // Dynamically define the location of the deployment "DIR_PATH"
+        def ACCOUNT = sh(
+                script: 'echo $JOB_NAME | awk -F/  \'{print $2}\'',
+                returnStdout: true
+        ).trim()
+
+        def REGION = sh(
+                script: 'echo $JOB_NAME | awk -F/  \'{print $3}\'',
+                returnStdout: true
+        ).trim()
+
+        def VPC = sh(
+                script: 'echo $JOB_NAME | awk -F/  \'{print $4}\'',
+                returnStdout: true
+        ).trim()
+
+        def ENVIRONMENT = sh(
+                script: 'echo $JOB_NAME | awk -F/ \'{print $5}\'',
+                returnStdout: true
+        ).trim()
+
+        def SERVICE = sh(
+                script: 'echo $JOB_NAME | awk -F/ \'{print $6}\'',
+                returnStdout: true
+        ).trim()
+
+        def DIR_PATH = "infrastructure/aws/$ACCOUNT/$REGION/$VPC/$ENVIRONMENT/$SERVICE"
+
+        // Export environment variables
+        echo("Exporting env vars")
+        env.ACCOUNT = "$ACCOUNT"
+        env.REGION = "$REGION"
+        env.VPC = "$VPC"
+        env.ENVIRONMENT = "$ENVIRONMENT"
+        env.SERVICE = "$SERVICE"
+        env.DIR_PATH = "$DIR_PATH"
+
+        env.COMMIT_HASH = params.COMMIT_HASH?.trim() ?: ""
+
+
+        // Get deployment details
+        if (!env.COMMIT_HASH) {
+          error("Please specify a COMMIT_HASH")
+        }
+
+        echo "********************************************************"
+        echo ""
+        echo " Deploying ${env.COMMIT_HASH} to ${env.ENVIRONMENT} "
+        echo ""
+        echo "********************************************************"
+
+      }
+    }
+
+  } catch (e) {
+    slackSend(
+            channel: '#jenkins',
+            color: '#b20000',
+            message: "*Deployment Failed*: <${env.BUILD_URL}|${env.SERVICE}>\n\t\t*Account:* ${env.ACCOUNT}\n\t\t*Region:* ${env.REGION}\n\t\t*VPC:* ${env.VPC}\n\t\t*Environment:* ${env.ENVIRONMENT}\n\t\t*Deployed Artifact:* ${env.SERVICE}\n\t\t*Deployed Code Commit:* <https://github.com/Pennsieve/Pennsieve-Visualization/commit/${env.COMMIT_HASH}|${env.COMMIT_HASH}>"
+    )
+    throw e
+  }
+}
