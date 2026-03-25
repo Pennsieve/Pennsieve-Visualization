@@ -39,11 +39,13 @@ try {
   }
 
   //if (isMain) {
-    build job: "service-deploy/pennsieve-non-prod/us-east-1/dev-vpc-use1/dev/${serviceName}",
-            parameters: [
-                    string(name: 'COMMIT_HASH', value: commitHash),
-                    string(name: 'TERRAFORM_ACTION', value: 'plan')
-            ]
+    withEnv(['COMMIT_HASH=${commitHash}']) {
+      build job: "service-deploy/pennsieve-non-prod/us-east-1/dev-vpc-use1/dev/${serviceName}",
+              parameters: [
+                      string(name: 'COMMIT_HASH', value: commitHash),
+                      string(name: 'TERRAFORM_ACTION', value: 'plan')
+              ]
+    }
   //}
 } catch (e) {
   slackSend(color: '#b20000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL}) by ${authorName}")
