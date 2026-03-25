@@ -25,10 +25,10 @@ currentBuild.description = "commit: ${commitHash}"
 
 // ── Build ──────────────────────────────────────────────────────────
 stage('Install') {
-  sh """#!/bin/bash -e
+  sh """#!/bin/bash -ev
             . $HOME/.nvm/nvm.sh ; nvm use 18.17.1
-            npm install -g pnpm
-            pnpm install
+            corepack enable
+            pnpm install --frozen-lockfile
       """
 }
 
