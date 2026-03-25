@@ -1,4 +1,7 @@
 #!/usr/bin/env groovy
 
-load 'packages/orthogonal/Jenkinsfile'
-
+ansiColor('xterm') {
+  node('executor') {
+    load 'packages/orthogonal/Jenkinsfile'
+  }
+}

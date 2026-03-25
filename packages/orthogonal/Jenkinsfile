@@ -26,7 +26,7 @@ ansiColor('xterm') {
 
     // ── Build ──────────────────────────────────────────────────────────
     stage('Install') {
-      sh """#!/bin/bash -ex
+      sh """#!/bin/bash -e
             . $HOME/.nvm/nvm.sh ; nvm use 18.17.1
             npm install -g pnpm
             pnpm install
