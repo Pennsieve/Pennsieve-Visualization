@@ -1,7 +1,10 @@
 #!/usr/bin/env groovy
 
 // We are being called from root Jenkinsfile which is providing node and stages.
-echo "packages/orthogonal/Jenkinsfile"
+
+def authorName = sh(returnStdout: true, script: 'git --no-pager show --format="%an" --no-patch')
+def isMain = env.BRANCH_NAME == "main"
+def serviceName = "orthogonal-viewer"
 
 // ── Path filter ────────────────────────────────────────────────────
 def changes = sh(
@@ -24,14 +27,30 @@ def commitHash = sh(
 currentBuild.description = "commit: ${commitHash}"
 
 // ── Build ──────────────────────────────────────────────────────────
-stage('Install and Build') {
-  sh """#!/bin/bash -e
+try {
+  stage('Install and Build') {
+    sh """#!/bin/bash -e
             . $HOME/.nvm/nvm.sh ; nvm use 18.17.1
             DEBUG="corepack" corepack enable pnpm
             DEBUG="corepack" pnpm install --frozen-lockfile
             DEBUG="corepack" pnpm build:orthogonal-embed
       """
-  stash includes: "packages/orthogonal/dist-embed/**", name: 'dist-embed'
+    stash includes: "packages/orthogonal/dist-embed/**", name: 'dist-embed'
+  }
+
+  //if (isMain) {
+    build job: "service-deploy/pennsieve-non-prod/us-east-1/dev-vpc-use1/dev/${serviceName}",
+            parameters: [
+                    string(name: 'COMMIT_HASH', value: commitHash),
+                    string(name: 'TERRAFORM_ACTION', value: 'plan')
+            ]
+  //}
+} catch (e) {
+  slackSend(color: '#b20000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL}) by ${authorName}")
+  throw e
 }
+
+slackSend(color: '#006600', message: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL}) by ${authorName}")
+
 
 
