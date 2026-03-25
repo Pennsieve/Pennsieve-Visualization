@@ -46,6 +46,9 @@ ansiColor('xterm') {
 
         env.COMMIT_HASH = params.COMMIT_HASH?.trim() ?: ""
 
+        def BUCKET_NAME = "pennsieve-${envName}-${serviceName}-use1"
+
+
 
         // Get deployment details
         if (!env.COMMIT_HASH) {
@@ -57,8 +60,89 @@ ansiColor('xterm') {
         echo " Deploying ${env.COMMIT_HASH} to ${env.ENVIRONMENT} "
         echo ""
         echo "********************************************************"
-
       }
+
+      // ── Build from the pinned commit ─────────────────────────────────
+      node('executor') {
+        stage('Checkout Visualization Repo') {
+          dir("${env.SERVICE}-deployment") {
+            checkout([
+                    $class                           : 'GitSCM',
+                    branches                         : [[name: "${env.COMMIT_HASH}"]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions                       : [],
+                    submoduleCfg                     : [],
+                    userRemoteConfigs                : [[
+                                                                credentialsId: 'JenkinsGitHubAccessToken',
+                                                                url          : 'https://github.com/Pennsieve/Pennsieve-Visualization.git'
+                                                        ]]
+            ])
+          }
+        }
+
+        stage('Build Embed') {
+          dir("${env.SERVICE}-deployment") {
+            sh """#!/bin/bash -e
+            . $HOME/.nvm/nvm.sh ; nvm use 18.17.1
+            DEBUG="corepack" corepack enable pnpm
+            DEBUG="corepack" pnpm install --frozen-lockfile
+            DEBUG="corepack" pnpm build:orthogonal-embed
+      """
+            stash includes: "packages/orthogonal/dist-embed/**", name: 'dist-embed'
+          }
+        }
+      }
+
+      // Deploy infrastructure changes and code
+      node("${env.ENVIRONMENT}-executor") {
+
+        stage('Checkout Infrastructure') {
+          dir('infrastructure') {
+            checkout([
+                    $class                           : 'GitSCM',
+                    branches                         : [[name: '*/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions                       : [],
+                    submoduleCfg                     : [],
+                    userRemoteConfigs                : [[
+                                                                credentialsId: 'JenkinsGitHubAccessToken',
+                                                                url          : 'https://github.com/Pennsieve/infrastructure.git'
+                                                        ]]
+            ])
+          }
+        }
+
+        stage('Terraform Apply') {
+          dir("${env.DIR_PATH}") {
+            // SERVICE_MODULE_VERSION pins the Terraform module source
+            // to the same commit as the embed code being deployed
+            withEnv(["SERVICE_MODULE_VERSION=${env.COMMIT_HASH}"]) {
+              sh "./terraform.sh ${params.TERRAFORM_ACTION}"
+            }
+          }
+        }
+
+        stage('Deploy to S3') {
+          unstash 'dist-embed'
+
+          sh """
+          ls -la 
+          echo ${env.BUCKET_NAME}
+        """
+        }
+
+
+
+        if (env.ENVIRONMENT == "prod") {
+          slackSend(
+                  channel: '#jenkins',
+                  color: '#071540',
+                  message: "*Release Deployed*: <${env.BUILD_URL}|${env.SERVICE}>\n\t\t*Account:* ${env.ACCOUNT}\n\t\t*Region:* ${env.REGION}\n\t\t*VPC:* ${env.VPC}\n\t\t*Environment:* ${env.ENVIRONMENT}\n\t\t*Deployed Commit:* <https://github.com/Pennsieve/Pennsieve-Visualization/commit/${env.COMMIT_HASH}|${env.COMMIT_HASH}>"
+          )
+        }
+      }
+
+
     }
 
   } catch (e) {
