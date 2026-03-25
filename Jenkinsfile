@@ -2,7 +2,9 @@
 
 ansiColor('xterm') {
   node('executor') {
-    checkout scm
-    load 'packages/orthogonal/Jenkinsfile'
+    stage("Checkout monorepo and load jobs") {
+      checkout scm
+      load 'packages/orthogonal/Jenkinsfile'
+    }
   }
 }
