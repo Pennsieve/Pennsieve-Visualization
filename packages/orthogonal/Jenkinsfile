@@ -27,9 +27,6 @@ currentBuild.description = "commit: ${commitHash}"
 stage('Install') {
   sh """#!/bin/bash -e
             . $HOME/.nvm/nvm.sh ; nvm use 18.17.1
-            echo "enabling corepack"
-            corepack enable pnpm
-            echo "corepack enabled"
             which pnpm
       """
 }
