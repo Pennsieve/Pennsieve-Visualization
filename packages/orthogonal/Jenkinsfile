@@ -32,7 +32,7 @@ if (!changes.contains('packages/orthogonal/')) {
 
 currentBuild.description = "commit: ${commitHash}"
 
-// ── Build ──────────────────────────────────────────────────────────
+// ── Non-Prod Deploy ──────────────────────────────────────────────────────────
 try {
   stage('Non-prod Deploy') {
     withEnv(["COMMIT_HASH=${commitHash}"]) {
