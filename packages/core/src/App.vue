@@ -4,8 +4,9 @@
 
     <!-- Markdown Component -->
     <section class="component-section">
-      <h2 class="component-label">Markdown</h2>
-      <p class="component-path">@pennsieve-viz/markdown</p>
+      <h2 class="component-label">&lt;Markdown /&gt;</h2>
+      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-url">inline markdown string</p>
       <div class="component-container" style="height: 300px">
         <Markdown
           mode="preview"
@@ -27,8 +28,9 @@ const hello = 'world';
 
     <!-- TextViewer Component -->
     <section class="component-section">
-      <h2 class="component-label">TextViewer</h2>
-      <p class="component-path">@pennsieve-viz/text-viewer</p>
+      <h2 class="component-label">&lt;TextViewer /&gt;</h2>
+      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-url">inline text content</p>
       <div class="component-container" style="height: 200px">
         <TextViewer :content="sampleTextContent" filename="example.txt" />
       </div>
@@ -45,8 +47,9 @@ const hello = 'world';
 
     <!-- CSVViewer Component -->
     <section class="component-section">
-      <h2 class="component-label">CSVViewer</h2>
-      <p class="component-path">@pennsieve-viz/csv-viewer</p>
+      <h2 class="component-label">&lt;CSVViewer /&gt;</h2>
+      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-url">{{ csvUrl }}</p>
       <div
         class="component-container bg-tertiary"
         style="height: 400px"
@@ -57,8 +60,9 @@ const hello = 'world';
 
     <!-- DataExplorer Component -->
     <section class="component-section">
-      <h2 class="component-label">DataExplorer</h2>
-      <p class="component-path">@pennsieve-viz/data-explorer</p>
+      <h2 class="component-label">&lt;DataExplorer /&gt;</h2>
+      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-url">https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/humandrg/v2/genes.parquet</p>
       <div
         class="component-container bg-tertiary"
         style="height: 400px"
@@ -69,8 +73,9 @@ const hello = 'world';
 
     <!-- UMAP Component -->
     <section class="component-section">
-      <h2 class="component-label">UMAP</h2>
-      <p class="component-path">@pennsieve-viz/umap</p>
+      <h2 class="component-label">&lt;UMAP /&gt;</h2>
+      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-url">{{ apiUrl }}</p>
       <div
         class="component-container bg-tertiary"
         style="height: 400px"
@@ -81,8 +86,9 @@ const hello = 'world';
 
     <!-- ProportionPlot Component -->
     <section class="component-section">
-      <h2 class="component-label">ProportionPlot</h2>
-      <p class="component-path">@pennsieve-viz/proportion-plot</p>
+      <h2 class="component-label">&lt;ProportionPlot /&gt;</h2>
+      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-url">{{ apiUrl }}</p>
       <div
         class="component-container bg-tertiary"
         style="height: 400px"
@@ -93,8 +99,9 @@ const hello = 'world';
 
     <!-- TSViewer Component -->
     <section class="component-section">
-      <h2 class="component-label">TSViewer</h2>
-      <p class="component-path">tsviewer</p>
+      <h2 class="component-label">&lt;TSViewer /&gt;</h2>
+      <p class="component-path">@pennsieve-viz/tsviewer</p>
+      <p class="component-url">no data source (websocket-based)</p>
       <div
         class="component-container bg-tertiary"
         style="height: 500px"
@@ -105,8 +112,9 @@ const hello = 'world';
 
     <!-- OmeViewer (Micro-CT) Component -->
     <section class="component-section">
-      <h2 class="component-label">OmeViewer (Micro-CT)</h2>
+      <h2 class="component-label">&lt;OmeViewer /&gt;</h2>
       <p class="component-path">@pennsieve-viz/micro-ct</p>
+      <p class="component-url">{{ omeTiffSource }}</p>
       <div
         class="component-container bg-dark"
         style="height: 600px"
@@ -115,22 +123,24 @@ const hello = 'world';
       </div>
     </section>
 
-    <!-- TiffViewer Component -->
-    <section class="component-section">
-      <h2 class="component-label">TiffViewer</h2>
+    <!-- TiffViewer Component (hidden for now) -->
+    <!-- <section class="component-section">
+      <h2 class="component-label">&lt;TiffViewer /&gt;</h2>
       <p class="component-path">@pennsieve-viz/micro-ct</p>
+      <p class="component-url">{{ TiffSource }}</p>
       <div
         class="component-container bg-dark"
         style="height: 600px"
       >
         <TiffViewer :source="TiffSource" />
       </div>
-    </section>
+    </section> -->
 
     <!-- OrthogonalViewer Component (iframe-isolated) -->
     <section class="component-section">
-      <h2 class="component-label">OrthogonalViewer (Neuroglancer)</h2>
+      <h2 class="component-label">&lt;OrthogonalFrame /&gt;</h2>
       <p class="component-path">@pennsieve-viz/orthogonal via iframe</p>
+      <p class="component-url">{{ zarrSource }}</p>
       <div
         class="component-container"
         style="height: 700px; background: #000; padding: 0"
@@ -142,9 +152,37 @@ const hello = 'world';
       </div>
     </section>
 
+    <!-- NiiViewer Component (direct .nii.gz) -->
+    <section class="component-section">
+      <h2 class="component-label">&lt;NiiViewer /&gt; (.nii.gz)</h2>
+      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-url">{{ niiUrl }}</p>
+      <div
+        class="component-container bg-dark"
+        style="height: 600px"
+      >
+        <NiiViewer :url="niiUrl" />
+      </div>
+    </section>
+
+    <!-- NiiViewer Component (OME-Zarr - SciVis) -->
+    <section class="component-section">
+      <h2 class="component-label">&lt;NiiViewer /&gt; (OME-Zarr SciVis)</h2>
+      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-url">{{ niiZarrUrl }}</p>
+      <div
+        class="component-container bg-dark"
+        style="height: 600px"
+      >
+        <NiiViewer :url="niiZarrUrl" :zarr-level="0" :zarr-max-volume-size="256" />
+      </div>
+    </section>
+
+
+
     <!-- EditIcon Component -->
     <section class="component-section">
-      <h2 class="component-label">EditIcon</h2>
+      <h2 class="component-label">&lt;EditIcon /&gt;</h2>
       <p class="component-path">@pennsieve-viz/core</p>
       <div class="component-container icon-container">
         <EditIcon />
@@ -164,11 +202,11 @@ import {
   UMAP,
   ProportionPlotBeta as ProportionPlot,
   EditIcon,
-  TSViewer,
-  OmeViewer,
-  TiffViewer,
   OrthogonalFrame,
+  NiiViewer,
 } from "./index";
+import { TSViewer } from "@pennsieve-viz/tsviewer";
+import { OmeViewer, TiffViewer } from "@pennsieve-viz/micro-ct";
 import "@pennsieve-viz/micro-ct/style.css";
 import "@pennsieve-viz/tsviewer/style.css";
 
@@ -230,6 +268,12 @@ const TiffSource = ref(
   "/smallTest.tiff"
 )
 
+// NiiViewer test sources
+const niiUrl = ref("/test-nifti.nii.gz");
+const niiZarrUrl = ref(
+  "https://ome-zarr-scivis.s3.us-east-1.amazonaws.com/v0.5/96x2/mri_ventricles.ome.zarr"
+);
+
 const samplePackage = ref({
   content: {
     id: "N:package:example-id",
@@ -283,6 +327,16 @@ const samplePackage = ref({
   padding: 8px 20px;
   font-family: monospace;
   font-size: 0.9rem;
+}
+
+.component-url {
+  background: t.$gray_1;
+  color: t.$gray_5;
+  margin: 0;
+  padding: 6px 20px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  word-break: break-all;
 }
 
 .component-note {

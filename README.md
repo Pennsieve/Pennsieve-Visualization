@@ -6,7 +6,7 @@ A monorepo containing Vue 3 visualization components for the Pennsieve platform.
 
 | Package | Description |
 |---------|-------------|
-| [`@pennsieve-viz/core`](packages/core) | Main library — DataExplorer, UMAP, Markdown, TextViewer, OrthogonalFrame, plus lazy re-exports of all viewer packages |
+| [`@pennsieve-viz/core`](packages/core) | Main library — DataExplorer, UMAP, Markdown, TextViewer, NiiViewer, OrthogonalFrame, plus lazy re-exports of all viewer packages |
 | [`@pennsieve-viz/tsviewer`](packages/ts-viewer) | Timeseries data viewer and annotator |
 | [`@pennsieve-viz/micro-ct`](packages/micro-ct) | OME-TIFF / TIFF viewer components for microscopy data |
 | [`@pennsieve-viz/orthogonal`](packages/orthogonal) | Neuroglancer-based orthogonal viewer for OME-Zarr volumes |
@@ -24,6 +24,7 @@ pennsieve-visualization/
 │   │       ├── text-viewer/
 │   │       ├── ai-plotly/        # beta
 │   │       ├── proportion-plot/  # beta
+│   │       ├── NiiViewer/         # NIfTI viewer (Niivue) + useNiiSource composable
 │   │       ├── orthogonal/       # OrthogonalFrame (iframe wrapper)
 │   │       ├── duckdb/           # DuckDB interface types
 │   │       └── composables/
@@ -188,7 +189,7 @@ import '@pennsieve-viz/core/style.css'
 
 ```vue
 <script setup>
-import { DataExplorer, UMAP, Markdown, TextViewer } from '@pennsieve-viz/core'
+import { DataExplorer, UMAP, Markdown, TextViewer, NiiViewer } from '@pennsieve-viz/core'
 import { OrthogonalFrame } from '@pennsieve-viz/core'
 </script>
 ```
@@ -238,6 +239,71 @@ import { ProportionPlotBeta, AiPlotlyBeta } from '@pennsieve-viz/core'
 | `source` | `string` | — | OME-Zarr source URL (required) |
 | `layout` | `'4panel' \| '3d' \| 'xy' \| 'xz' \| 'yz'` | `'4panel'` | Viewer layout |
 | `embedUrl` | `string` | `'/'` | Base URL of the hosted embed app |
+
+---
+
+## NiiViewer
+
+Renders NIfTI (`.nii`, `.nii.gz`) volumes using [Niivue](https://github.com/niivue/niivue). Also supports NIfTI-Zarr for chunked streaming of larger files.
+
+### Basic usage
+
+```vue
+<script setup>
+import { NiiViewer } from '@pennsieve-viz/core'
+</script>
+
+<template>
+  <NiiViewer url="https://example.com/brain.nii.gz" />
+</template>
+```
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `url` | `string` | — | URL to a `.nii.gz` or `.zarr` volume (required) |
+| `sliceType` | `'axial' \| 'coronal' \| 'sagittal' \| 'multi' \| 'render'` | `'multi'` | Slice layout |
+| `zarrLevel` | `number` | — | Zarr pyramid level (0 = highest res). Enables chunked loading when set. |
+| `zarrMaxVolumeSize` | `number` | — | Max voxels per dimension for zarr virtual volume |
+| `zarrChannel` | `number` | — | Which channel to load from zarr |
+
+### Large file strategy
+
+NiiViewer loads the entire file into memory. This works well for files under ~200MB. For larger NIfTI files, convert them to zarr via a Pennsieve workflow and pass the zarr URL with `zarrLevel`:
+
+```vue
+<NiiViewer url="https://s3.../brain.ome.zarr" :zarr-level="0" :zarr-max-volume-size="512" />
+```
+
+> **Note:** Niivue's zarr support loads a fixed-size virtual volume into memory (`zarrMaxVolumeSize^3`). This works for neuroimaging data (typically up to ~1GB). For multi-GB microscopy OME-Zarr, use `OrthogonalFrame` (Neuroglancer) or `OmeViewer` (Viv) which do true viewport-based tile streaming.
+
+### useNiiSource composable
+
+`useNiiSource` resolves a Pennsieve package to a NiiViewer-ready URL. It checks for a zarr view asset first, falls back to the source file if it's small enough, or flags that conversion is needed.
+
+This is intended for use in the consuming app (e.g. pennsieve-app), not in the viz library itself.
+
+```vue
+<script setup>
+import { NiiViewer, useNiiSource } from '@pennsieve-viz/core'
+
+const { url, zarrLevel, needsConversion, fileSizeMB, error } =
+  useNiiSource({ pkgId: 'N:package:...', apiUrl, getToken })
+</script>
+
+<template>
+  <NiiViewer v-if="url" :url="url" :zarr-level="zarrLevel" />
+  <p v-else-if="needsConversion">
+    File too large ({{ fileSizeMB }}MB). Run the NIfTI → Zarr conversion workflow.
+  </p>
+  <p v-else-if="error">{{ error }}</p>
+</template>
+```
+
+The composable:
+1. Calls `/packages/{pkgId}/view` to get viewer assets
+2. If a `.zarr` view asset exists → returns its URL with `zarrLevel: 0`
+3. If only a source file exists and it's < 200MB → returns the `.nii.gz` URL directly
+4. If the source file is ≥ 200MB with no zarr asset → sets `needsConversion: true`
 
 ---
 
