@@ -36,7 +36,8 @@
     "element-plus": "^2.3.0",
     "hyparquet": "^1.12.1",
     "marked": "^15.0.7",
-    "ramda": "^0.31.3"
+    "ramda": "^0.31.3",
+    "@niivue/niivue": "^0.68.1"
   },
   "peerDependencies": {
     "@aws-amplify/auth": "^6.0.0",

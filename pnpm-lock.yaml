@@ -65,6 +65,9 @@ importers:
       '@element-plus/icons-vue':
         specifier: ^2.3.1
         version: 2.3.1(vue@3.5.26(typescript@5.9.3))
+      '@niivue/niivue':
+        specifier: ^0.68.1
+        version: 0.68.1
       d3:
         specifier: ^7.9.0
         version: 7.9.0
@@ -920,6 +923,14 @@ packages:
     peerDependencies:
       '@loaders.gl/core': ^4.3.0
 
+  '@lukeed/csprng@1.1.0':
+    resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
+    engines: {node: '>=8'}
+
+  '@lukeed/uuid@2.0.1':
+    resolution: {integrity: sha512-qC72D4+CDdjGqJvkFMMEAtancHUQ7/d/tAiHf64z8MopFDmcrtbcJuerDtFceuAfQJ2pDSfCKCtbqoGBNnwg0w==}
+    engines: {node: '>=8'}
+
   '@luma.gl/constants@9.1.10':
     resolution: {integrity: sha512-O4Nx8UbWmrHHZ7ihKB8WiscX1cz05l1KvKorYTgq+xeXwz2Beh3MkXBMnA46uuyEtimN945OEdYshZnbh80jyw==}
 
@@ -1073,6 +1084,9 @@ packages:
     resolution: {integrity: sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ==}
     cpu: [x64]
     os: [win32]
+
+  '@niivue/niivue@0.68.1':
+    resolution: {integrity: sha512-uZ/4pJ6mGk8UY8DWOu+/cC/AOpPQW7W6kEhyOrEhuUDZW5+lPmmcnqU6ilipiR4iAcSA8r9KTXJm+p55iTyUgw==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -1814,6 +1828,9 @@ packages:
   '@types/web-bluetooth@0.0.20':
     resolution: {integrity: sha512-g9gZnnXVq7gM7v3tJCWV/qw7w+KeOlSHAhgF9RytFyifW6AF61hdT2ucrYhPq9hLs5JIryeupHV3qGk95dH9ow==}
 
+  '@ungap/structured-clone@1.3.0':
+    resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+
   '@vitejs/plugin-vue@5.2.4':
     resolution: {integrity: sha512-7Yx/SXSOcQq5HiiV3orevHUFn+pmMB4cgbEkDYgnkUWb0WfeQ/wa2yFv6D5ICiCQOVpjA7vYDXrC7AGO8yjDHA==}
     engines: {node: ^18.0.0 || >=20.0.0}
@@ -2007,6 +2024,9 @@ packages:
 
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
+
+  '@zarrita/storage@0.1.4':
+    resolution: {integrity: sha512-qURfJAQcQGRfDQ4J9HaCjGaj3jlJKc66bnRk6G/IeLUsM7WKyG7Bzsuf1EZurSXyc0I4LVcu6HaeQQ4d3kZ16g==}
 
   abab@1.0.4:
     resolution: {integrity: sha512-I+Wi+qiE2kUXyrRhNsWv6XsjUTBJjSoVSctKNBfLG5zG/Xe7Rjbxf13+vqYHNTwHaFU+FtSlVxOCTiMEVtPv0A==}
@@ -3961,6 +3981,9 @@ packages:
   nifti-reader-js@0.6.9:
     resolution: {integrity: sha512-oEC35cuYFR0i+KeXhaK0hJz4oSj511Vo7LmO/6iqbxzwek6XWnBi77VURlk4jsnJ86tlJNpYv6ujmSDpPP46Tw==}
 
+  nifti-reader-js@0.8.0:
+    resolution: {integrity: sha512-iO1iIhQDfKniy+l/86HfOPte7So+SxBmBiMSiUB2VXU7z4hSewMTlE3h0fCgfzfXvMUa+ilzLTJ2ZHmtFw6EWw==}
+
   node-addon-api@7.1.1:
     resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}
 
@@ -4349,6 +4372,9 @@ packages:
   readdirp@4.1.2:
     resolution: {integrity: sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg==}
     engines: {node: '>= 14.18.0'}
+
+  reference-spec-reader@0.2.0:
+    resolution: {integrity: sha512-q0mfCi5yZSSHXpCyxjgQeaORq3tvDsxDyzaadA/5+AbAUwRyRuuTh0aRQuE/vAOt/qzzxidJ5iDeu1cLHaNBlQ==}
 
   regl-error2d@2.0.12:
     resolution: {integrity: sha512-r7BUprZoPO9AbyqM5qlJesrSRkl+hZnVKWKsVp7YhOl/3RIpi4UDGASGJY0puQ96u5fBYw/OlqV24IGcgJ0McA==}
@@ -4993,6 +5019,10 @@ packages:
   unquote@1.1.1:
     resolution: {integrity: sha512-vRCqFv6UhXpWxZPyGDh/F3ZpNv8/qo7w6iufLpQg9aKnQ71qM4B5KiI7Mia9COcjEhrO9LueHpMYjYzsWH3OIg==}
 
+  unzipit@1.4.3:
+    resolution: {integrity: sha512-gsq2PdJIWWGhx5kcdWStvNWit9FVdTewm4SEG7gFskWs+XCVaULt9+BwuoBtJiRE8eo3L1IPAOrbByNLtLtIlg==}
+    engines: {node: '>=12'}
+
   update-browserslist-db@1.2.3:
     resolution: {integrity: sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==}
     hasBin: true
@@ -5020,6 +5050,9 @@ packages:
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     hasBin: true
+
+  uzip-module@1.0.3:
+    resolution: {integrity: sha512-AMqwWZaknLM77G+VPYNZLEruMGWGzyigPK3/Whg99B3S6vGHuqsyl5ZrOv1UUF3paGK1U6PM0cnayioaryg/fA==}
 
   valibot@1.2.0:
     resolution: {integrity: sha512-mm1rxUsmOxzrwnX5arGS+U4T25RdvpPjPN4yR0u9pUBov9+zGVtO84tif1eY4r6zWxVxu3KzIyknJy3rxfRZZg==}
@@ -5251,6 +5284,9 @@ packages:
   zarr@0.6.3:
     resolution: {integrity: sha512-v7g3i/NfLEHtGtCEX8zl9b/LMY+8BY7fIYvbNX3nskAhliMCY5mA12jlc8Rbe91hSwL/4Nh2d3fUcVmnthXQkQ==}
     engines: {node: '>=12'}
+
+  zarrita@0.5.4:
+    resolution: {integrity: sha512-i88iN2+HqIQ+uiCEWLfhjbYNXAJD7IrM4h3lFwFclfqEOOhxp10amRWtqmgN5jbuy3+h0LwdyLVVzk4y9rTLgg==}
 
   zod-to-json-schema@3.25.1:
     resolution: {integrity: sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==}
@@ -6479,6 +6515,12 @@ snapshots:
       jszip: 3.10.1
       md5: 2.3.0
 
+  '@lukeed/csprng@1.1.0': {}
+
+  '@lukeed/uuid@2.0.1':
+    dependencies:
+      '@lukeed/csprng': 1.1.0
+
   '@luma.gl/constants@9.1.10': {}
 
   '@luma.gl/core@9.1.10':
@@ -6679,6 +6721,18 @@ snapshots:
 
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.3':
     optional: true
+
+  '@niivue/niivue@0.68.1':
+    dependencies:
+      '@lukeed/uuid': 2.0.1
+      '@ungap/structured-clone': 1.3.0
+      array-equal: 1.0.2
+      fflate: 0.8.2
+      gl-matrix: 3.4.4
+      nifti-reader-js: 0.8.0
+      zarrita: 0.5.4
+    optionalDependencies:
+      '@rollup/rollup-linux-x64-gnu': 4.53.5
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
@@ -7562,6 +7616,8 @@ snapshots:
   '@types/web-bluetooth@0.0.20':
     optional: true
 
+  '@ungap/structured-clone@1.3.0': {}
+
   '@vitejs/plugin-vue@5.2.4(vite@6.4.1(@types/node@25.0.3)(sass-embedded@1.97.0)(sass@1.97.0)(terser@5.44.1))(vue@3.5.26(typescript@5.9.3))':
     dependencies:
       vite: 6.4.1(@types/node@25.0.3)(sass-embedded@1.97.0)(sass@1.97.0)(terser@5.44.1)
@@ -7874,6 +7930,11 @@ snapshots:
   '@xtuc/ieee754@1.2.0': {}
 
   '@xtuc/long@4.2.2': {}
+
+  '@zarrita/storage@0.1.4':
+    dependencies:
+      reference-spec-reader: 0.2.0
+      unzipit: 1.4.3
 
   abab@1.0.4: {}
 
@@ -9982,7 +10043,11 @@ snapshots:
 
   nifti-reader-js@0.6.9:
     dependencies:
-      fflate: 0.7.4
+      fflate: 0.8.2
+
+  nifti-reader-js@0.8.0:
+    dependencies:
+      fflate: 0.8.2
 
   node-addon-api@7.1.1:
     optional: true
@@ -10409,6 +10474,8 @@ snapshots:
       picomatch: 2.3.1
 
   readdirp@4.1.2: {}
+
+  reference-spec-reader@0.2.0: {}
 
   regl-error2d@2.0.12:
     dependencies:
@@ -11114,6 +11181,10 @@ snapshots:
 
   unquote@1.1.1: {}
 
+  unzipit@1.4.3:
+    dependencies:
+      uzip-module: 1.0.3
+
   update-browserslist-db@1.2.3(browserslist@4.28.1):
     dependencies:
       browserslist: 4.28.1
@@ -11133,6 +11204,8 @@ snapshots:
   uuid@3.4.0: {}
 
   uuid@9.0.1: {}
+
+  uzip-module@1.0.3: {}
 
   valibot@1.2.0(typescript@5.9.3):
     optionalDependencies:
@@ -11351,6 +11424,11 @@ snapshots:
     dependencies:
       numcodecs: 0.2.2
       p-queue: 7.4.1
+
+  zarrita@0.5.4:
+    dependencies:
+      '@zarrita/storage': 0.1.4
+      numcodecs: 0.3.2
 
   zod-to-json-schema@3.25.1(zod@3.25.76):
     dependencies:
