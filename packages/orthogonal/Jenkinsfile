@@ -1,0 +1,54 @@
+#!/usr/bin/env groovy
+
+// We are being called from root Jenkinsfile which is providing node and stages.
+
+def authorName = sh(returnStdout: true, script: 'git --no-pager show --format="%an" --no-patch')
+def isMain = env.BRANCH_NAME == "main"
+def serviceName = "orthogonal-viewer"
+
+// ── Path filter ────────────────────────────────────────────────────
+def changes = sh(
+        script: "git diff --name-only HEAD~1 HEAD || true",
+        returnStdout: true
+).trim()
+
+def commitHash = sh(
+        script: "git rev-parse --short HEAD",
+        returnStdout: true
+).trim()
+
+if (!changes.contains('packages/orthogonal/')) {
+  echo "No changes under packages/orthogonal/. Skipping build."
+  currentBuild.result = 'NOT_BUILT'
+  currentBuild.description = 'No orthogonal changes'
+  return
+} else if (!isMain) {
+  echo "Not a push to main. Skipping non-prod deploy of packages/orthogonal/ viewer."
+  currentBuild.result = 'NOT_BUILT'
+  currentBuild.description = 'No non-prod deploy'
+  return
+}
+
+
+currentBuild.description = "commit: ${commitHash}"
+
+// ── Non-Prod Deploy ──────────────────────────────────────────────────────────
+try {
+  stage('Non-prod Deploy') {
+    withEnv(["COMMIT_HASH=${commitHash}"]) {
+      build job: "service-deploy/pennsieve-non-prod/us-east-1/dev-vpc-use1/dev/${serviceName}",
+              parameters: [
+                      string(name: 'COMMIT_HASH', value: commitHash),
+                      string(name: 'TERRAFORM_ACTION', value: 'apply')
+              ]
+    }
+  }
+} catch (e) {
+  slackSend(color: '#b20000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL}) by ${authorName}")
+  throw e
+}
+
+slackSend(color: '#006600', message: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL}) by ${authorName}")
+
+
+

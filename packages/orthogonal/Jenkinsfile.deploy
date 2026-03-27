@@ -1,0 +1,177 @@
+#!/usr/bin/env groovy
+
+ansiColor('xterm') {
+  try {
+    node('master') {
+      stage('determine deploy parameters') {
+
+        sh "[ ! -z \"${params.TERRAFORM_ACTION}\" ] || { echo -e \"\n\n\tERROR: Please specify a TERRAFORM_ACTION\n\n\" && exit 1; }"
+
+        // Dynamically define the location of the deployment "DIR_PATH"
+        def ACCOUNT = sh(
+                script: 'echo $JOB_NAME | awk -F/  \'{print $2}\'',
+                returnStdout: true
+        ).trim()
+
+        def REGION = sh(
+                script: 'echo $JOB_NAME | awk -F/  \'{print $3}\'',
+                returnStdout: true
+        ).trim()
+
+        def VPC = sh(
+                script: 'echo $JOB_NAME | awk -F/  \'{print $4}\'',
+                returnStdout: true
+        ).trim()
+
+        def ENVIRONMENT = sh(
+                script: 'echo $JOB_NAME | awk -F/ \'{print $5}\'',
+                returnStdout: true
+        ).trim()
+
+        def SERVICE = sh(
+                script: 'echo $JOB_NAME | awk -F/ \'{print $6}\'',
+                returnStdout: true
+        ).trim()
+
+        def DIR_PATH = "infrastructure/aws/$ACCOUNT/$REGION/$VPC/$ENVIRONMENT/$SERVICE"
+
+        // Export environment variables
+        echo("Exporting env vars")
+        env.ACCOUNT = "$ACCOUNT"
+        env.REGION = "$REGION"
+        env.VPC = "$VPC"
+        env.ENVIRONMENT = "$ENVIRONMENT"
+        env.SERVICE = "$SERVICE"
+        env.DIR_PATH = "$DIR_PATH"
+
+        env.COMMIT_HASH = params.COMMIT_HASH?.trim() ?: ""
+
+        env.BUCKET_NAME = "pennsieve-${env.ENVIRONMENT}-${env.SERVICE}-use1"
+
+
+        // Get deployment details
+        if (!env.COMMIT_HASH) {
+          error("Please specify a COMMIT_HASH")
+        }
+
+        echo "********************************************************"
+        echo ""
+        echo " Deploying ${env.COMMIT_HASH} to ${env.ENVIRONMENT} "
+        echo ""
+        echo "********************************************************"
+      }
+
+      // ── Build from the pinned commit ─────────────────────────────────
+      node('executor') {
+        stage('Checkout Visualization Repo') {
+          dir("${env.SERVICE}-deployment") {
+            checkout([
+                    $class                           : 'GitSCM',
+                    branches                         : [[name: "${env.COMMIT_HASH}"]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions                       : [],
+                    submoduleCfg                     : [],
+                    userRemoteConfigs                : [[
+                                                                credentialsId: "${params.GITHUB_TOKEN_ID}",
+                                                                url          : 'https://github.com/Pennsieve/Pennsieve-Visualization.git'
+                                                        ]]
+            ])
+          }
+        }
+
+        stage('Build Embed') {
+          dir("${env.SERVICE}-deployment") {
+            sh """#!/bin/bash -e
+            . $HOME/.nvm/nvm.sh ; nvm use 18.17.1
+            DEBUG="corepack" corepack enable pnpm
+            DEBUG="corepack" pnpm install --frozen-lockfile
+            DEBUG="corepack" pnpm build:orthogonal-embed
+      """
+            stash includes: "packages/orthogonal/dist-embed/**", name: 'dist-embed'
+          }
+        }
+      }
+
+      // Deploy infrastructure changes and code
+      node("${env.ENVIRONMENT}-executor") {
+
+        stage('Checkout Infrastructure') {
+          dir('infrastructure') {
+            checkout([
+                    $class                           : 'GitSCM',
+                    branches                         : [[name: '*/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions                       : [],
+                    submoduleCfg                     : [],
+                    userRemoteConfigs                : [[
+                                                                credentialsId: "${params.GITHUB_TOKEN_ID}",
+                                                                url          : 'https://github.com/Pennsieve/infrastructure.git'
+                                                        ]]
+            ])
+          }
+        }
+
+        stage('Terraform Apply') {
+          dir("${env.DIR_PATH}") {
+            // SERVICE_MODULE_VERSION pins the Terraform module source
+            // to the same commit as the embed code being deployed
+            withEnv(["SERVICE_MODULE_VERSION=${env.COMMIT_HASH}"]) {
+              sh "./terraform.sh ${params.TERRAFORM_ACTION}"
+            }
+          }
+        }
+
+        stage('Deploy to S3') {
+          unstash 'dist-embed'
+
+          sh """
+        aws s3 sync packages/orthogonal/dist-embed/ s3://${env.BUCKET_NAME}/ \
+          --delete \
+          --cache-control "no-cache" \
+          --exclude "assets/*"
+
+        aws s3 sync packages/orthogonal/dist-embed/assets/ s3://${env.BUCKET_NAME}/assets/ \
+          --cache-control "max-age=31536000, immutable"
+      """
+        }
+
+        stage('Invalidate CloudFront') {
+          def distributionId = sh(
+                  script: "aws cloudfront list-distributions --query \"DistributionList.Items[?contains(Origins.Items[0].DomainName, '${env.BUCKET_NAME}.s3.amazonaws.com')].Id\" --output text",
+                  returnStdout: true
+          ).trim()
+
+          def response = sh(
+                  returnStdout: true,
+                  script: "aws cloudfront create-invalidation --distribution-id ${distributionId} --paths '/embed.html'"
+          ).trim()
+
+          println "${response}"
+
+          def responseMap = new groovy.json.JsonSlurperClassic().parseText(response)
+          def invalidation = responseMap.Invalidation
+          sh "aws cloudfront wait invalidation-completed --distribution-id ${distributionId} --id ${invalidation.Id}"
+        }
+
+
+        if (env.ENVIRONMENT == "prod") {
+          slackSend(
+                  channel: '#jenkins',
+                  color: '#071540',
+                  message: "*Orthogonal Viewer Deployed*: <${env.BUILD_URL}|${env.SERVICE}>\n\t\t*Account:* ${env.ACCOUNT}\n\t\t*Region:* ${env.REGION}\n\t\t*VPC:* ${env.VPC}\n\t\t*Environment:* ${env.ENVIRONMENT}\n\t\t*Deployed Commit:* <https://github.com/Pennsieve/Pennsieve-Visualization/commit/${env.COMMIT_HASH}|${env.COMMIT_HASH}>"
+          )
+        }
+      }
+
+
+    }
+
+  } catch (e) {
+    slackSend(
+            channel: '#jenkins',
+            color: '#b20000',
+            message: "*Deployment Failed*: <${env.BUILD_URL}|${env.SERVICE}>\n\t\t*Account:* ${env.ACCOUNT}\n\t\t*Region:* ${env.REGION}\n\t\t*VPC:* ${env.VPC}\n\t\t*Environment:* ${env.ENVIRONMENT}\n\t\t*Deployed Artifact:* ${env.SERVICE}\n\t\t*Deployed Code Commit:* <https://github.com/Pennsieve/Pennsieve-Visualization/commit/${env.COMMIT_HASH}|${env.COMMIT_HASH}>"
+    )
+    throw e
+  }
+}
