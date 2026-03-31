@@ -18,8 +18,7 @@
  * controls.setAxes('UMAP_1', 'UMAP_2')
  */
 
-import { readonly } from 'vue'
-import { storeToRefs } from 'pinia'
+import { readonly, toRef, computed } from 'vue'
 import { createUMAPStore } from './umapStore'
 import type { UMAPPoint } from './umapStore'
 
@@ -32,54 +31,29 @@ import type { UMAPPoint } from './umapStore'
 export function useUMAPControls(instanceId = 'default') {
   const store = createUMAPStore(instanceId)
 
-  const {
-    pointCount,
-    colorMode,
-    startColor,
-    endColor,
-    singleColor,
-    pointData,
-    metaData,
-    columns,
-    colorMap,
-    xAxis,
-    yAxis,
-    hoverFields,
-    selectedPoints,
-    hoveredPoint,
-    isLoading,
-    error,
-    sourceInfo,
-    hasData,
-    selectedCount,
-    isConnected,
-    numericColumns,
-    categoricalColumns,
-  } = storeToRefs(store)
-
   // ============================================
   // STATE QUERIES
   // ============================================
 
   const getPoint = (pointId: number): UMAPPoint | undefined => {
-    return pointData.value.find(p => p.id === pointId)
+    return store.pointData.find((p: UMAPPoint) => p.id === pointId)
   }
 
   const getSelectedPoints = (): UMAPPoint[] => {
-    return pointData.value.filter(p => selectedPoints.value.has(p.id))
+    return store.pointData.filter((p: UMAPPoint) => store.selectedPoints.has(p.id))
   }
 
   const getState = () => ({
-    pointCount: pointCount.value,
-    colorMode: colorMode.value,
-    xAxis: xAxis.value,
-    yAxis: yAxis.value,
-    hasData: hasData.value,
-    selectedCount: selectedCount.value,
-    isLoading: isLoading.value,
-    error: error.value,
-    isConnected: isConnected.value,
-    sourceInfo: { ...sourceInfo.value },
+    pointCount: store.pointCount,
+    colorMode: store.colorMode,
+    xAxis: store.xAxis,
+    yAxis: store.yAxis,
+    hasData: store.hasData,
+    selectedCount: store.selectedCount,
+    isLoading: store.isLoading,
+    error: store.error,
+    isConnected: store.isConnected,
+    sourceInfo: { ...store.sourceInfo },
   })
 
   // ============================================
@@ -88,28 +62,28 @@ export function useUMAPControls(instanceId = 'default') {
 
   return {
     // Readonly state
-    pointData: readonly(pointData),
-    metaData: readonly(metaData),
-    columns: readonly(columns),
-    colorMode: readonly(colorMode),
-    startColor: readonly(startColor),
-    endColor: readonly(endColor),
-    singleColor: readonly(singleColor),
-    pointCount: readonly(pointCount),
-    xAxis: readonly(xAxis),
-    yAxis: readonly(yAxis),
-    hoverFields: readonly(hoverFields),
-    selectedPoints: readonly(selectedPoints),
-    hoveredPoint: readonly(hoveredPoint),
-    isLoading: readonly(isLoading),
-    error: readonly(error),
+    pointData: readonly(toRef(store, 'pointData')),
+    metaData: readonly(toRef(store, 'metaData')),
+    columns: readonly(toRef(store, 'columns')),
+    colorMode: readonly(toRef(store, 'colorMode')),
+    startColor: readonly(toRef(store, 'startColor')),
+    endColor: readonly(toRef(store, 'endColor')),
+    singleColor: readonly(toRef(store, 'singleColor')),
+    pointCount: readonly(toRef(store, 'pointCount')),
+    xAxis: readonly(toRef(store, 'xAxis')),
+    yAxis: readonly(toRef(store, 'yAxis')),
+    hoverFields: readonly(toRef(store, 'hoverFields')),
+    selectedPoints: readonly(toRef(store, 'selectedPoints')),
+    hoveredPoint: readonly(toRef(store, 'hoveredPoint')),
+    isLoading: readonly(toRef(store, 'isLoading')),
+    error: readonly(toRef(store, 'error')),
 
-    // Computed
-    hasData,
-    selectedCount,
-    isConnected,
-    numericColumns,
-    categoricalColumns,
+    // Computed (from store getters)
+    hasData: computed(() => store.hasData),
+    selectedCount: computed(() => store.selectedCount),
+    isConnected: computed(() => store.isConnected),
+    numericColumns: computed(() => store.numericColumns),
+    categoricalColumns: computed(() => store.categoricalColumns),
 
     // State queries
     getPoint,
@@ -140,7 +114,7 @@ export function useUMAPControls(instanceId = 'default') {
     triggerRegenerate: () => store.triggerRegenerate(),
 
     // Source tracking
-    setSourceInfo: (info: Partial<typeof sourceInfo.value>) => store.setSourceInfo(info),
+    setSourceInfo: (info: Partial<typeof store.sourceInfo>) => store.setSourceInfo(info),
 
     // Lifecycle
     reset: () => store.resetStore(),

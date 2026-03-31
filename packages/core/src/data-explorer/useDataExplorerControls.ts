@@ -17,8 +17,7 @@
  * controls.setDisplayMode('json')
  */
 
-import { readonly } from 'vue'
-import { storeToRefs } from 'pinia'
+import { readonly, toRef, computed } from 'vue'
 import { createDataExplorerStore } from './dataExplorerStore'
 
 /**
@@ -30,45 +29,22 @@ import { createDataExplorerStore } from './dataExplorerStore'
 export function useDataExplorerControls(instanceId = 'default') {
   const store = createDataExplorerStore(instanceId)
 
-  const {
-    isLoading,
-    isQueryRunning,
-    isFileLoading,
-    error,
-    connectionId,
-    tableName,
-    sqlQuery,
-    queryResults,
-    queryHistory,
-    currentPage,
-    itemsPerPage,
-    displayMode,
-    csvOptions,
-    sourceInfo,
-    isConnected,
-    hasResults,
-    tableColumns,
-    totalPages,
-    paginatedResults,
-    rowCount,
-  } = storeToRefs(store)
-
   // ============================================
   // STATE QUERIES
   // ============================================
 
   const getState = () => ({
-    isLoading: isLoading.value,
-    isQueryRunning: isQueryRunning.value,
-    error: error.value,
-    isConnected: isConnected.value,
-    hasResults: hasResults.value,
-    sqlQuery: sqlQuery.value,
-    rowCount: rowCount.value,
-    currentPage: currentPage.value,
-    totalPages: totalPages.value,
-    displayMode: displayMode.value,
-    sourceInfo: { ...sourceInfo.value },
+    isLoading: store.isLoading,
+    isQueryRunning: store.isQueryRunning,
+    error: store.error,
+    isConnected: store.isConnected,
+    hasResults: store.hasResults,
+    sqlQuery: store.sqlQuery,
+    rowCount: store.rowCount,
+    currentPage: store.currentPage,
+    totalPages: store.totalPages,
+    displayMode: store.displayMode,
+    sourceInfo: { ...store.sourceInfo },
   })
 
   // ============================================
@@ -77,24 +53,24 @@ export function useDataExplorerControls(instanceId = 'default') {
 
   return {
     // Readonly state
-    isLoading: readonly(isLoading),
-    isQueryRunning: readonly(isQueryRunning),
-    isFileLoading: readonly(isFileLoading),
-    error: readonly(error),
-    sqlQuery: readonly(sqlQuery),
-    queryResults: readonly(queryResults),
-    queryHistory: readonly(queryHistory),
-    currentPage: readonly(currentPage),
-    itemsPerPage: readonly(itemsPerPage),
-    displayMode: readonly(displayMode),
+    isLoading: readonly(toRef(store, 'isLoading')),
+    isQueryRunning: readonly(toRef(store, 'isQueryRunning')),
+    isFileLoading: readonly(toRef(store, 'isFileLoading')),
+    error: readonly(toRef(store, 'error')),
+    sqlQuery: readonly(toRef(store, 'sqlQuery')),
+    queryResults: readonly(toRef(store, 'queryResults')),
+    queryHistory: readonly(toRef(store, 'queryHistory')),
+    currentPage: readonly(toRef(store, 'currentPage')),
+    itemsPerPage: readonly(toRef(store, 'itemsPerPage')),
+    displayMode: readonly(toRef(store, 'displayMode')),
 
-    // Computed
-    isConnected,
-    hasResults,
-    tableColumns,
-    totalPages,
-    paginatedResults,
-    rowCount,
+    // Computed (from store getters)
+    isConnected: computed(() => store.isConnected),
+    hasResults: computed(() => store.hasResults),
+    tableColumns: computed(() => store.tableColumns),
+    totalPages: computed(() => store.totalPages),
+    paginatedResults: computed(() => store.paginatedResults),
+    rowCount: computed(() => store.rowCount),
 
     // State queries
     getState,
@@ -121,7 +97,7 @@ export function useDataExplorerControls(instanceId = 'default') {
     clearError: () => store.clearError(),
 
     // Source tracking
-    setSourceInfo: (info: Partial<typeof sourceInfo.value>) => store.setSourceInfo(info),
+    setSourceInfo: (info: Partial<typeof store.sourceInfo>) => store.setSourceInfo(info),
 
     // Lifecycle
     reset: () => store.resetStore(),
