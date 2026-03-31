@@ -137,6 +137,17 @@ cd packages/core && npm publish --access public
 
 ---
 
+## Architecture
+
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the standard factory Pinia store pattern that all `@pennsieve-viz` packages follow. This covers:
+
+- The `createViewerStore` / `clearViewerStore` / `useViewerControls` API contract
+- How the host app wires up viewers to side panels via a thin composable
+- Multi-instance support
+- Implementation templates for new packages
+
+---
+
 ## Usage in a Consuming App
 
 ### Install
@@ -376,6 +387,24 @@ clearViewerStore('instance-id')
 clearAllViewerStores()
 ```
 
+### Controls Composable
+
+For side panels and external control UIs, use `useViewerControls` instead of the raw store:
+
+```js
+import { useViewerControls } from '@pennsieve-viz/tsviewer'
+
+const controls = useViewerControls('instance-id')
+
+controls.channels          // readonly ref
+controls.selectedChannels  // readonly computed
+controls.selectChannels(['ch-1', 'ch-2'])
+controls.setActiveTool('annotate')
+controls.reset()
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pattern.
+
 ---
 
 ## Micro-CT
@@ -404,6 +433,29 @@ import { OmeViewer, TiffViewer } from '@pennsieve-viz/micro-ct'
 ```
 
 Exports: `OmeViewer`, `OmeViewerControls`, `OmeOrthogonalViewer`, `TiffViewer`, `useOmeLoader`.
+
+### Store API
+
+```js
+import { createViewerStore, clearViewerStore, useViewerControls } from '@pennsieve-viz/micro-ct'
+
+// Create an isolated store instance
+const store = createViewerStore('my-ome-viewer')
+
+// Or use the controls composable (recommended for external panels)
+const controls = useViewerControls('my-ome-viewer')
+
+controls.channels          // readonly ref — channel list
+controls.currentZ          // readonly ref — current Z slice
+controls.setCurrentZ(5)
+controls.setChannelVisibility(0, false)
+controls.reset()
+
+// Cleanup
+clearViewerStore('my-ome-viewer')
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pattern.
 
 ---
 
