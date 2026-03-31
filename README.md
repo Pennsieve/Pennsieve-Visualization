@@ -412,7 +412,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pattern.
 ### Peer Dependencies
 
 ```bash
-pnpm add vue @deck.gl/core @deck.gl/extensions @deck.gl/geo-layers @deck.gl/layers @deck.gl/mesh-layers @luma.gl/constants @luma.gl/core @luma.gl/engine @luma.gl/shadertools @luma.gl/webgl
+pnpm add vue pinia @deck.gl/core @deck.gl/extensions @deck.gl/geo-layers @deck.gl/layers @deck.gl/mesh-layers @luma.gl/constants @luma.gl/core @luma.gl/engine @luma.gl/shadertools @luma.gl/webgl
 ```
 
 ### Usage
@@ -427,32 +427,34 @@ import { OmeViewer, TiffViewer } from '@pennsieve-viz/micro-ct'
 </script>
 
 <template>
-  <OmeViewer :source="omeTiffUrl" />
+  <OmeViewer :source="omeTiffUrl" source-type="ome-tiff" instance-id="my-ome" />
   <TiffViewer :source="tiffUrl" />
 </template>
 ```
 
-Exports: `OmeViewer`, `OmeViewerControls`, `OmeOrthogonalViewer`, `TiffViewer`, `useOmeLoader`.
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `source` | `string \| File` | — | URL or File to load (required) |
+| `sourceType` | `'ome-zarr' \| 'ome-tiff'` | `'ome-zarr'` | Source format |
+| `instanceId` | `string` | `'default'` | Store instance ID for multi-viewer / side-panel support |
+
+Exports: `OmeViewer`, `OmeViewerControls`, `OmeOrthogonalViewer`, `TiffViewer`, `useOmeLoader`, `createViewerStore`, `clearViewerStore`, `useViewerControls`.
 
 ### Store API
 
+OmeViewer writes all its state (channels, Z/T slices, loading, errors) to a factory Pinia store keyed by `instanceId`. External components (side panels, palettes) read that same store via `useViewerControls`:
+
 ```js
-import { createViewerStore, clearViewerStore, useViewerControls } from '@pennsieve-viz/micro-ct'
+import { useViewerControls } from '@pennsieve-viz/micro-ct'
 
-// Create an isolated store instance
-const store = createViewerStore('my-ome-viewer')
-
-// Or use the controls composable (recommended for external panels)
-const controls = useViewerControls('my-ome-viewer')
+// Use the same instanceId passed to <OmeViewer instance-id="my-ome">
+const controls = useViewerControls('my-ome')
 
 controls.channels          // readonly ref — channel list
 controls.currentZ          // readonly ref — current Z slice
 controls.setCurrentZ(5)
 controls.setChannelVisibility(0, false)
 controls.reset()
-
-// Cleanup
-clearViewerStore('my-ome-viewer')
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pattern.

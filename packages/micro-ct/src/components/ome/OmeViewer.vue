@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
+import { storeToRefs } from "pinia";
 import { Deck, OrthographicView } from "@deck.gl/core";
 import { MultiscaleImageLayer, ImageLayer } from "@vivjs/layers";
 import { ColorPaletteExtension } from "@vivjs/extensions";
@@ -7,42 +8,47 @@ import { getDefaultInitialViewState, DetailView } from "@vivjs/views";
 
 import OmeViewerControls from "./OmeViewerControls.vue";
 import { useOmeLoader } from "./useOmeLoader";
+import { createViewerStore, clearViewerStore } from "../../stores/viewerStore";
 import type { SourceType, ViewerLayerProps } from "./types";
 
 // Props
 interface Props {
   source: string | File;
   sourceType: SourceType;
+  instanceId?: string;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  instanceId: 'default',
+});
+
+// Store (factory pattern — external consumers use useViewerControls with same instanceId)
+const viewerStore = createViewerStore(props.instanceId);
+const {
+  currentZ,
+  currentT,
+  maxZ,
+  maxT,
+  fluidMode,
+  channels,
+  isTileLoading,
+} = storeToRefs(viewerStore);
 
 // Composables
 const { load, isLoading, error } = useOmeLoader();
 
-// Reactive state
+// Sync loader state into the store so useViewerControls can read it
+watch(isLoading, (val) => viewerStore.setLoading(val));
+watch(error, (val) => viewerStore.setError(val?.message ?? null));
+
+// Internal state (not exposed through store)
 const containerRef = ref<HTMLDivElement | null>(null);
-const isTileLoading = ref(false);
 let deckInstance: Deck | null = null;
 let tileLoadingTimeout: ReturnType<typeof setTimeout> | null = null;
 let tileLoadingDebounce: ReturnType<typeof setTimeout> | null = null;
 let sliceUpdateDebounce: ReturnType<typeof setTimeout> | null = null;
-
-// Dimension navigation state
-const currentZ = ref(0);
-const currentT = ref(0);
-const maxZ = ref(0);
-const maxT = ref(0);
-const fluidMode = ref(false);
 let currentLoader: any = null;
 let currentLayerProps: ViewerLayerProps | null = null;
-
-// Channel state
-const channels = ref<Array<{
-  name: string;
-  color: [number, number, number];
-  visible: boolean;
-}>>([]);
 
 // Default colors for channels
 const DEFAULT_COLORS: [number, number, number][] = [
@@ -73,9 +79,9 @@ function startTileLoading() {
   if (tileLoadingTimeout) clearTimeout(tileLoadingTimeout);
 
   tileLoadingDebounce = setTimeout(() => {
-    isTileLoading.value = true;
+    viewerStore.setTileLoading(true);
     tileLoadingTimeout = setTimeout(() => {
-      isTileLoading.value = false;
+      viewerStore.setTileLoading(false);
     }, 3000);
   }, 150);
 }
@@ -83,7 +89,7 @@ function startTileLoading() {
 function stopTileLoading() {
   if (tileLoadingDebounce) clearTimeout(tileLoadingDebounce);
   if (tileLoadingTimeout) clearTimeout(tileLoadingTimeout);
-  isTileLoading.value = false;
+  viewerStore.setTileLoading(false);
 }
 
 // Build layer props from loader data
@@ -170,12 +176,12 @@ function buildLayerProps(
     channelNames = Array(numChannels).fill(null).map((_, i) => `Channel ${i + 1}`);
   }
 
-  // Populate the channels ref for the UI
-  channels.value = colors.map((color, i) => ({
+  // Populate channel state in the store
+  viewerStore.setChannels(colors.map((color, i) => ({
     name: channelNames[i],
     color,
     visible: channelsVisible[i],
-  }));
+  })));
 
   const layerProps: ViewerLayerProps = {
     isCustomLoader: loader[0]._tiff !== undefined,
@@ -243,10 +249,10 @@ async function initializeViewer() {
   if (!containerRef.value) return;
 
   // Store dimension info for navigation
-  maxZ.value = dimensions.sizeZ - 1;
-  maxT.value = dimensions.sizeT - 1;
-  currentZ.value = 0;
-  currentT.value = 0;
+  viewerStore.setDimensions(dimensions.sizeZ - 1, dimensions.sizeT - 1);
+  viewerStore.setCurrentZ(0);
+  viewerStore.setCurrentT(0);
+  viewerStore.setSource(typeof props.source === 'string' ? props.source : props.source.name, props.sourceType);
 
   // Store loader for slice updates
   // For custom loaders (TIFF): loader is array with one custom object, use loader[0]
@@ -324,7 +330,7 @@ function updateSlice() {
 
 // Handle channel visibility toggle
 function onChannelVisibilityChange(index: number, visible: boolean) {
-  channels.value[index].visible = visible;
+  viewerStore.setChannelVisibility(index, visible);
   updateSlice();
 }
 
@@ -368,6 +374,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cleanup();
+  clearViewerStore(props.instanceId);
 });
 </script>
 

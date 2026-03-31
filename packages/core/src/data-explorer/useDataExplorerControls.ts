@@ -19,6 +19,7 @@
 
 import { readonly, toRef, computed } from 'vue'
 import { createDataExplorerStore } from './dataExplorerStore'
+export type { QueryResult, CSVOptions } from './dataExplorerStore'
 
 /**
  * Provides read and write access to a DataExplorer instance's state.
