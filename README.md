@@ -137,6 +137,17 @@ cd packages/core && npm publish --access public
 
 ---
 
+## Architecture
+
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the standard factory Pinia store pattern that all `@pennsieve-viz` packages follow. This covers:
+
+- The `createViewerStore` / `clearViewerStore` / `useViewerControls` API contract
+- How the host app wires up viewers to side panels via a thin composable
+- Multi-instance support
+- Implementation templates for new packages
+
+---
+
 ## Usage in a Consuming App
 
 ### Install
@@ -376,6 +387,24 @@ clearViewerStore('instance-id')
 clearAllViewerStores()
 ```
 
+### Controls Composable
+
+For side panels and external control UIs, use `useViewerControls` instead of the raw store:
+
+```js
+import { useViewerControls } from '@pennsieve-viz/tsviewer'
+
+const controls = useViewerControls('instance-id')
+
+controls.channels          // readonly ref
+controls.selectedChannels  // readonly computed
+controls.selectChannels(['ch-1', 'ch-2'])
+controls.setActiveTool('annotate')
+controls.reset()
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pattern.
+
 ---
 
 ## Micro-CT
@@ -383,7 +412,7 @@ clearAllViewerStores()
 ### Peer Dependencies
 
 ```bash
-pnpm add vue @deck.gl/core @deck.gl/extensions @deck.gl/geo-layers @deck.gl/layers @deck.gl/mesh-layers @luma.gl/constants @luma.gl/core @luma.gl/engine @luma.gl/shadertools @luma.gl/webgl
+pnpm add vue pinia @deck.gl/core @deck.gl/extensions @deck.gl/geo-layers @deck.gl/layers @deck.gl/mesh-layers @luma.gl/constants @luma.gl/core @luma.gl/engine @luma.gl/shadertools @luma.gl/webgl
 ```
 
 ### Usage
@@ -398,12 +427,37 @@ import { OmeViewer, TiffViewer } from '@pennsieve-viz/micro-ct'
 </script>
 
 <template>
-  <OmeViewer :source="omeTiffUrl" />
+  <OmeViewer :source="omeTiffUrl" source-type="ome-tiff" instance-id="my-ome" />
   <TiffViewer :source="tiffUrl" />
 </template>
 ```
 
-Exports: `OmeViewer`, `OmeViewerControls`, `OmeOrthogonalViewer`, `TiffViewer`, `useOmeLoader`.
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `source` | `string \| File` | — | URL or File to load (required) |
+| `sourceType` | `'ome-zarr' \| 'ome-tiff'` | `'ome-zarr'` | Source format |
+| `instanceId` | `string` | `'default'` | Store instance ID for multi-viewer / side-panel support |
+
+Exports: `OmeViewer`, `OmeViewerControls`, `OmeOrthogonalViewer`, `TiffViewer`, `useOmeLoader`, `createViewerStore`, `clearViewerStore`, `useViewerControls`.
+
+### Store API
+
+OmeViewer writes all its state (channels, Z/T slices, loading, errors) to a factory Pinia store keyed by `instanceId`. External components (side panels, palettes) read that same store via `useViewerControls`:
+
+```js
+import { useViewerControls } from '@pennsieve-viz/micro-ct'
+
+// Use the same instanceId passed to <OmeViewer instance-id="my-ome">
+const controls = useViewerControls('my-ome')
+
+controls.channels          // readonly ref — channel list
+controls.currentZ          // readonly ref — current Z slice
+controls.setCurrentZ(5)
+controls.setChannelVisibility(0, false)
+controls.reset()
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pattern.
 
 ---
 
