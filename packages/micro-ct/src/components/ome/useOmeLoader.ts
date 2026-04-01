@@ -42,11 +42,14 @@ export function useOmeLoader() {
     if (sizeZMatch) sizeZ = parseInt(sizeZMatch[1]);
     if (typeMatch) pixelType = typeMatch[1];
 
-    // Calculate image count from dimensions (much faster than getImageCount() which traverses all IFDs)
-    const imageCount = sizeC * sizeT * sizeZ;
-
-    // Pre-index all IFDs in background for fast random access later
-    tiff.getImageCount();
+    // Detect interleaved RGB: file has fewer IFDs than OME-XML dimensions imply
+    const samplesPerPixel =
+      firstImage.getFileDirectory().SamplesPerPixel || 1;
+    const expectedIfdCount = sizeC * sizeT * sizeZ;
+    // getImageCount() also pre-indexes all IFDs for fast random access later
+    const actualIfdCount = await tiff.getImageCount();
+    const isInterleaved =
+      samplesPerPixel > 1 && actualIfdCount < expectedIfdCount;
 
     const width = firstImage.getWidth();
     const height = firstImage.getHeight();
@@ -82,9 +85,11 @@ export function useOmeLoader() {
       labels,
       tileSize: 512,
       _tiff: tiff,
-      _imageCount: imageCount,
+      _imageCount: actualIfdCount,
       _sizeC: sizeC,
       _sizeZ: sizeZ,
+      _isInterleaved: isInterleaved,
+      _samplesPerPixel: samplesPerPixel,
       // Cache for raster data: key is "t-c-z", value is the raster result
       _rasterCache: new Map<
         string,
@@ -110,17 +115,39 @@ export function useOmeLoader() {
         const t = selection.t || 0;
         const c = selection.c || 0;
         const z = selection.z || 0;
-        // Calculate IFD index based on dimension order (assuming XYZCT)
-        const ifdIndex = t * this._sizeC * this._sizeZ + c * this._sizeZ + z;
-        const image = await this._tiff.getImage(
-          Math.min(ifdIndex, this._imageCount - 1)
-        );
-        const raster = await image.readRasters();
-        const result = {
-          data: raster[0],
-          width: image.getWidth(),
-          height: image.getHeight(),
-        };
+
+        let result: { data: any; width: number; height: number };
+
+        if (this._isInterleaved) {
+          // For interleaved files, multiple channels are stored as bands within
+          // fewer IFDs. Compute which IFD holds this channel and which band
+          // within that IFD to extract.
+          const ifdChannels = this._samplesPerPixel;
+          const ifdIndex = t * Math.ceil(this._sizeC / ifdChannels) * this._sizeZ
+            + Math.floor(c / ifdChannels) * this._sizeZ + z;
+          const bandIndex = c % ifdChannels;
+          const image = await this._tiff.getImage(
+            Math.min(ifdIndex, this._imageCount - 1)
+          );
+          const raster = await image.readRasters();
+          result = {
+            data: raster[bandIndex],
+            width: image.getWidth(),
+            height: image.getHeight(),
+          };
+        } else {
+          // Standard layout: each channel is a separate IFD
+          const ifdIndex = t * this._sizeC * this._sizeZ + c * this._sizeZ + z;
+          const image = await this._tiff.getImage(
+            Math.min(ifdIndex, this._imageCount - 1)
+          );
+          const raster = await image.readRasters();
+          result = {
+            data: raster[0],
+            width: image.getWidth(),
+            height: image.getHeight(),
+          };
+        }
 
         // Add to cache, evicting oldest if necessary
         if (this._rasterCache.size >= this._maxCacheSize) {
