@@ -8,13 +8,15 @@ import type {
   OmeMetadata,
   OmeDimensions,
   SourceType,
+  OnUrlExpired,
 } from "./types";
 
 export function useOmeLoader() {
   const isLoading = ref(false);
   const error: Ref<Error | null> = ref(null);
 
-  async function loadOmeTiff(source: string | File): Promise<OmeLoaderResult> {
+  async function loadOmeTiff(source: string | File, options?: { onUrlExpired?: OnUrlExpired }): Promise<OmeLoaderResult> {
+    const onUrlExpired = options?.onUrlExpired;
     // Load OME-TIFF using geotiff directly to avoid strict OME-XML validation
     const tiff =
       typeof source === "string"
@@ -55,10 +57,6 @@ export function useOmeLoader() {
       ? sizeZ * sizeT
       : sizeC * sizeT * sizeZ;
 
-    console.log('[ome-loader] Detected:', {
-      sizeC, sizeZ, sizeT, samplesPerPixel, isInterleaved, imageCount, pixelType
-    });
-
     // Pre-index all IFDs in background for fast random access later
     tiff.getImageCount();
 
@@ -89,7 +87,7 @@ export function useOmeLoader() {
     const shape = [sizeT, sizeC, sizeZ, height, width];
     const labels = ["t", "c", "z", "y", "x"];
 
-    // Create a custom loader that uses windowed reads (no full-image caching)
+    // Create a custom loader with LRU tile cache and URL expiry handling
     const customLoader = {
       dtype,
       shape,
@@ -100,6 +98,60 @@ export function useOmeLoader() {
       _sizeC: sizeC,
       _sizeZ: sizeZ,
       _isInterleaved: isInterleaved,
+      _onUrlExpired: onUrlExpired,
+      _refreshingUrl: null as Promise<void> | null,
+
+      // LRU tile cache: keyed on "x-y-c-z-t", capped at 500 entries
+      _tileCache: new Map<string, any>(),
+      _tileCacheKeys: [] as string[],
+      _maxCacheSize: 500,
+
+      _cacheGet(key: string): any | undefined {
+        if (!this._tileCache.has(key)) return undefined;
+        // Move to end for LRU
+        const idx = this._tileCacheKeys.indexOf(key);
+        if (idx > -1) this._tileCacheKeys.splice(idx, 1);
+        this._tileCacheKeys.push(key);
+        return this._tileCache.get(key);
+      },
+
+      _cacheSet(key: string, value: any) {
+        if (this._tileCache.has(key)) {
+          const idx = this._tileCacheKeys.indexOf(key);
+          if (idx > -1) this._tileCacheKeys.splice(idx, 1);
+        }
+        while (this._tileCacheKeys.length >= this._maxCacheSize) {
+          const evict = this._tileCacheKeys.shift()!;
+          this._tileCache.delete(evict);
+        }
+        this._tileCache.set(key, value);
+        this._tileCacheKeys.push(key);
+      },
+
+      _isUrlExpiredError(err: any): boolean {
+        const msg = String(err?.message || err || '');
+        return /\b(400|403|Bad Request|Forbidden|expired)\b/i.test(msg);
+      },
+
+      async _refreshTiff(): Promise<boolean> {
+        if (!this._onUrlExpired) return false;
+        // Deduplicate concurrent refresh attempts
+        if (!this._refreshingUrl) {
+          this._refreshingUrl = (async () => {
+            const newUrl = await this._onUrlExpired!();
+            if (newUrl) {
+              this._tiff = await GeoTIFF.fromUrl(newUrl);
+              this._tiff.getImageCount(); // re-index IFDs
+            }
+          })();
+        }
+        try {
+          await this._refreshingUrl;
+          return true;
+        } finally {
+          this._refreshingUrl = null;
+        }
+      },
 
       _getIfdIndex(selection: Record<string, number>): number {
         const t = selection.t || 0;
@@ -130,8 +182,6 @@ export function useOmeLoader() {
         let outHeight: number;
 
         if (imgWidth * imgHeight > MAX_PIXELS) {
-          // Image too large to read in full — read a small center crop
-          // to satisfy Viv's initialization (contrast stats, dtype check)
           const cx = Math.max(0, Math.floor((imgWidth - SAMPLE_SIZE) / 2));
           const cy = Math.max(0, Math.floor((imgHeight - SAMPLE_SIZE) / 2));
           const x1 = Math.min(cx + SAMPLE_SIZE, imgWidth);
@@ -163,16 +213,48 @@ export function useOmeLoader() {
         const x1 = Math.min(x0 + tileSize, imgWidth);
         const y1 = Math.min(y0 + tileSize, imgHeight);
 
-        const ifdIndex = this._getIfdIndex(selection);
-        const image = await this._tiff.getImage(ifdIndex);
-        const rasters = await image.readRasters({ window: [x0, y0, x1, y1] });
-
         const c = selection.c || 0;
-        const data = this._isInterleaved
-          ? ((rasters as any)[c] || rasters[0])
-          : rasters[0];
+        const z = selection.z || 0;
+        const t = selection.t || 0;
+        const cacheKey = `${x}-${y}-${c}-${z}-${t}`;
 
-        return { data, width: x1 - x0, height: y1 - y0 };
+        // Check cache first — instant return for already-loaded tiles
+        const cached = this._cacheGet(cacheKey);
+        if (cached) return { data: cached, width: x1 - x0, height: y1 - y0 };
+
+        const fetchAndCache = async () => {
+          const ifdIndex = this._getIfdIndex(selection);
+          const image = await this._tiff.getImage(ifdIndex);
+          const rasters = await image.readRasters({ window: [x0, y0, x1, y1] });
+
+          if (this._isInterleaved) {
+            // Cache ALL bands — the big win for channel toggling.
+            // readRasters already returned all bands; don't discard them.
+            for (let band = 0; band < this._sizeC; band++) {
+              const bandKey = `${x}-${y}-${band}-${z}-${t}`;
+              this._cacheSet(bandKey, (rasters as any)[band] || rasters[0]);
+            }
+            return (rasters as any)[c] || rasters[0];
+          } else {
+            this._cacheSet(cacheKey, rasters[0]);
+            return rasters[0];
+          }
+        };
+
+        try {
+          const data = await fetchAndCache();
+          return { data, width: x1 - x0, height: y1 - y0 };
+        } catch (err: any) {
+          // Detect presigned URL expiry and attempt refresh
+          if (this._isUrlExpiredError(err)) {
+            const refreshed = await this._refreshTiff();
+            if (refreshed) {
+              const data = await fetchAndCache();
+              return { data, width: x1 - x0, height: y1 - y0 };
+            }
+          }
+          throw err;
+        }
       },
 
       onTileError(err: Error) {
@@ -261,14 +343,15 @@ export function useOmeLoader() {
 
   async function load(
     source: string | File,
-    sourceType: SourceType
+    sourceType: SourceType,
+    options?: { onUrlExpired?: OnUrlExpired }
   ): Promise<OmeLoaderResult | null> {
     isLoading.value = true;
     error.value = null;
 
     try {
       if (sourceType === "ome-tiff") {
-        return await loadOmeTiff(source);
+        return await loadOmeTiff(source, options);
       } else {
         if (typeof source !== "string") {
           throw new Error("OME-Zarr only supports URL sources");

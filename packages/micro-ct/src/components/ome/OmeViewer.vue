@@ -9,13 +9,14 @@ import { getDefaultInitialViewState, DetailView } from "@vivjs/views";
 import OmeViewerControls from "./OmeViewerControls.vue";
 import { useOmeLoader } from "./useOmeLoader";
 import { createViewerStore, clearViewerStore } from "../../stores/viewerStore";
-import type { SourceType, ViewerLayerProps, OmeDimensions } from "./types";
+import type { SourceType, ViewerLayerProps, OmeDimensions, OnUrlExpired } from "./types";
 
 // Props
 interface Props {
   source: string | File;
   sourceType: SourceType;
   instanceId?: string;
+  onUrlExpired?: OnUrlExpired;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -125,7 +126,6 @@ function buildLayerProps(
     if (tIndex >= 0) selection.t = currentT.value;
     selections.push(selection);
   }
-  console.log('Built selections:', selections, { cIndex, zIndex, tIndex, numChannels });
 
   // Get contrast limits
   let contrastLimits: [number, number][];
@@ -137,7 +137,6 @@ function buildLayerProps(
   } else {
     contrastLimits = Array(numChannels).fill([0, maxVal]) as [number, number][];
   }
-  console.log('[ome-loader] dtype:', dtype, 'contrastLimits:', contrastLimits);
 
   // Get channel visibility
   const channelsVisible: boolean[] =
@@ -234,7 +233,9 @@ function createLayer(
 
 // Initialize the viewer
 async function initializeViewer() {
-  const result = await load(props.source, props.sourceType);
+  const result = await load(props.source, props.sourceType, {
+    onUrlExpired: props.onUrlExpired,
+  });
   if (!result) return;
 
   const { loader, metadata, dimensions } = result;

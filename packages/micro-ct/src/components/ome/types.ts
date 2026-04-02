@@ -7,6 +7,9 @@ export interface OmeLoaderResult {
   isCustomLoader: boolean;
 }
 
+/** Callback invoked when the presigned URL expires (400/403). Return a fresh URL to retry. */
+export type OnUrlExpired = () => Promise<string | undefined>;
+
 export interface OmeMetadata {
   Name?: string;
   Pixels?: {
