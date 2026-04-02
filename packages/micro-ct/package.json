@@ -1,6 +1,6 @@
 {
   "name": "@pennsieve-viz/micro-ct",
-  "version": "1.0.65",
+  "version": "1.0.71",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

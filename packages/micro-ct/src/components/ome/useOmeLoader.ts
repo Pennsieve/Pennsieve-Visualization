@@ -10,13 +10,15 @@ import type {
   SourceType,
   OnUrlExpired,
 } from "./types";
+import { getTileCached, setTileCached } from "../../utils/tileCache";
 
 export function useOmeLoader() {
   const isLoading = ref(false);
   const error: Ref<Error | null> = ref(null);
 
-  async function loadOmeTiff(source: string | File, options?: { onUrlExpired?: OnUrlExpired }): Promise<OmeLoaderResult> {
+  async function loadOmeTiff(source: string | File, options?: { onUrlExpired?: OnUrlExpired; tileDB?: IDBDatabase }): Promise<OmeLoaderResult> {
     const onUrlExpired = options?.onUrlExpired;
+    const tileDB = options?.tileDB;
     // Load OME-TIFF using geotiff directly to avoid strict OME-XML validation
     const tiff =
       typeof source === "string"
@@ -100,6 +102,7 @@ export function useOmeLoader() {
       _isInterleaved: isInterleaved,
       _onUrlExpired: onUrlExpired,
       _refreshingUrl: null as Promise<void> | null,
+      _tileDB: tileDB as IDBDatabase | undefined,
 
       // LRU tile cache: keyed on "x-y-c-z-t", capped at 500 entries
       _tileCache: new Map<string, any>(),
@@ -218,10 +221,24 @@ export function useOmeLoader() {
         const t = selection.t || 0;
         const cacheKey = `${x}-${y}-${c}-${z}-${t}`;
 
-        // Check cache first — instant return for already-loaded tiles
+        // 1. Check in-memory cache — instant return for already-loaded tiles
         const cached = this._cacheGet(cacheKey);
         if (cached) return { data: cached, width: x1 - x0, height: y1 - y0 };
 
+        // 2. Check IndexedDB (if available) — survives page reloads
+        if (this._tileDB) {
+          try {
+            const persisted = await getTileCached(this._tileDB, cacheKey);
+            if (persisted) {
+              this._cacheSet(cacheKey, persisted);
+              return { data: persisted, width: x1 - x0, height: y1 - y0 };
+            }
+          } catch {
+            // IndexedDB read failed — fall through to fetch
+          }
+        }
+
+        // 3. Fetch via readRasters — store in both memory and IndexedDB
         const fetchAndCache = async () => {
           const ifdIndex = this._getIfdIndex(selection);
           const image = await this._tiff.getImage(ifdIndex);
@@ -232,11 +249,16 @@ export function useOmeLoader() {
             // readRasters already returned all bands; don't discard them.
             for (let band = 0; band < this._sizeC; band++) {
               const bandKey = `${x}-${y}-${band}-${z}-${t}`;
-              this._cacheSet(bandKey, (rasters as any)[band] || rasters[0]);
+              const bandData = (rasters as any)[band] || rasters[0];
+              this._cacheSet(bandKey, bandData);
+              // Fire-and-forget write to IndexedDB
+              if (this._tileDB) setTileCached(this._tileDB, bandKey, bandData);
             }
             return (rasters as any)[c] || rasters[0];
           } else {
             this._cacheSet(cacheKey, rasters[0]);
+            // Fire-and-forget write to IndexedDB
+            if (this._tileDB) setTileCached(this._tileDB, cacheKey, rasters[0] as ArrayBufferView);
             return rasters[0];
           }
         };
@@ -344,7 +366,7 @@ export function useOmeLoader() {
   async function load(
     source: string | File,
     sourceType: SourceType,
-    options?: { onUrlExpired?: OnUrlExpired }
+    options?: { onUrlExpired?: OnUrlExpired; tileDB?: IDBDatabase }
   ): Promise<OmeLoaderResult | null> {
     isLoading.value = true;
     error.value = null;

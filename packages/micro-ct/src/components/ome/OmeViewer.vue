@@ -9,6 +9,7 @@ import { getDefaultInitialViewState, DetailView } from "@vivjs/views";
 import OmeViewerControls from "./OmeViewerControls.vue";
 import { useOmeLoader } from "./useOmeLoader";
 import { createViewerStore, clearViewerStore } from "../../stores/viewerStore";
+import { openTileDB } from "../../utils/tileCache";
 import type { SourceType, ViewerLayerProps, OmeDimensions, OnUrlExpired } from "./types";
 
 // Props
@@ -17,6 +18,7 @@ interface Props {
   sourceType: SourceType;
   instanceId?: string;
   onUrlExpired?: OnUrlExpired;
+  cacheId?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -233,8 +235,18 @@ function createLayer(
 
 // Initialize the viewer
 async function initializeViewer() {
+  let tileDB: IDBDatabase | undefined;
+  if (props.cacheId) {
+    try {
+      tileDB = await openTileDB(props.cacheId);
+    } catch {
+      // IndexedDB unavailable — proceed without persistence
+    }
+  }
+
   const result = await load(props.source, props.sourceType, {
     onUrlExpired: props.onUrlExpired,
+    tileDB,
   });
   if (!result) return;
 
