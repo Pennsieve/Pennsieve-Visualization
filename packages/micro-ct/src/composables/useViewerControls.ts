@@ -3,10 +3,14 @@
  * Use this in wrapper components or external control panels that need
  * to interact with viewer state.
  *
+ * Returns null if Pinia is not available — the core viewer still works,
+ * but external control features are disabled.
+ *
  * @example
  * import { useViewerControls } from '@pennsieve-viz/micro-ct'
  *
  * const controls = useViewerControls('viewer-1')
+ * if (!controls) return // Pinia not available
  *
  * // Read state
  * const channels = controls.channels.value
@@ -26,10 +30,12 @@ import type { SourceType } from '../components/ome/types'
  * Provides read and write access to an OmeViewer instance's state.
  *
  * @param instanceId - The unique identifier of the viewer instance
- * @returns Control interface for the viewer
+ * @returns Control interface for the viewer, or null if Pinia is not available
  */
 export function useViewerControls(instanceId = 'default') {
   const viewerStore = createViewerStore(instanceId)
+
+  if (!viewerStore) return null
 
   const {
     source,

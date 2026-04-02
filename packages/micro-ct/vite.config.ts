@@ -19,6 +19,7 @@ export default defineConfig({
     rollupOptions: {
       external: [
         "vue",
+        "pinia",
         /^@deck\.gl\/.*/,
         /^@luma\.gl\/.*/,
         /^@vivjs\/.*/,

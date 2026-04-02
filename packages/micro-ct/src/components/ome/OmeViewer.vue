@@ -2,14 +2,14 @@
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { Deck, OrthographicView } from "@deck.gl/core";
-import { MultiscaleImageLayer, ImageLayer } from "@vivjs/layers";
+import { MultiscaleImageLayer } from "@vivjs/layers";
 import { ColorPaletteExtension } from "@vivjs/extensions";
 import { getDefaultInitialViewState, DetailView } from "@vivjs/views";
 
 import OmeViewerControls from "./OmeViewerControls.vue";
 import { useOmeLoader } from "./useOmeLoader";
 import { createViewerStore, clearViewerStore } from "../../stores/viewerStore";
-import type { SourceType, ViewerLayerProps } from "./types";
+import type { SourceType, ViewerLayerProps, OmeDimensions } from "./types";
 
 // Props
 interface Props {
@@ -23,23 +23,28 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 // Store (factory pattern — external consumers use useViewerControls with same instanceId)
+// Returns null when Pinia is not available; viewer still works without it.
 const viewerStore = createViewerStore(props.instanceId);
-const {
-  currentZ,
-  currentT,
-  maxZ,
-  maxT,
-  fluidMode,
-  channels,
-  isTileLoading,
-} = storeToRefs(viewerStore);
+
+// Reactive state — use store-backed refs when Pinia is available, local refs as fallback.
+// This ensures the template always has working reactive bindings.
+const _storeRefs = viewerStore ? storeToRefs(viewerStore) : null;
+
+const currentZ = (_storeRefs as any)?.currentZ ?? ref(0);
+const currentT = (_storeRefs as any)?.currentT ?? ref(0);
+const maxZ = (_storeRefs as any)?.maxZ ?? ref(0);
+const maxT = (_storeRefs as any)?.maxT ?? ref(0);
+const fluidMode = (_storeRefs as any)?.fluidMode ?? ref(false);
+const channels = (_storeRefs as any)?.channels ?? ref<{ name: string; color: [number, number, number]; visible: boolean }[]>([]);
+const isTileLoading = (_storeRefs as any)?.isTileLoading ?? ref(false);
 
 // Composables
 const { load, isLoading, error } = useOmeLoader();
 
 // Sync loader state into the store so useViewerControls can read it
-watch(isLoading, (val) => viewerStore.setLoading(val));
-watch(error, (val) => viewerStore.setError(val?.message ?? null));
+// (isLoading and error come from the composable, not from the store)
+watch(isLoading, (val) => viewerStore?.setLoading(val));
+watch(error, (val) => viewerStore?.setError(val?.message ?? null));
 
 // Internal state (not exposed through store)
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -79,9 +84,9 @@ function startTileLoading() {
   if (tileLoadingTimeout) clearTimeout(tileLoadingTimeout);
 
   tileLoadingDebounce = setTimeout(() => {
-    viewerStore.setTileLoading(true);
+    isTileLoading.value = true;
     tileLoadingTimeout = setTimeout(() => {
-      viewerStore.setTileLoading(false);
+      isTileLoading.value = false;
     }, 3000);
   }, 150);
 }
@@ -89,7 +94,7 @@ function startTileLoading() {
 function stopTileLoading() {
   if (tileLoadingDebounce) clearTimeout(tileLoadingDebounce);
   if (tileLoadingTimeout) clearTimeout(tileLoadingTimeout);
-  viewerStore.setTileLoading(false);
+  isTileLoading.value = false;
 }
 
 // Build layer props from loader data
@@ -132,6 +137,7 @@ function buildLayerProps(
   } else {
     contrastLimits = Array(numChannels).fill([0, maxVal]) as [number, number][];
   }
+  console.log('[ome-loader] dtype:', dtype, 'contrastLimits:', contrastLimits);
 
   // Get channel visibility
   const channelsVisible: boolean[] =
@@ -176,15 +182,16 @@ function buildLayerProps(
     channelNames = Array(numChannels).fill(null).map((_, i) => `Channel ${i + 1}`);
   }
 
-  // Populate channel state in the store
-  viewerStore.setChannels(colors.map((color, i) => ({
+  // Populate channel state
+  const channelData = colors.map((color, i) => ({
     name: channelNames[i],
     color,
     visible: channelsVisible[i],
-  })));
+  }));
+  // Always update via the ref — when store exists, channels IS the store ref
+  channels.value = channelData;
 
   const layerProps: ViewerLayerProps = {
-    isCustomLoader: loader[0]._tiff !== undefined,
     contrastLimits,
     channelsVisible,
     colors,
@@ -204,39 +211,25 @@ function createLayer(
   selections: Record<string, number>[],
   layerProps: ViewerLayerProps
 ) {
-  const { isCustomLoader, contrastLimits, channelsVisible, colors, dtype } = layerProps;
+  const { contrastLimits, channelsVisible, colors, dtype } = layerProps;
 
-  if (isCustomLoader) {
-    // Custom loader (TIFF) - use ImageLayer
-    return new ImageLayer({
-      id: "ome-image-layer",
-      loader,
-      selections,
-      contrastLimits,
-      channelsVisible,
-      colors,
-      dtype,
-      extensions: [new ColorPaletteExtension()],
-      onViewportLoad: stopTileLoading,
-    });
-  } else {
-    // Zarr - use MultiscaleImageLayer for pyramid support
-    return new MultiscaleImageLayer({
-      id: "ome-multiscale-layer",
-      loader,
-      selections,
-      contrastLimits,
-      channelsVisible,
-      colors,
-      dtype,
-      extensions: [new ColorPaletteExtension()],
-      viewportId: "detail",
-      onViewportLoad: stopTileLoading,
-      onTileError: (err: any) => {
-        console.error("Tile error:", err);
-      },
-    });
-  }
+  // Always use MultiscaleImageLayer — it tiles the image via getTile,
+  // which avoids exceeding WebGL's max texture size for large images.
+  return new MultiscaleImageLayer({
+    id: "ome-multiscale-layer",
+    loader,
+    selections,
+    contrastLimits,
+    channelsVisible,
+    colors,
+    dtype,
+    extensions: [new ColorPaletteExtension()],
+    viewportId: "detail",
+    onViewportLoad: stopTileLoading,
+    onTileError: (err: any) => {
+      console.error("Tile error:", err);
+    },
+  });
 }
 
 // Initialize the viewer
@@ -244,20 +237,23 @@ async function initializeViewer() {
   const result = await load(props.source, props.sourceType);
   if (!result) return;
 
-  const { loader, metadata, dimensions, isCustomLoader } = result;
+  const { loader, metadata, dimensions } = result;
 
   if (!containerRef.value) return;
 
-  // Store dimension info for navigation
-  viewerStore.setDimensions(dimensions.sizeZ - 1, dimensions.sizeT - 1);
-  viewerStore.setCurrentZ(0);
-  viewerStore.setCurrentT(0);
-  viewerStore.setSource(typeof props.source === 'string' ? props.source : props.source.name, props.sourceType);
+  // Store dimension info for navigation — refs are store-backed when store exists
+  maxZ.value = dimensions.sizeZ - 1;
+  maxT.value = dimensions.sizeT - 1;
+  currentZ.value = 0;
+  currentT.value = 0;
+  if (viewerStore) {
+    viewerStore.setSource(typeof props.source === 'string' ? props.source : props.source.name, props.sourceType);
+  }
 
   // Store loader for slice updates
-  // For custom loaders (TIFF): loader is array with one custom object, use loader[0]
-  // For zarr: loader is array of resolution levels, keep full array for MultiscaleImageLayer
-  currentLoader = isCustomLoader ? loader[0] : loader;
+  // Both custom (TIFF) and zarr loaders are arrays of resolution levels.
+  // MultiscaleImageLayer expects an array, so keep it as-is.
+  currentLoader = loader;
 
   // Build layer props
   const { selections, layerProps } = buildLayerProps(loader, dimensions, metadata);
@@ -330,7 +326,9 @@ function updateSlice() {
 
 // Handle channel visibility toggle
 function onChannelVisibilityChange(index: number, visible: boolean) {
-  viewerStore.setChannelVisibility(index, visible);
+  if (index >= 0 && index < channels.value.length) {
+    channels.value[index].visible = visible;
+  }
   updateSlice();
 }
 
@@ -374,7 +372,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cleanup();
-  clearViewerStore(props.instanceId);
+  if (viewerStore) clearViewerStore(props.instanceId);
 });
 </script>
 

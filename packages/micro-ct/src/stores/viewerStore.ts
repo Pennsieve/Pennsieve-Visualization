@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, getActivePinia, storeToRefs } from 'pinia'
 import { ref, computed } from 'vue'
 import type { SourceType } from '../components/ome/types'
 
@@ -18,8 +18,12 @@ export interface OmeChannelState {
  * Each instanceId gets its own isolated store, enabling multiple
  * independent OmeViewer components on the same page.
  *
+ * Returns null if Pinia is not active — the core viewer still works
+ * without a store; only optional features (side panels, external
+ * controls via useViewerControls) are disabled.
+ *
  * @param instanceId - Unique identifier for the viewer instance
- * @returns Pinia store instance for this viewer
+ * @returns Pinia store instance for this viewer, or null
  */
 export function createViewerStore(instanceId = 'default') {
   if (instanceId === 'default' && !hasShownDefaultWarning) {
@@ -33,6 +37,14 @@ export function createViewerStore(instanceId = 'default') {
 
   if (storeInstances.has(instanceId)) {
     return storeInstances.get(instanceId)!()
+  }
+
+  try {
+    const activePinia = getActivePinia()
+    if (!activePinia) throw new Error('No active Pinia instance')
+  } catch {
+    console.warn('[micro-ct] Pinia not available, viewer store disabled — core viewer will still work.')
+    return null
   }
 
   const useStore = defineStore(`pennsieve-viz-micro-ct-${instanceId}`, () => {

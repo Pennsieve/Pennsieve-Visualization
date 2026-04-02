@@ -32,18 +32,32 @@ export function useOmeLoader() {
     let pixelType = "uint8";
 
     // Extract dimensions from OME-XML
+    // Use Pixels-specific regex to avoid matching attributes on other elements
+    // (e.g. <Microscope Type="Upright" /> before <Pixels Type="uint8">)
     const sizeCMatch = description.match(/SizeC="(\d+)"/);
     const sizeTMatch = description.match(/SizeT="(\d+)"/);
     const sizeZMatch = description.match(/SizeZ="(\d+)"/);
-    const typeMatch = description.match(/Type="(\w+)"/);
+    const typeMatch = description.match(/<Pixels[^>]*\bType="(\w+)"/);
 
     if (sizeCMatch) sizeC = parseInt(sizeCMatch[1]);
     if (sizeTMatch) sizeT = parseInt(sizeTMatch[1]);
     if (sizeZMatch) sizeZ = parseInt(sizeZMatch[1]);
     if (typeMatch) pixelType = typeMatch[1];
 
-    // Calculate image count from dimensions (much faster than getImageCount() which traverses all IFDs)
-    const imageCount = sizeC * sizeT * sizeZ;
+    // Detect interleaved RGB: when SamplesPerPixel > 1, all channels are
+    // packed into each IFD rather than stored as separate IFDs per channel.
+    const samplesPerPixel = firstImage.fileDirectory.SamplesPerPixel || 1;
+    const isInterleaved = samplesPerPixel > 1;
+
+    // For interleaved images, each IFD contains all channels, so the
+    // actual IFD count is sizeZ * sizeT (not sizeC * sizeZ * sizeT).
+    const imageCount = isInterleaved
+      ? sizeZ * sizeT
+      : sizeC * sizeT * sizeZ;
+
+    console.log('[ome-loader] Detected:', {
+      sizeC, sizeZ, sizeT, samplesPerPixel, isInterleaved, imageCount, pixelType
+    });
 
     // Pre-index all IFDs in background for fast random access later
     tiff.getImageCount();
@@ -75,7 +89,7 @@ export function useOmeLoader() {
     const shape = [sizeT, sizeC, sizeZ, height, width];
     const labels = ["t", "c", "z", "y", "x"];
 
-    // Create a custom loader that wraps geotiff with caching
+    // Create a custom loader that uses windowed reads (no full-image caching)
     const customLoader = {
       dtype,
       shape,
@@ -85,84 +99,80 @@ export function useOmeLoader() {
       _imageCount: imageCount,
       _sizeC: sizeC,
       _sizeZ: sizeZ,
-      // Cache for raster data: key is "t-c-z", value is the raster result
-      _rasterCache: new Map<
-        string,
-        { data: any; width: number; height: number }
-      >(),
-      _maxCacheSize: 10, // Keep last 10 slices in memory
+      _isInterleaved: isInterleaved,
 
-      _getCacheKey(selection: Record<string, number>): string {
+      _getIfdIndex(selection: Record<string, number>): number {
         const t = selection.t || 0;
         const c = selection.c || 0;
         const z = selection.z || 0;
-        return `${t}-${c}-${z}`;
+
+        let ifdIndex: number;
+        if (this._isInterleaved) {
+          // Interleaved: each IFD has all channels, index by z and t only
+          ifdIndex = t * this._sizeZ + z;
+        } else {
+          // Planar: separate IFD per channel (assuming XYZCT order)
+          ifdIndex = t * this._sizeC * this._sizeZ + c * this._sizeZ + z;
+        }
+        return Math.min(ifdIndex, this._imageCount - 1);
       },
 
       async getRaster({ selection }: { selection: Record<string, number> }) {
-        const cacheKey = this._getCacheKey(selection);
+        const ifdIndex = this._getIfdIndex(selection);
+        const image = await this._tiff.getImage(ifdIndex);
+        const imgWidth = image.getWidth();
+        const imgHeight = image.getHeight();
 
-        // Check cache first
-        if (this._rasterCache.has(cacheKey)) {
-          return this._rasterCache.get(cacheKey)!;
+        const MAX_PIXELS = 4096 * 4096;
+        const SAMPLE_SIZE = 512;
+        let rasters: any;
+        let outWidth: number;
+        let outHeight: number;
+
+        if (imgWidth * imgHeight > MAX_PIXELS) {
+          // Image too large to read in full — read a small center crop
+          // to satisfy Viv's initialization (contrast stats, dtype check)
+          const cx = Math.max(0, Math.floor((imgWidth - SAMPLE_SIZE) / 2));
+          const cy = Math.max(0, Math.floor((imgHeight - SAMPLE_SIZE) / 2));
+          const x1 = Math.min(cx + SAMPLE_SIZE, imgWidth);
+          const y1 = Math.min(cy + SAMPLE_SIZE, imgHeight);
+          rasters = await image.readRasters({ window: [cx, cy, x1, y1] });
+          outWidth = x1 - cx;
+          outHeight = y1 - cy;
+        } else {
+          rasters = await image.readRasters({ window: [0, 0, imgWidth, imgHeight] });
+          outWidth = imgWidth;
+          outHeight = imgHeight;
         }
 
-        const t = selection.t || 0;
         const c = selection.c || 0;
-        const z = selection.z || 0;
-        // Calculate IFD index based on dimension order (assuming XYZCT)
-        const ifdIndex = t * this._sizeC * this._sizeZ + c * this._sizeZ + z;
-        const image = await this._tiff.getImage(
-          Math.min(ifdIndex, this._imageCount - 1)
-        );
-        const raster = await image.readRasters();
-        const result = {
-          data: raster[0],
-          width: image.getWidth(),
-          height: image.getHeight(),
-        };
+        const data = this._isInterleaved
+          ? ((rasters as any)[c] || rasters[0])
+          : rasters[0];
 
-        // Add to cache, evicting oldest if necessary
-        if (this._rasterCache.size >= this._maxCacheSize) {
-          const firstKey = this._rasterCache.keys().next().value;
-          if (firstKey !== undefined) {
-            this._rasterCache.delete(firstKey);
-          }
-        }
-        this._rasterCache.set(cacheKey, result);
-
-        return result;
+        return { data, width: outWidth, height: outHeight };
       },
 
       async getTile({ x, y, selection }: any) {
-        // Get raster from cache or load it
-        const raster = await this.getRaster({ selection });
         const tileSize = this.tileSize;
+        const imgWidth = this.shape[this.labels.indexOf('x')];
+        const imgHeight = this.shape[this.labels.indexOf('y')];
+
         const x0 = x * tileSize;
         const y0 = y * tileSize;
-        const x1 = Math.min(x0 + tileSize, raster.width);
-        const y1 = Math.min(y0 + tileSize, raster.height);
-        const tileWidth = x1 - x0;
-        const tileHeight = y1 - y0;
+        const x1 = Math.min(x0 + tileSize, imgWidth);
+        const y1 = Math.min(y0 + tileSize, imgHeight);
 
-        // Extract tile data
-        const TypedArrayConstructor = raster.data.constructor as any;
-        const tileData = new TypedArrayConstructor(tileWidth * tileHeight);
-        for (let row = 0; row < tileHeight; row++) {
-          const srcOffset = (y0 + row) * raster.width + x0;
-          const dstOffset = row * tileWidth;
-          tileData.set(
-            raster.data.subarray(srcOffset, srcOffset + tileWidth),
-            dstOffset
-          );
-        }
+        const ifdIndex = this._getIfdIndex(selection);
+        const image = await this._tiff.getImage(ifdIndex);
+        const rasters = await image.readRasters({ window: [x0, y0, x1, y1] });
 
-        return { data: tileData, width: tileWidth, height: tileHeight };
-      },
+        const c = selection.c || 0;
+        const data = this._isInterleaved
+          ? ((rasters as any)[c] || rasters[0])
+          : rasters[0];
 
-      // Clear cache when no longer needed
-      clearCache() {
-        this._rasterCache.clear();
+        return { data, width: x1 - x0, height: y1 - y0 };
       },
 
       onTileError(err: Error) {

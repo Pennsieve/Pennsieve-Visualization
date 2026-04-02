@@ -53,7 +53,6 @@ export interface OmeDimensions {
 }
 
 export interface ViewerLayerProps {
-  isCustomLoader: boolean;
   contrastLimits: [number, number][];
   channelsVisible: boolean[];
   colors: [number, number, number][];
