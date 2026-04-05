@@ -32,7 +32,7 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
     "d3": "^7.9.0",
-    "dompurify": "^3.2.6",
+    "dompurify": "^3.3.2",
     "element-plus": "^2.3.0",
     "hyparquet": "^1.12.1",
     "marked": "^15.0.7",
