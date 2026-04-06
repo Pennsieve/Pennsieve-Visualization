@@ -49,6 +49,6 @@ export default defineConfig({
           a.name?.endsWith(".css") ? "style.css" : "assets/[name][extname]",
       },
     },
-    copyPublicDir: false,
+    copyPublicDir: false, // public dir still served by dev server
   },
 });

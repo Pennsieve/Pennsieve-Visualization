@@ -51,7 +51,7 @@ const hello = 'world';
         class="component-container bg-tertiary"
         style="height: 400px"
       >
-        <CSVViewer :src-url="csvUrl" />
+        <CSVViewerCore :url="csvBlobUrl" />
       </div>
     </section>
 
@@ -157,7 +157,7 @@ const hello = 'world';
 <script setup lang="ts">
 import { ref } from "vue";
 import {
-  CSVViewer,
+  CSVViewerCore,
   Markdown,
   TextViewer,
   DataExplorer,
@@ -206,13 +206,27 @@ const samplePlotlyLayout = ref({
   yaxis: { title: "Y Axis" },
 });
 
+// CSV dummy data as blob URL
+const csvDummyData = `ID,Name,Age,Email,Department,Salary,Start Date,Status
+1,Alice Johnson,32,alice.johnson@example.com,Engineering,95000,2021-03-15,Active
+2,Bob Smith,45,bob.smith@example.com,Marketing,78000,2019-07-22,Active
+3,Carol Davis,28,carol.davis@example.com,Engineering,88000,2022-01-10,Active
+4,David Wilson,38,david.wilson@example.com,Sales,72000,2020-11-03,On Leave
+5,Eva Martinez,31,eva.martinez@example.com,Engineering,92000,2021-06-18,Active
+6,Frank Brown,52,frank.brown@example.com,HR,85000,2017-02-28,Active
+7,Grace Lee,29,grace.lee@example.com,Marketing,71000,2022-09-01,Active
+8,Henry Taylor,41,henry.taylor@example.com,Engineering,105000,2018-04-12,Active
+9,Iris Chen,35,iris.chen@example.com,Sales,76000,2020-08-25,Active
+10,Jack Anderson,27,jack.anderson@example.com,Engineering,82000,2023-01-09,Active
+11,Karen White,44,karen.white@example.com,HR,90000,2016-11-30,Active
+12,Leo Harris,33,leo.harris@example.com,Marketing,74000,2021-05-14,On Leave
+13,Mia Clark,30,mia.clark@example.com,Engineering,91000,2022-03-07,Active
+14,Nathan Lewis,48,nathan.lewis@example.com,Sales,83000,2015-09-20,Active
+15,Olivia Walker,26,olivia.walker@example.com,Engineering,79000,2023-06-01,Active`;
+const csvBlobUrl = URL.createObjectURL(new Blob([csvDummyData], { type: "text/csv" }));
+
 // API configuration (update these for real data)
 const apiUrl = ref(
-  "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
-);
-
-// CSV sample URL (update for real CSV data)
-const csvUrl = ref(
   "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
 );
 
