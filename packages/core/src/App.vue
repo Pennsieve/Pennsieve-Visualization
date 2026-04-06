@@ -206,23 +206,26 @@ const samplePlotlyLayout = ref({
   yaxis: { title: "Y Axis" },
 });
 
-// CSV dummy data as blob URL
-const csvDummyData = `ID,Name,Age,Email,Department,Salary,Start Date,Status
-1,Alice Johnson,32,alice.johnson@example.com,Engineering,95000,2021-03-15,Active
-2,Bob Smith,45,bob.smith@example.com,Marketing,78000,2019-07-22,Active
-3,Carol Davis,28,carol.davis@example.com,Engineering,88000,2022-01-10,Active
-4,David Wilson,38,david.wilson@example.com,Sales,72000,2020-11-03,On Leave
-5,Eva Martinez,31,eva.martinez@example.com,Engineering,92000,2021-06-18,Active
-6,Frank Brown,52,frank.brown@example.com,HR,85000,2017-02-28,Active
-7,Grace Lee,29,grace.lee@example.com,Marketing,71000,2022-09-01,Active
-8,Henry Taylor,41,henry.taylor@example.com,Engineering,105000,2018-04-12,Active
-9,Iris Chen,35,iris.chen@example.com,Sales,76000,2020-08-25,Active
-10,Jack Anderson,27,jack.anderson@example.com,Engineering,82000,2023-01-09,Active
-11,Karen White,44,karen.white@example.com,HR,90000,2016-11-30,Active
-12,Leo Harris,33,leo.harris@example.com,Marketing,74000,2021-05-14,On Leave
-13,Mia Clark,30,mia.clark@example.com,Engineering,91000,2022-03-07,Active
-14,Nathan Lewis,48,nathan.lewis@example.com,Sales,83000,2015-09-20,Active
-15,Olivia Walker,26,olivia.walker@example.com,Engineering,79000,2023-06-01,Active`;
+// CSV dummy data — sample neuroscience experiment metadata
+const csvDummyData = `Subject_ID,Species,Sex,Age_Weeks,Genotype,Brain_Region,Electrode_Count,Sampling_Rate_Hz,Recording_Duration_Min,Spike_Count,Mean_Firing_Rate_Hz,Signal_SNR_dB,Condition,Date_Recorded,Notes
+DRG-001,Rat,M,12,Wild-Type,Dorsal Root Ganglion,32,30000,45,128450,4.76,18.3,Baseline,2024-09-12,Pre-stimulation recording
+DRG-002,Rat,F,14,Wild-Type,Dorsal Root Ganglion,32,30000,45,143200,5.31,21.1,Baseline,2024-09-12,Pre-stimulation recording
+DRG-003,Rat,M,12,Knockout,Dorsal Root Ganglion,32,30000,45,67300,2.49,15.7,Baseline,2024-09-14,Reduced spontaneous activity
+DRG-004,Rat,F,13,Knockout,Dorsal Root Ganglion,32,30000,45,72100,2.67,16.2,Baseline,2024-09-14,Reduced spontaneous activity
+DRG-005,Rat,M,12,Wild-Type,Dorsal Root Ganglion,64,30000,60,312500,5.21,22.4,Capsaicin 1uM,2024-09-18,Increased firing post-stimulus
+DRG-006,Rat,F,14,Wild-Type,Dorsal Root Ganglion,64,30000,60,298700,4.98,20.8,Capsaicin 1uM,2024-09-18,Increased firing post-stimulus
+DRG-007,Rat,M,12,Knockout,Dorsal Root Ganglion,64,30000,60,145600,2.43,14.9,Capsaicin 1uM,2024-09-20,Attenuated response vs WT
+DRG-008,Rat,F,13,Knockout,Dorsal Root Ganglion,64,30000,60,152300,2.54,15.3,Capsaicin 1uM,2024-09-20,Attenuated response vs WT
+DRG-009,Mouse,M,8,Wild-Type,Dorsal Root Ganglion,16,20000,30,84500,4.69,19.6,Baseline,2024-10-01,Control cohort
+DRG-010,Mouse,F,8,Wild-Type,Dorsal Root Ganglion,16,20000,30,91200,5.07,20.2,Baseline,2024-10-01,Control cohort
+DRG-011,Mouse,M,8,Transgenic-ChR2,Dorsal Root Ganglion,16,20000,30,67800,3.77,17.5,Optogenetic 5mW,2024-10-03,Blue light 470nm stimulation
+DRG-012,Mouse,F,8,Transgenic-ChR2,Dorsal Root Ganglion,16,20000,30,72400,4.02,18.1,Optogenetic 5mW,2024-10-03,Blue light 470nm stimulation
+DRG-013,Rat,M,16,Wild-Type,Dorsal Root Ganglion,64,30000,90,567800,6.31,24.5,Nerve Injury 7d,2024-10-10,SNI model - ipsilateral
+DRG-014,Rat,M,16,Wild-Type,Dorsal Root Ganglion,64,30000,90,198400,2.20,19.1,Nerve Injury 7d,2024-10-10,SNI model - contralateral control
+DRG-015,Rat,F,16,Wild-Type,Dorsal Root Ganglion,64,30000,90,542100,6.02,23.8,Nerve Injury 7d,2024-10-12,SNI model - ipsilateral
+DRG-016,Rat,F,16,Wild-Type,Dorsal Root Ganglion,64,30000,90,201700,2.24,18.7,Nerve Injury 7d,2024-10-12,SNI model - contralateral control
+DRG-017,Human,F,N/A,N/A,Dorsal Root Ganglion,128,40000,120,892300,7.44,28.3,Surgical Explant,2024-11-05,IRB #2024-0892 - L4/L5
+DRG-018,Human,M,N/A,N/A,Dorsal Root Ganglion,128,40000,120,764500,6.37,26.1,Surgical Explant,2024-11-08,IRB #2024-0892 - L5/S1`;
 const csvBlobUrl = URL.createObjectURL(new Blob([csvDummyData], { type: "text/csv" }));
 
 // API configuration (update these for real data)
