@@ -44,20 +44,8 @@ export const TextViewerLazy = defineAsyncComponent(
 export const NiiViewerLazy = defineAsyncComponent(
   () => import('./NiiViewer').then(m => m.NiiViewer)
 )
-// =============================================================================
-// Beta components - not part of public API, but available for testing
-// Import directly: import { ProportionPlot } from '@pennsieve-viz/core/src/proportion-plot'
-// Or use the lazy exports below
-// =============================================================================
-export const ProportionPlotBeta = defineAsyncComponent(
-  () => import('./proportion-plot').then(m => m.ProportionPlot)
-)
-
-export const AiPlotlyBeta = defineAsyncComponent(
-  () => import('./ai-plotly').then(m => m.AiPlotly)
-)
-
 // External packages (lazy-loaded) - these remain as separate packages
+// Plotly components moved to @pennsieve-viz/plot
 // export const TSViewer = defineAsyncComponent(
 //   () => import('@pennsieve-viz/tsviewer').then(m => m.TSViewer)
 // )

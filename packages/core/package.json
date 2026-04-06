@@ -1,6 +1,6 @@
 {
   "name": "@pennsieve-viz/core",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Pennsieve visualization component library for scientific data",
   "type": "module",
   "main": "./dist/pennsieve-viz.cjs.js",
@@ -13,7 +13,8 @@
       "require": "./dist/pennsieve-viz.cjs.js"
     },
     "./style.css": "./dist/style.css",
-    "./styles/theme.scss": "./src/styles/theme.scss"
+    "./styles/theme.scss": "./src/styles/theme.scss",
+    "./styles/viewer-theme.scss": "./src/styles/viewer-theme.scss"
   },
   "files": [
     "dist",
@@ -46,7 +47,6 @@
     "@pennsieve-viz/orthogonal": "^0.1.0",
     "@pennsieve-viz/tsviewer": "^1.0.0",
     "pinia": "^2.0.0 || ^3.0.0",
-    "plotly.js": "^2.35.0",
     "vue": "^3.2.0"
   },
   "peerDependenciesMeta": {
@@ -60,9 +60,6 @@
       "optional": true
     },
     "@pennsieve-viz/tsviewer": {
-      "optional": true
-    },
-    "plotly.js": {
       "optional": true
     }
   },
