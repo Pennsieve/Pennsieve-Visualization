@@ -50,9 +50,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, inject } from 'vue'
-import type { DuckDBStoreInterface } from '../duckdb'
-import { useGetToken } from '../composables/useGetToken'
-import { useViewerStyle, type ViewerStyleOverrides } from '../composables/useViewerStyle'
+import type { DuckDBStoreInterface } from '@pennsieve-viz/core'
+import { useGetToken } from '@pennsieve-viz/core'
+import { useViewerStyle, type ViewerStyleOverrides } from '@pennsieve-viz/core'
 
 const props = defineProps<{
   apiUrl?: string
@@ -284,7 +284,7 @@ onBeforeUnmount(async () => { if (connectionId.value) await duck.closeConnection
 </script>
 
 <style scoped lang="scss">
-@use "../styles/viewer-theme" as vt;
+@use "@pennsieve-viz/core/styles/viewer-theme.scss" as vt;
 
 .pp-container {
   @include vt.viewer-base;

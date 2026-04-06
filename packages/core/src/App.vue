@@ -36,15 +36,6 @@ const hello = 'world';
       </div>
     </section>
 
-    <!-- AiPlotly Component -->
-    <!-- <section class="component-section">
-      <h2 class="component-label">AiPlotly</h2>
-      <p class="component-path">@pennsieve-viz/ai-plotly</p>
-      <div class="component-container" style="height: 400px">
-        <AiPlotly :data="samplePlotlyData" :layout="samplePlotlyLayout" />
-      </div>
-    </section> -->
-
     <!-- CSVViewer Component -->
     <section class="component-section">
       <h2 class="component-label">&lt;CSVViewer /&gt;</h2>
@@ -81,19 +72,6 @@ const hello = 'world';
         style="height: 400px"
       >
         <UMAP instance-id="playground-umap" :src-url="apiUrl" />
-      </div>
-    </section>
-
-    <!-- ProportionPlot Component -->
-    <section class="component-section">
-      <h2 class="component-label">&lt;ProportionPlot /&gt;</h2>
-      <p class="component-path">@pennsieve-viz/core</p>
-      <p class="component-url">{{ apiUrl }}</p>
-      <div
-        class="component-container bg-tertiary"
-        style="height: 400px"
-      >
-        <ProportionPlot :src-url="apiUrl" xKey="category" yKey="value" />
       </div>
     </section>
 
@@ -200,7 +178,6 @@ import {
   TextViewer,
   DataExplorer,
   UMAP,
-  ProportionPlotBeta as ProportionPlot,
   EditIcon,
   OrthogonalFrame,
   NiiViewer,
@@ -218,31 +195,6 @@ The TextViewer component handles plain text files.
 Line 4
 Line 5
 Line 6`);
-
-// Sample data for AiPlotly
-const samplePlotlyData = ref([
-  {
-    x: [1, 2, 3, 4, 5],
-    y: [10, 15, 13, 17, 22],
-    type: "scatter",
-    mode: "lines+markers",
-    name: "Sample Data",
-    marker: { color: "blue" },
-  },
-  {
-    x: [1, 2, 3, 4, 5],
-    y: [12, 9, 15, 12, 18],
-    type: "bar",
-    name: "Bar Data",
-    marker: { color: "orange" },
-  },
-]);
-
-const samplePlotlyLayout = ref({
-  title: "Sample Plotly Chart",
-  xaxis: { title: "X Axis" },
-  yaxis: { title: "Y Axis" },
-});
 
 // CSV dummy data — sample neuroscience experiment metadata
 const csvDummyData = `Subject_ID,Species,Sex,Age_Weeks,Genotype,Brain_Region,Electrode_Count,Sampling_Rate_Hz,Recording_Duration_Min,Spike_Count,Mean_Firing_Rate_Hz,Signal_SNR_dB,Condition,Date_Recorded,Notes
