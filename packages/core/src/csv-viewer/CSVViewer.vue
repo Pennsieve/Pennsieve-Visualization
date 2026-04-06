@@ -59,12 +59,15 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useViewerStyle, type ViewerStyleOverrides } from "../composables/useViewerStyle";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   url: string
   rowsPerPage?: number
   autoLoad?: boolean
   customStyle?: ViewerStyleOverrides
-}>();
+}>(), {
+  autoLoad: true,
+  rowsPerPage: 25,
+});
 
 const { rootStyle } = useViewerStyle(() => props.customStyle);
 
@@ -73,7 +76,7 @@ const error = ref("");
 const columns = ref<string[]>([]);
 const rows = ref<Record<string, string>[]>([]);
 const currentPage = ref(1);
-const pageSize = ref(props.rowsPerPage ?? 25);
+const pageSize = ref(props.rowsPerPage);
 
 const paginatedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
@@ -133,6 +136,7 @@ function parseCSV(text: string): { columns: string[]; rows: Record<string, strin
 }
 
 const loadCSVFile = async () => {
+  console.log('[CSVViewer] loadCSVFile called, url:', props.url);
   if (!props.url) {
     error.value = "No URL provided";
     return;
@@ -143,17 +147,21 @@ const loadCSVFile = async () => {
     error.value = "";
 
     const response = await fetch(props.url);
+    console.log('[CSVViewer] fetch response:', response.status);
     if (!response.ok) {
       throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
     }
 
     const text = await response.text();
+    console.log('[CSVViewer] fetched text length:', text.length, 'first 200 chars:', text.substring(0, 200));
     const parsed = parseCSV(text);
+    console.log('[CSVViewer] parsed columns:', parsed.columns, 'rows:', parsed.rows.length);
 
     columns.value = parsed.columns;
     rows.value = parsed.rows;
     currentPage.value = 1;
   } catch (err: any) {
+    console.error('[CSVViewer] error:', err);
     error.value = `Failed to load file: ${err.message}`;
   } finally {
     isLoading.value = false;
@@ -183,8 +191,11 @@ watch(
 );
 
 onMounted(async () => {
-  if ((props.autoLoad ?? true) && props.url) {
+  console.log('[CSVViewer] mounted, url:', props.url, 'autoLoad:', props.autoLoad);
+  if (props.autoLoad && props.url) {
     await loadCSVFile();
+  } else {
+    console.log('[CSVViewer] skipped loading — autoLoad:', props.autoLoad, 'url:', props.url);
   }
 });
 </script>

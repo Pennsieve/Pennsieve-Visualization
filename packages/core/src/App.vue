@@ -54,7 +54,7 @@ const hello = 'world';
         class="component-container bg-tertiary"
         style="height: 400px"
       >
-        <CSVViewer :src-url="csvUrl" />
+        <CSVViewerCore :url="csvBlobUrl" />
       </div>
     </section>
 
@@ -195,7 +195,7 @@ const hello = 'world';
 <script setup lang="ts">
 import { ref } from "vue";
 import {
-  CSVViewer,
+  CSVViewerCore,
   Markdown,
   TextViewer,
   DataExplorer,
@@ -244,13 +244,30 @@ const samplePlotlyLayout = ref({
   yaxis: { title: "Y Axis" },
 });
 
+// CSV dummy data — sample neuroscience experiment metadata
+const csvDummyData = `Subject_ID,Species,Sex,Age_Weeks,Genotype,Brain_Region,Electrode_Count,Sampling_Rate_Hz,Recording_Duration_Min,Spike_Count,Mean_Firing_Rate_Hz,Signal_SNR_dB,Condition,Date_Recorded,Notes
+DRG-001,Rat,M,12,Wild-Type,Dorsal Root Ganglion,32,30000,45,128450,4.76,18.3,Baseline,2024-09-12,Pre-stimulation recording
+DRG-002,Rat,F,14,Wild-Type,Dorsal Root Ganglion,32,30000,45,143200,5.31,21.1,Baseline,2024-09-12,Pre-stimulation recording
+DRG-003,Rat,M,12,Knockout,Dorsal Root Ganglion,32,30000,45,67300,2.49,15.7,Baseline,2024-09-14,Reduced spontaneous activity
+DRG-004,Rat,F,13,Knockout,Dorsal Root Ganglion,32,30000,45,72100,2.67,16.2,Baseline,2024-09-14,Reduced spontaneous activity
+DRG-005,Rat,M,12,Wild-Type,Dorsal Root Ganglion,64,30000,60,312500,5.21,22.4,Capsaicin 1uM,2024-09-18,Increased firing post-stimulus
+DRG-006,Rat,F,14,Wild-Type,Dorsal Root Ganglion,64,30000,60,298700,4.98,20.8,Capsaicin 1uM,2024-09-18,Increased firing post-stimulus
+DRG-007,Rat,M,12,Knockout,Dorsal Root Ganglion,64,30000,60,145600,2.43,14.9,Capsaicin 1uM,2024-09-20,Attenuated response vs WT
+DRG-008,Rat,F,13,Knockout,Dorsal Root Ganglion,64,30000,60,152300,2.54,15.3,Capsaicin 1uM,2024-09-20,Attenuated response vs WT
+DRG-009,Mouse,M,8,Wild-Type,Dorsal Root Ganglion,16,20000,30,84500,4.69,19.6,Baseline,2024-10-01,Control cohort
+DRG-010,Mouse,F,8,Wild-Type,Dorsal Root Ganglion,16,20000,30,91200,5.07,20.2,Baseline,2024-10-01,Control cohort
+DRG-011,Mouse,M,8,Transgenic-ChR2,Dorsal Root Ganglion,16,20000,30,67800,3.77,17.5,Optogenetic 5mW,2024-10-03,Blue light 470nm stimulation
+DRG-012,Mouse,F,8,Transgenic-ChR2,Dorsal Root Ganglion,16,20000,30,72400,4.02,18.1,Optogenetic 5mW,2024-10-03,Blue light 470nm stimulation
+DRG-013,Rat,M,16,Wild-Type,Dorsal Root Ganglion,64,30000,90,567800,6.31,24.5,Nerve Injury 7d,2024-10-10,SNI model - ipsilateral
+DRG-014,Rat,M,16,Wild-Type,Dorsal Root Ganglion,64,30000,90,198400,2.20,19.1,Nerve Injury 7d,2024-10-10,SNI model - contralateral control
+DRG-015,Rat,F,16,Wild-Type,Dorsal Root Ganglion,64,30000,90,542100,6.02,23.8,Nerve Injury 7d,2024-10-12,SNI model - ipsilateral
+DRG-016,Rat,F,16,Wild-Type,Dorsal Root Ganglion,64,30000,90,201700,2.24,18.7,Nerve Injury 7d,2024-10-12,SNI model - contralateral control
+DRG-017,Human,F,N/A,N/A,Dorsal Root Ganglion,128,40000,120,892300,7.44,28.3,Surgical Explant,2024-11-05,IRB #2024-0892 - L4/L5
+DRG-018,Human,M,N/A,N/A,Dorsal Root Ganglion,128,40000,120,764500,6.37,26.1,Surgical Explant,2024-11-08,IRB #2024-0892 - L5/S1`;
+const csvBlobUrl = URL.createObjectURL(new Blob([csvDummyData], { type: "text/csv" }));
+
 // API configuration (update these for real data)
 const apiUrl = ref(
-  "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
-);
-
-// CSV sample URL (update for real CSV data)
-const csvUrl = ref(
   "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
 );
 
