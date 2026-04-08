@@ -19,12 +19,12 @@ def commitHash = sh(
 
 if (!changes.contains('packages/orthogonal/')) {
   echo "No changes under packages/orthogonal/. Skipping build."
-  currentBuild.result = 'NOT_BUILT'
+  currentBuild.result = 'SUCCESS'
   currentBuild.description = 'No orthogonal changes'
   return
 } else if (!isMain) {
   echo "Not a push to main. Skipping non-prod deploy of packages/orthogonal/ viewer."
-  currentBuild.result = 'NOT_BUILT'
+  currentBuild.result = 'SUCCESS'
   currentBuild.description = 'No non-prod deploy'
   return
 }
