@@ -6,10 +6,35 @@ A monorepo containing Vue 3 visualization components for the Pennsieve platform.
 
 | Package | Description |
 |---------|-------------|
-| [`@pennsieve-viz/core`](packages/core) | Main library — DataExplorer, UMAP, Markdown, TextViewer, NiiViewer, OrthogonalFrame, plus lazy re-exports of all viewer packages |
+| [`@pennsieve-viz/core`](packages/core) | Main library — DataExplorer, UMAP, CSVViewer, Markdown, TextViewer, NiiViewer, OrthogonalFrame |
+| [`@pennsieve-viz/plot`](packages/plot) | Plotly-based components — AiPlotly, ProportionPlot **(beta)** |
 | [`@pennsieve-viz/tsviewer`](packages/ts-viewer) | Timeseries data viewer and annotator |
-| [`@pennsieve-viz/micro-ct`](packages/micro-ct) | OME-TIFF / TIFF viewer components for microscopy data |
+| [`@pennsieve-viz/micro-ct`](packages/micro-ct) | OmeViewer (OME-TIFF, OME-Zarr), TiffViewer (plain TIFF) |
 | [`@pennsieve-viz/orthogonal`](packages/orthogonal) | Neuroglancer-based orthogonal viewer for OME-Zarr volumes |
+
+## Viewer → Format Reference
+
+| Format | Viewer | Package | Engine | Notes |
+|--------|--------|---------|--------|-------|
+| OME-Zarr (folder) | **OrthogonalFrame** | core (iframe → orthogonal) | Neuroglancer | 3D multi-panel orthogonal views. Viewport-based chunk streaming — handles arbitrarily large datasets. |
+| OME-Zarr (folder) | **OmeViewer** | micro-ct | Deck.gl + Viv | 2D tiled, multi-channel, Z/T stacks |
+| OME-Zarr (folder) | **NiiViewer** | core | NiiVue | Volume rendering. Loads entire volume into memory (capped by `zarrMaxVolumeSize^3`), so works for smaller neuroimaging OME-Zarrs but not large multi-resolution microscopy data. |
+| OME-TIFF | **OmeViewer** | micro-ct | Deck.gl + Viv | 2D tiled, multi-channel |
+| TIFF (tiled/multi-IFD) | **TiffViewer** | micro-ct | GeoTIFF | Pan/zoom, multi-channel. Works well with tiled TIFFs. |
+| TIFF (single IFD) | — | — | — | Too slow for TiffViewer (must decode entire image at once). Convert to zarr and use OmeViewer or OrthogonalFrame. |
+| NIfTI (.nii.gz) | **NiiViewer** | core | NiiVue | Multi-slice and 3D render |
+| CSV | **CSVViewer** | core | Pure Vue | Paginated table |
+| CSV, Parquet | **DataExplorer** | core | DuckDB | In-browser SQL, export |
+| CSV, Parquet | **UMAP** | core | DuckDB + WebGL | Interactive scatterplot |
+| Parquet | **AiPlotly** | plot (beta) | Plotly + DuckDB | AI-driven plot generation |
+| CSV, Parquet | **ProportionPlot** | plot (beta) | Plotly + DuckDB | Stacked bar charts |
+| Markdown | **Markdown** | core | marked.js | Edit/preview modes |
+| Plain text | **TextViewer** | core | Pure Vue | Line numbers, syntax types |
+| Time-series | **TSViewer** | ts-viewer | Canvas | WebSocket streaming, annotations |
+
+> **OmeOrthogonalViewer** (micro-ct) is deprecated — it does not handle multi-panel zarr data well. Use **OrthogonalFrame** (Neuroglancer) for orthogonal zarr viewing instead.
+>
+> **NiiViewer vs OrthogonalFrame for OME-Zarr:** NiiVue loads the full volume into GPU memory, which is fast for small-to-medium neuroimaging data (up to ~1GB). For large multi-resolution microscopy OME-Zarrs, Neuroglancer (via OrthogonalFrame) is required — it streams only the chunks visible at the current zoom/position.
 
 ## Folder Structure
 
@@ -18,16 +43,19 @@ pennsieve-visualization/
 ├── packages/
 │   ├── core/              # @pennsieve-viz/core
 │   │   └── src/
+│   │       ├── csv-viewer/
 │   │       ├── data-explorer/
 │   │       ├── umap/
 │   │       ├── markdown/
 │   │       ├── text-viewer/
-│   │       ├── ai-plotly/        # beta
-│   │       ├── proportion-plot/  # beta
 │   │       ├── NiiViewer/         # NIfTI viewer (Niivue) + useNiiSource composable
 │   │       ├── orthogonal/       # OrthogonalFrame (iframe wrapper)
 │   │       ├── duckdb/           # DuckDB interface types
 │   │       └── composables/
+│   ├── plot/              # @pennsieve-viz/plot (beta)
+│   │   └── src/
+│   │       ├── ai-plotly/
+│   │       └── proportion-plot/
 │   ├── orthogonal/        # @pennsieve-viz/orthogonal
 │   ├── ts-viewer/         # @pennsieve-viz/tsviewer
 │   └── micro-ct/          # @pennsieve-viz/micro-ct
@@ -225,11 +253,11 @@ import {
 </script>
 ```
 
-#### Beta components
+#### Beta components (from @pennsieve-viz/plot)
 
 ```vue
 <script setup>
-import { ProportionPlotBeta, AiPlotlyBeta } from '@pennsieve-viz/core'
+import { AiPlotly, ProportionPlot } from '@pennsieve-viz/plot'
 </script>
 ```
 
@@ -438,7 +466,9 @@ import { OmeViewer, TiffViewer } from '@pennsieve-viz/micro-ct'
 | `sourceType` | `'ome-zarr' \| 'ome-tiff'` | `'ome-zarr'` | Source format |
 | `instanceId` | `string` | `'default'` | Store instance ID for multi-viewer / side-panel support |
 
-Exports: `OmeViewer`, `OmeViewerControls`, `OmeOrthogonalViewer`, `TiffViewer`, `useOmeLoader`, `createViewerStore`, `clearViewerStore`, `useViewerControls`.
+Exports: `OmeViewer`, `OmeViewerControls`, `TiffViewer`, `useOmeLoader`, `createViewerStore`, `clearViewerStore`, `useViewerControls`.
+
+> **Note:** `OmeOrthogonalViewer` is deprecated and should not be used for new work. Use `OrthogonalFrame` (Neuroglancer via iframe) for orthogonal zarr viewing.
 
 ### Store API
 
