@@ -3,6 +3,7 @@
     <CSVViewer
       v-if="resolvedUrl"
       :url="resolvedUrl"
+      :delimiter="resolveDelimiter(fileType)"
       :rows-per-page="rowsPerPage"
       :custom-style="customStyle"
     />
@@ -21,10 +22,22 @@ const props = defineProps<{
   apiUrl?: string
   /** Provide a direct public URL (bypass Pennsieve API) */
   srcUrl?: string
+  /** File type string e.g. 'CSV', 'TSV' (case-insensitive) */
+  fileType?: string
   /** Rows per page for pagination */
   rowsPerPage?: number
   customStyle?: ViewerStyleOverrides
 }>()
+
+const FILE_TYPE_DELIMITERS: Record<string, string> = {
+  csv: ',',
+  tsv: '\t',
+}
+
+function resolveDelimiter(fileType?: string): string {
+  if (!fileType) return ','
+  return FILE_TYPE_DELIMITERS[fileType.toLowerCase()] ?? ','
+}
 
 const resolvedUrl = ref('')
 const viewAssets = ref<any[]>([])

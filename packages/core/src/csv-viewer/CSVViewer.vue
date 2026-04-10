@@ -61,10 +61,12 @@ import { useViewerStyle, type ViewerStyleOverrides } from "../composables/useVie
 
 const props = withDefaults(defineProps<{
   url: string
+  delimiter?: string
   rowsPerPage?: number
   autoLoad?: boolean
   customStyle?: ViewerStyleOverrides
 }>(), {
+  delimiter: ",",
   autoLoad: true,
   rowsPerPage: 25,
 });
@@ -83,7 +85,7 @@ const paginatedRows = computed(() => {
   return rows.value.slice(start, start + pageSize.value);
 });
 
-function parseCSV(text: string): { columns: string[]; rows: Record<string, string>[] } {
+function parseDelimitedText(text: string, delimiter: string): { columns: string[]; rows: Record<string, string>[] } {
   const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
   if (lines.length === 0) return { columns: [], rows: [] };
 
@@ -108,7 +110,7 @@ function parseCSV(text: string): { columns: string[]; rows: Record<string, strin
       } else {
         if (ch === '"') {
           inQuotes = true;
-        } else if (ch === ",") {
+        } else if (ch === delimiter) {
           fields.push(current.trim());
           current = "";
         } else {
@@ -154,7 +156,7 @@ const loadCSVFile = async () => {
 
     const text = await response.text();
     console.log('[CSVViewer] fetched text length:', text.length, 'first 200 chars:', text.substring(0, 200));
-    const parsed = parseCSV(text);
+    const parsed = parseDelimitedText(text, props.delimiter);
     console.log('[CSVViewer] parsed columns:', parsed.columns, 'rows:', parsed.rows.length);
 
     columns.value = parsed.columns;
