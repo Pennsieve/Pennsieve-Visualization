@@ -22,14 +22,23 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 
+interface CloudfrontCredentials {
+  policy: string
+  signature: string
+  key_pair_id: string
+}
+
 const props = withDefaults(defineProps<{
   source: string
   layout?: '4panel' | '3d' | 'xy' | 'xz' | 'yz'
   /** Base URL of the orthogonal embed server (defaults to same-origin /embed.html) */
   embedUrl?: string
+  /** CloudFront signing credentials — sent to the embedded viewer via postMessage */
+  cloudfront?: CloudfrontCredentials | null
 }>(), {
   layout: '4panel',
   embedUrl: '',
+  cloudfront: null,
 })
 
 const emit = defineEmits<{
@@ -49,8 +58,19 @@ const iframeSrc = computed(() => {
   return `${base}?${params.toString()}`
 })
 
+function sendCloudfrontParams() {
+  if (!props.cloudfront || !iframeRef.value?.contentWindow) return
+  const cf = props.cloudfront
+  const params = `Policy=${cf.policy}&Signature=${cf.signature}&Key-Pair-Id=${cf.key_pair_id}`
+  iframeRef.value.contentWindow.postMessage(
+    { type: 'set-cloudfront-params', payload: params },
+    '*'
+  )
+}
+
 function onIframeLoad() {
-  // iframe HTML loaded, but neuroglancer may still be initializing
+  // Send CloudFront params as soon as the iframe is ready to receive messages
+  sendCloudfrontParams()
 }
 
 function onMessage(event: MessageEvent) {
@@ -85,6 +105,10 @@ watch(() => props.layout, (newLayout) => {
     { type: 'set-layout', payload: newLayout },
     '*'
   )
+})
+
+watch(() => props.cloudfront, () => {
+  sendCloudfrontParams()
 })
 
 onMounted(() => {

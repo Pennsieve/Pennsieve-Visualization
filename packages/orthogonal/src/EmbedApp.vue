@@ -16,6 +16,34 @@ import type { LayoutMode } from './types'
 const source = ref('')
 const layout = ref<LayoutMode>('4panel')
 
+// ---- Service Worker for CloudFront signing ----
+let swReady: Promise<ServiceWorkerRegistration | null> = navigator.serviceWorker
+  ? navigator.serviceWorker.register('./sw.js').then((reg) => {
+      const sw = reg.active || reg.installing || reg.waiting
+      if (!sw) return reg
+      if (sw.state === 'activated') return reg
+      return new Promise<ServiceWorkerRegistration>((resolve) => {
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'activated') resolve(reg)
+        })
+      })
+    }).catch(() => null)
+  : Promise.resolve(null)
+
+function sendParamsToSW(params: string): Promise<void> {
+  return swReady.then((reg) => {
+    if (!reg?.active) return
+    return new Promise<void>((resolve) => {
+      const ch = new MessageChannel()
+      ch.port1.onmessage = () => resolve()
+      reg.active!.postMessage(
+        { type: 'set-cloudfront-params', params },
+        [ch.port2]
+      )
+    })
+  })
+}
+
 // Read initial source from URL params (set by parent iframe)
 onMounted(() => {
   const params = new URLSearchParams(window.location.search)
@@ -27,10 +55,13 @@ onMounted(() => {
 })
 
 // Listen for messages from parent window
-window.addEventListener('message', (event) => {
+window.addEventListener('message', async (event) => {
   const { type, payload } = event.data || {}
 
   switch (type) {
+    case 'set-cloudfront-params':
+      await sendParamsToSW(payload)
+      break
     case 'set-source':
       source.value = payload
       break
