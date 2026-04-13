@@ -19,8 +19,52 @@ const copyServiceWorker = () => ({
   },
 });
 
+// Dev-only: store CloudFront signing params in memory and provide
+// a same-origin proxy to assets.pennsieve.net, avoiding CORS issues.
+const assetProxy = () => ({
+  name: "asset-proxy",
+  configureServer(server: any) {
+    let cfParams = "";
+
+    // Receive signing params from EmbedApp via POST
+    server.middlewares.use("/cf-params", (req: any, res: any, next: any) => {
+      if (req.method === "POST") {
+        let body = "";
+        req.on("data", (chunk: string) => { body += chunk; });
+        req.on("end", () => {
+          cfParams = body;
+          res.writeHead(200);
+          res.end("ok");
+        });
+      } else {
+        next();
+      }
+    });
+
+    // Proxy /cf-proxy/path → https://assets.pennsieve.net/path?signing-params
+    server.middlewares.use("/cf-proxy", async (req: any, res: any, next: any) => {
+      const path = (req.url || "/").replace(/^\/cf-proxy/, "");
+      if (!path) return next();
+      const separator = path.includes("?") ? "&" : "?";
+      const target = `https://assets.pennsieve.net${path}${cfParams ? separator + cfParams : ""}`;
+      try {
+        const upstream = await fetch(target);
+        res.writeHead(upstream.status, {
+          "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
+          "Access-Control-Allow-Origin": "*",
+        });
+        const buffer = Buffer.from(await upstream.arrayBuffer());
+        res.end(buffer);
+      } catch (err: any) {
+        res.writeHead(502);
+        res.end(err.message);
+      }
+    });
+  },
+});
+
 export default defineConfig({
-  plugins: [vue(), copyServiceWorker()],
+  plugins: [vue(), copyServiceWorker(), assetProxy()],
   root: __dirname,
   resolve: {
     alias: {
