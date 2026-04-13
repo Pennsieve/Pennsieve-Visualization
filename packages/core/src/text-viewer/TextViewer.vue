@@ -17,6 +17,8 @@ const { rootStyle } = useViewerStyle(() => props.customStyle);
 const text = ref("");
 const loading = ref(false);
 const error = ref<string | null>(null);
+const copied = ref(false);
+let copiedTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 const localFileType = computed(() => props.fileType ?? "text");
 const localMaxHeight = computed(() => props.maxHeight ?? "600px");
@@ -77,8 +79,18 @@ async function fetchContent() {
   }
 }
 
-function copyToClipboard() {
-  navigator.clipboard.writeText(formattedContent.value);
+async function copyToClipboard() {
+  try {
+    await navigator.clipboard.writeText(formattedContent.value);
+    copied.value = true;
+    if (copiedTimeoutId) clearTimeout(copiedTimeoutId);
+    copiedTimeoutId = setTimeout(() => {
+      copied.value = false;
+      copiedTimeoutId = null;
+    }, 1500);
+  } catch {
+    error.value = "Failed to copy to clipboard";
+  }
 }
 
 watch(
@@ -142,8 +154,12 @@ watch(
           {{ fileStats.type }} | {{ fileStats.lines }} lines |
           {{ fileStats.characters }} characters
         </span>
-        <button @click="copyToClipboard" class="text-viewer__copy-button">
-          Copy to Clipboard
+        <button
+          @click="copyToClipboard"
+          class="text-viewer__copy-button"
+          :class="{ 'text-viewer__copy-button--copied': copied }"
+        >
+          {{ copied ? "Copied!" : "Copy to Clipboard" }}
         </button>
       </div>
     </template>
@@ -219,6 +235,12 @@ watch(
   @include vt.ps-btn-secondary;
   padding: var(--ps-space-xs) var(--ps-space-md);
   font-size: var(--ps-font-size-sm);
+}
+
+.text-viewer__copy-button--copied {
+  background-color: var(--ps-color-success);
+  border-color: var(--ps-color-success-dark);
+  color: #fff;
 }
 
 .text-viewer__loading,
