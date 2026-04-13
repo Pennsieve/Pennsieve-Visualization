@@ -237,6 +237,12 @@ watch(
   font-size: var(--ps-font-size-sm);
 }
 
+.text-viewer__copy-button--copied {
+  background-color: var(--ps-color-success);
+  border-color: var(--ps-color-success-dark);
+  color: #fff;
+}
+
 .text-viewer__loading,
 .text-viewer__error,
 .text-viewer__empty {
