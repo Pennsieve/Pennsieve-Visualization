@@ -124,7 +124,7 @@ onUnmounted(() => {
 .orthogonal-frame {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: inherit;
   overflow: hidden;
   background: #000;
 }
