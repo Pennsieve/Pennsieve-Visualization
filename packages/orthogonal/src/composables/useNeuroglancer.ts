@@ -137,7 +137,7 @@ export function useNeuroglancer() {
    * Fetch OME-Zarr metadata and build layer configs for each channel.
    * Falls back to a single grayscale layer if metadata is unavailable.
    */
-  async function fetchChannelMetadata(source: string) {
+  async function fetchChannelMetadata(source: string): Promise<{ layers: any[], isVolumetric: boolean }> {
     try {
       const [attrsRes, arrayRes] = await Promise.all([
         fetch(`${source}/.zattrs`),
@@ -145,6 +145,10 @@ export function useNeuroglancer() {
       ])
       const zattrs = await attrsRes.json()
       const omeroChannels = zattrs?.omero?.channels as OmeroChannel[] | undefined
+
+      // Check if the data has a Z axis (volumetric vs 2D)
+      const axes = zattrs?.multiscales?.[0]?.axes as Array<{ name: string; type?: string }> | undefined
+      const isVolumetric = axes ? axes.some(a => a.name === 'z') : false
 
       // Determine dtype for fallback range
       let dtypeRange: [number, number] = [0, 10000]
@@ -171,49 +175,58 @@ export function useNeuroglancer() {
       }
 
       if (omeroChannels && omeroChannels.length > 0) {
-        return omeroChannels.map((ch, i) => {
-          const colorHex = ch.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length].replace('#', '')
-          const rgb = hexToFloats(colorHex)
-          const range: [number, number] = ch.window
-            ? [ch.window.start ?? 0, ch.window.end ?? dtypeRange[1]]
-            : dtypeRange
+        return {
+          isVolumetric,
+          layers: omeroChannels.map((ch, i) => {
+            const colorHex = ch.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length].replace('#', '')
+            const rgb = hexToFloats(colorHex)
+            const range: [number, number] = ch.window
+              ? [ch.window.start ?? 0, ch.window.end ?? dtypeRange[1]]
+              : dtypeRange
 
-          return {
-            type: 'image',
-            source: `zarr://${source}`,
-            name: ch.label || `Channel ${i}`,
-            shader: buildColorShader(rgb),
-            shaderControls: { normalized: { range } },
-            visible: ch.active !== false,
-            ...volumeDefaults,
-            // Pin this layer to a specific channel index
-            localDimensions: { "c'": [1, ''] },
-            localPosition: [i],
-          }
-        })
+            return {
+              type: 'image',
+              source: `zarr://${source}`,
+              name: ch.label || `Channel ${i}`,
+              shader: buildColorShader(rgb),
+              shaderControls: { normalized: { range } },
+              visible: ch.active !== false,
+              ...volumeDefaults,
+              // Pin this layer to a specific channel index
+              localDimensions: { "c'": [1, ''] },
+              localPosition: [i],
+            }
+          }),
+        }
       }
 
       // No OMERO metadata — single grayscale layer
-      return [{
-        type: 'image',
-        source: `zarr://${source}`,
-        name: 'data',
-        shader: '#uicontrol invlerp normalized\nvoid main() { emitGrayscale(normalized()); }',
-        shaderControls: { normalized: { range: dtypeRange } },
-        ...volumeDefaults,
-      }]
+      return {
+        isVolumetric,
+        layers: [{
+          type: 'image',
+          source: `zarr://${source}`,
+          name: 'data',
+          shader: '#uicontrol invlerp normalized\nvoid main() { emitGrayscale(normalized()); }',
+          shaderControls: { normalized: { range: dtypeRange } },
+          ...volumeDefaults,
+        }],
+      }
     } catch {
       // Metadata fetch failed entirely — single grayscale layer with safe defaults
-      return [{
-        type: 'image',
-        source: `zarr://${source}`,
-        name: 'data',
-        shader: '#uicontrol invlerp normalized\nvoid main() { emitGrayscale(normalized()); }',
-        shaderControls: { normalized: { range: [0, 255] as [number, number] } },
-        volumeRendering: 'on',
-        volumeRenderingMode: 'min',
-        volumeRenderingGain: -5,
-      }]
+      return {
+        isVolumetric: false,
+        layers: [{
+          type: 'image',
+          source: `zarr://${source}`,
+          name: 'data',
+          shader: '#uicontrol invlerp normalized\nvoid main() { emitGrayscale(normalized()); }',
+          shaderControls: { normalized: { range: [0, 255] as [number, number] } },
+          volumeRendering: 'on',
+          volumeRenderingMode: 'min',
+          volumeRenderingGain: -5,
+        }],
+      }
     }
   }
 
@@ -245,10 +258,10 @@ export function useNeuroglancer() {
       viewer.value = v
 
       // Build per-channel layers from OME-Zarr metadata
-      const layers = await fetchChannelMetadata(source)
+      const { layers, isVolumetric } = await fetchChannelMetadata(source)
 
       const initialState: NeuroglancerStateJSON = {
-        layout: initialLayout,
+        layout: isVolumetric ? initialLayout : 'xy',
         layers,
       }
 
