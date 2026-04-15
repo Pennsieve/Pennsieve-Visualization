@@ -224,7 +224,7 @@ export function useNeuroglancer() {
             shader: buildRGBShader(),
             shaderControls: { normalized: { range: dtypeRange } },
             ...volumeDefaults,
-            localDimensions: { "c^": [3, ''] },
+            channelDimensions: { "c^": [1, ''] },
           }],
         }
       }
