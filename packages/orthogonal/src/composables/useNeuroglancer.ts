@@ -158,11 +158,12 @@ export function useNeuroglancer() {
       let zattrs: Record<string, any> | undefined
       let dtype = ''
 
+      const base = source.replace(/\/+$/, '')
       const [v2AttrsRes, v2ArrayRes, v3RootRes, v3ArrayRes] = await Promise.all([
-        fetch(`${source}/.zattrs`).catch(() => null),
-        fetch(`${source}/0/.zarray`).catch(() => null),
-        fetch(`${source}/zarr.json`).catch(() => null),
-        fetch(`${source}/0/zarr.json`).catch(() => null),
+        fetch(`${base}/.zattrs`).catch(() => null),
+        fetch(`${base}/0/.zarray`).catch(() => null),
+        fetch(`${base}/zarr.json`).catch(() => null),
+        fetch(`${base}/0/zarr.json`).catch(() => null),
       ])
 
       if (v2AttrsRes?.ok) {

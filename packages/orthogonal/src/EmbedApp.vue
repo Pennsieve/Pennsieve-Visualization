@@ -74,7 +74,8 @@ onMounted(() => {
   const lay = params.get('layout') as LayoutMode | null
   if (lay) pendingLayout = lay
 
-  // Viewer starts when set-cloudfront-params is received from parent
+  // If no CloudFront params arrive within 500ms, assume public data
+  setTimeout(() => startViewer(), 500)
 })
 
 // Listen for messages from parent window
