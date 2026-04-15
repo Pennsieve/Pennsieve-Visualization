@@ -44,6 +44,21 @@ function buildColorShader(rgb: [number, number, number]): string {
   ].join('\n')
 }
 
+/**
+ * Build a shader that composites 3 bundled channels as RGB.
+ */
+function buildRGBShader(): string {
+  return [
+    'void main() {',
+    '  emitRGB(vec3(',
+    '    toNormalized(getDataValue(0)),',
+    '    toNormalized(getDataValue(1)),',
+    '    toNormalized(getDataValue(2))',
+    '  ));',
+    '}',
+  ].join('\n')
+}
+
 
 /**
  * Composable that manages Neuroglancer viewer lifecycle and
@@ -168,10 +183,14 @@ export function useNeuroglancer() {
       }
 
       const omeroChannels = zattrs?.omero?.channels as OmeroChannel[] | undefined
+      const colorModel = zattrs?.omero?.rdefs?.model as string | undefined
 
       // Check if the data has a Z axis (volumetric vs 2D)
       const axes = zattrs?.multiscales?.[0]?.axes as Array<{ name: string; type?: string }> | undefined
       const isVolumetric = axes ? axes.some(a => a.name === 'z') : false
+
+      // Detect RGB: 3 channels with color model
+      const isRGB = colorModel === 'color' && omeroChannels?.length === 3
 
       // Determine dtype for fallback range
       let dtypeRange: [number, number] = [0, 10000]
@@ -195,8 +214,33 @@ export function useNeuroglancer() {
         volumeRenderingGain: -5,
       }
 
+      if (isRGB) {
+        // RGB brightfield: single layer with c^ channel dimension and RGB shader.
+        // Source transform overrides the OME-Zarr parser's default c' → c^.
+        const outputDimensions: Record<string, [number, string]> = { "c^": [1, ''] }
+        if (axes) {
+          for (const a of axes) {
+            if (a.type === 'space') outputDimensions[a.name] = [0.000001, 'm']
+          }
+        }
+        return {
+          isVolumetric,
+          layers: [{
+            type: 'image',
+            source: {
+              url: `zarr://${source}`,
+              transform: { outputDimensions },
+            },
+            name: 'RGB',
+            shader: buildRGBShader(),
+            channelDimensions: { "c^": [1, ''] },
+            ...(isVolumetric ? volumeDefaults : {}),
+          }],
+        }
+      }
+
       if (omeroChannels && omeroChannels.length > 0) {
-        // Multi-channel: one layer per channel, each pinned to a channel index
+        // Multi-channel (fluorescence): one layer per channel, each pinned to a channel index
         return {
           isVolumetric,
           layers: omeroChannels.map((ch, i) => {
