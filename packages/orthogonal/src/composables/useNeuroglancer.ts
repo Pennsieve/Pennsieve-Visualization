@@ -44,20 +44,6 @@ function buildColorShader(rgb: [number, number, number]): string {
   ].join('\n')
 }
 
-/**
- * Build a shader that composites 3 bundled channels as RGB.
- */
-function buildRGBShader(): string {
-  return [
-    'void main() {',
-    '  emitRGB(vec3(',
-    '    toNormalized(getDataValue(0)),',
-    '    toNormalized(getDataValue(1)),',
-    '    toNormalized(getDataValue(2))',
-    '  ));',
-    '}',
-  ].join('\n')
-}
 
 /**
  * Composable that manages Neuroglancer viewer lifecycle and
@@ -182,14 +168,10 @@ export function useNeuroglancer() {
       }
 
       const omeroChannels = zattrs?.omero?.channels as OmeroChannel[] | undefined
-      const colorModel = zattrs?.omero?.rdefs?.model as string | undefined
 
       // Check if the data has a Z axis (volumetric vs 2D)
       const axes = zattrs?.multiscales?.[0]?.axes as Array<{ name: string; type?: string }> | undefined
       const isVolumetric = axes ? axes.some(a => a.name === 'z') : false
-
-      // Detect RGB: 3 channels with color model
-      const isRGB = colorModel === 'color' && omeroChannels?.length === 3
 
       // Determine dtype for fallback range
       let dtypeRange: [number, number] = [0, 10000]
@@ -211,22 +193,6 @@ export function useNeuroglancer() {
         volumeRendering: 'on',
         volumeRenderingMode: 'min',
         volumeRenderingGain: -5,
-      }
-
-      if (isRGB) {
-        // RGB image: single layer with bundled channel dimension and RGB shader
-        return {
-          isVolumetric,
-          layers: [{
-            type: 'image',
-            source: `zarr://${source}`,
-            name: 'RGB',
-            shader: buildRGBShader(),
-            shaderControls: { normalized: { range: dtypeRange } },
-            ...volumeDefaults,
-            channelDimensions: { "c^": [1, ''] },
-          }],
-        }
       }
 
       if (omeroChannels && omeroChannels.length > 0) {
