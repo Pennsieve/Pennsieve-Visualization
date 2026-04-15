@@ -45,6 +45,21 @@ function buildColorShader(rgb: [number, number, number]): string {
 }
 
 /**
+ * Build a shader that composites 3 bundled channels as RGB.
+ */
+function buildRGBShader(): string {
+  return [
+    'void main() {',
+    '  emitRGB(vec3(',
+    '    toNormalized(getDataValue(0)),',
+    '    toNormalized(getDataValue(1)),',
+    '    toNormalized(getDataValue(2))',
+    '  ));',
+    '}',
+  ].join('\n')
+}
+
+/**
  * Composable that manages Neuroglancer viewer lifecycle and
  * bridges imperative viewer state to Vue reactivity via rAF polling.
  */
@@ -139,22 +154,45 @@ export function useNeuroglancer() {
    */
   async function fetchChannelMetadata(source: string): Promise<{ layers: any[], isVolumetric: boolean }> {
     try {
-      const [attrsRes, arrayRes] = await Promise.all([
-        fetch(`${source}/.zattrs`),
+      // Try Zarr v2 (.zattrs) first, fall back to Zarr v3 (zarr.json)
+      let zattrs: Record<string, any> | undefined
+      let dtype = ''
+
+      const [v2AttrsRes, v2ArrayRes, v3RootRes, v3ArrayRes] = await Promise.all([
+        fetch(`${source}/.zattrs`).catch(() => null),
         fetch(`${source}/0/.zarray`).catch(() => null),
+        fetch(`${source}/zarr.json`).catch(() => null),
+        fetch(`${source}/0/zarr.json`).catch(() => null),
       ])
-      const zattrs = await attrsRes.json()
+
+      if (v2AttrsRes?.ok) {
+        zattrs = await v2AttrsRes.json()
+      } else if (v3RootRes?.ok) {
+        const root = await v3RootRes.json()
+        zattrs = root?.attributes
+      }
+
+      if (v2ArrayRes?.ok) {
+        const zarray = await v2ArrayRes.json()
+        dtype = (zarray?.dtype as string) ?? ''
+      } else if (v3ArrayRes?.ok) {
+        const zarray = await v3ArrayRes.json()
+        dtype = (zarray?.data_type as string) ?? ''
+      }
+
       const omeroChannels = zattrs?.omero?.channels as OmeroChannel[] | undefined
+      const colorModel = zattrs?.omero?.rdefs?.model as string | undefined
 
       // Check if the data has a Z axis (volumetric vs 2D)
       const axes = zattrs?.multiscales?.[0]?.axes as Array<{ name: string; type?: string }> | undefined
       const isVolumetric = axes ? axes.some(a => a.name === 'z') : false
 
+      // Detect RGB: 3 channels with color model
+      const isRGB = colorModel === 'color' && omeroChannels?.length === 3
+
       // Determine dtype for fallback range
       let dtypeRange: [number, number] = [0, 10000]
-      if (arrayRes?.ok) {
-        const zarray = await arrayRes.json()
-        const dtype = (zarray?.dtype as string) ?? ''
+      if (dtype) {
         if (dtype.includes('u1') || dtype.includes('uint8')) {
           dtypeRange = [0, 255]
         } else if (dtype.includes('u2') || dtype.includes('uint16')) {
@@ -174,7 +212,24 @@ export function useNeuroglancer() {
         volumeRenderingGain: -5,
       }
 
+      if (isRGB) {
+        // RGB image: single layer with bundled channel dimension and RGB shader
+        return {
+          isVolumetric,
+          layers: [{
+            type: 'image',
+            source: `zarr://${source}`,
+            name: 'RGB',
+            shader: buildRGBShader(),
+            shaderControls: { normalized: { range: dtypeRange } },
+            ...volumeDefaults,
+            localDimensions: { "c^": [3, ''] },
+          }],
+        }
+      }
+
       if (omeroChannels && omeroChannels.length > 0) {
+        // Multi-channel: one layer per channel, each pinned to a channel index
         return {
           isVolumetric,
           layers: omeroChannels.map((ch, i) => {
@@ -192,7 +247,6 @@ export function useNeuroglancer() {
               shaderControls: { normalized: { range } },
               visible: ch.active !== false,
               ...volumeDefaults,
-              // Pin this layer to a specific channel index
               localDimensions: { "c'": [1, ''] },
               localPosition: [i],
             }
