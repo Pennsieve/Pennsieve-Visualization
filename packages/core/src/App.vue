@@ -224,7 +224,8 @@ const apiUrl = ref(
 );
 
 // OrthogonalViewer (Neuroglancer) — runs in iframe for full isolation
-const zarrSource = "https://pennsieve-dev-zarr-test-use1.s3.us-east-1.amazonaws.com/ddb6cb43-3749-4e9d-9c59-e2d4a8aa7f5a";
+// Served by scripts/serve-test-zarr.py (started automatically with `pnpm dev`)
+const zarrSource = "http://localhost:9090";
 //needs to be different port than current localhost
 const orthogonalEmbedUrl = "http://localhost:5173/embed.html";
 
