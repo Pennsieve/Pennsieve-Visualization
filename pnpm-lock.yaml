@@ -168,6 +168,10 @@ importers:
         version: 3.5.26(typescript@5.9.3)
 
   packages/orthogonal:
+    dependencies:
+      numcodecs:
+        specifier: ^0.3.2
+        version: 0.3.2
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: ^5.2.4

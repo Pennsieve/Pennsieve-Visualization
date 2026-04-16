@@ -110,7 +110,7 @@ const layoutModes = [
 <style scoped>
 .ortho-controls {
   position: absolute;
-  top: 12px;
+  top: 52px;
   left: 12px;
   display: flex;
   flex-direction: column;

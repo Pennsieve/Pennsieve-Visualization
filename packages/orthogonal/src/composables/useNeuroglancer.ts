@@ -150,10 +150,135 @@ export function useNeuroglancer() {
   }
 
   /**
+   * Fetch a zarr chunk, decompress with blosc, and return a typed array.
+   * Falls back to raw bytes if blosc import fails.
+   */
+  async function fetchAndDecodeChunk(
+    url: string,
+    dtype: string,
+  ): Promise<ArrayBufferView | null> {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) return null
+      const compressed = new Uint8Array(await res.arrayBuffer())
+
+      const { default: Blosc } = await import('numcodecs/blosc')
+      const codec = Blosc.fromConfig({ id: 'blosc' })
+      const decompressed: Uint8Array = await codec.decode(compressed)
+
+      if (dtype.includes('f4') || dtype.includes('float32')) {
+        return new Float32Array(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength / 4)
+      } else if (dtype.includes('u2') || dtype.includes('uint16')) {
+        return new Uint16Array(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength / 2)
+      } else if (dtype.includes('i2') || dtype.includes('int16')) {
+        return new Int16Array(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength / 2)
+      } else if (dtype.includes('u1') || dtype.includes('uint8')) {
+        return decompressed
+      }
+      // Default: treat as float32
+      return new Float32Array(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength / 4)
+    } catch (e) {
+      console.warn('[useNeuroglancer] chunk decode failed:', e)
+      return null
+    }
+  }
+
+  /**
+   * Fetch the smallest pyramid level's chunks and compute the 1-99% data range.
+   * Returns null if fetching/decoding fails.
+   */
+  async function fetchDataRange(
+    source: string,
+    dtype: string,
+    multiscales: any,
+  ): Promise<[number, number] | null> {
+    try {
+      const base = source.replace(/\/+$/, '')
+      const datasets = multiscales?.[0]?.datasets as Array<{ path: string }> | undefined
+      if (!datasets || datasets.length === 0) return null
+
+      // Use the smallest (last) pyramid level
+      const smallestPath = datasets[datasets.length - 1].path
+
+      // Fetch array metadata to get chunk layout
+      let arrayMeta: any = null
+      const v2Res = await fetch(`${base}/${smallestPath}/.zarray`).catch(() => null)
+      const v3Res = await fetch(`${base}/${smallestPath}/zarr.json`).catch(() => null)
+
+      if (v2Res?.ok) {
+        arrayMeta = await v2Res.json()
+      } else if (v3Res?.ok) {
+        arrayMeta = await v3Res.json()
+      }
+      if (!arrayMeta) return null
+
+      // Determine shape and chunk shape
+      const shape: number[] = arrayMeta.shape
+      const chunkShape: number[] = arrayMeta.chunks
+        ?? arrayMeta.chunk_grid?.configuration?.chunk_shape
+      if (!shape || !chunkShape) return null
+
+      // Determine chunk key separator
+      const separator = arrayMeta.chunk_key_encoding?.configuration?.separator
+        ?? (arrayMeta.dimension_separator || '/')
+
+      // Zarr v3 chunks live under "c/" prefix, v2 don't
+      const isV3 = arrayMeta.zarr_format === 3
+      const chunkPrefix = isV3 ? 'c/' : ''
+
+      // Compute number of chunks along each dimension
+      const numChunks = shape.map((s: number, i: number) => Math.ceil(s / chunkShape[i]))
+
+      // Fetch all chunks (smallest level should be small)
+      const allValues: number[] = []
+      const chunkUrls: string[] = []
+
+      function buildChunkUrls(dimIndex: number, indices: number[]) {
+        if (dimIndex === shape.length) {
+          chunkUrls.push(`${base}/${smallestPath}/${chunkPrefix}${indices.join(separator)}`)
+          return
+        }
+        for (let i = 0; i < numChunks[dimIndex]; i++) {
+          buildChunkUrls(dimIndex + 1, [...indices, i])
+        }
+      }
+      buildChunkUrls(0, [])
+
+      const chunkResults = await Promise.all(
+        chunkUrls.map(url => fetchAndDecodeChunk(url, dtype))
+      )
+
+      for (const chunk of chunkResults) {
+        if (chunk) {
+          const arr = chunk instanceof Float32Array ? chunk
+            : chunk instanceof Uint16Array ? chunk
+            : chunk instanceof Int16Array ? chunk
+            : chunk instanceof Uint8Array ? chunk
+            : new Float32Array((chunk as any).buffer)
+          for (let i = 0; i < arr.length; i++) {
+            if (Number.isFinite(arr[i])) allValues.push(arr[i])
+          }
+        }
+      }
+
+      if (allValues.length === 0) return null
+
+      allValues.sort((a, b) => a - b)
+      const p01 = allValues[Math.floor(allValues.length * 0.01)]
+      const p99 = allValues[Math.ceil(allValues.length * 0.99) - 1]
+      console.log(`[useNeuroglancer] computed data range from ${allValues.length} values: [${p01}, ${p99}]`)
+      return [p01, p99]
+    } catch (e) {
+      console.warn('[useNeuroglancer] fetchDataRange failed:', e)
+      return null
+    }
+  }
+
+  /**
    * Fetch OME-Zarr metadata and build layer configs for each channel.
    * Falls back to a single grayscale layer if metadata is unavailable.
    */
-  async function fetchChannelMetadata(source: string): Promise<{ layers: any[], isVolumetric: boolean }> {
+  async function fetchChannelMetadata(source: string): Promise<{ layers: any[], isVolumetric: boolean, dataRange: [number, number] | null }> {
     try {
       // Try Zarr v2 (.zattrs) first, fall back to Zarr v3 (zarr.json)
       let zattrs: Record<string, any> | undefined
@@ -186,11 +311,15 @@ export function useNeuroglancer() {
       const colorModel = zattrs?.omero?.rdefs?.model as string | undefined
 
       // Check if the data has a Z axis (volumetric vs 2D)
-      const axes = zattrs?.multiscales?.[0]?.axes as Array<{ name: string; type?: string }> | undefined
+      const multiscales = zattrs?.multiscales
+      const axes = multiscales?.[0]?.axes as Array<{ name: string; type?: string }> | undefined
       const isVolumetric = axes ? axes.some(a => a.name === 'z') : false
 
       // Detect RGB: 3 channels with color model
       const isRGB = colorModel === 'color' && omeroChannels?.length === 3
+
+      // Compute actual data range from smallest pyramid level
+      const dataRange = await fetchDataRange(source, dtype, multiscales)
 
       // Determine dtype for fallback range
       let dtypeRange: [number, number] = [0, 10000]
@@ -206,6 +335,9 @@ export function useNeuroglancer() {
           dtypeRange = [0, 1]
         }
       }
+
+      // Use computed range if available, otherwise fall back to dtype range
+      const displayRange: [number, number] = dataRange ?? dtypeRange
 
       // Common volume rendering defaults
       const volumeDefaults = {
@@ -224,6 +356,7 @@ export function useNeuroglancer() {
           }
         }
         return {
+          dataRange,
           isVolumetric,
           layers: [{
             type: 'image',
@@ -242,13 +375,14 @@ export function useNeuroglancer() {
       if (omeroChannels && omeroChannels.length > 0) {
         // Multi-channel (fluorescence): one layer per channel, each pinned to a channel index
         return {
+          dataRange,
           isVolumetric,
           layers: omeroChannels.map((ch, i) => {
             const colorHex = ch.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length].replace('#', '')
             const rgb = hexToFloats(colorHex)
             const range: [number, number] = ch.window
-              ? [ch.window.start ?? 0, ch.window.end ?? dtypeRange[1]]
-              : dtypeRange
+              ? [ch.window.start ?? 0, ch.window.end ?? displayRange[1]]
+              : displayRange
 
             return {
               type: 'image',
@@ -267,19 +401,21 @@ export function useNeuroglancer() {
 
       // No OMERO metadata — single grayscale layer
       return {
+        dataRange,
         isVolumetric,
         layers: [{
           type: 'image',
           source: `zarr://${source}`,
           name: 'data',
           shader: '#uicontrol invlerp normalized\nvoid main() { emitGrayscale(normalized()); }',
-          shaderControls: { normalized: { range: dtypeRange } },
+          shaderControls: { normalized: { range: displayRange } },
           ...volumeDefaults,
         }],
       }
     } catch {
       // Metadata fetch failed entirely — single grayscale layer with safe defaults
       return {
+        dataRange: null,
         isVolumetric: false,
         layers: [{
           type: 'image',
@@ -293,6 +429,44 @@ export function useNeuroglancer() {
         }],
       }
     }
+  }
+
+  /**
+   * Apply a computed data range to all invlerp shader controls on the viewer.
+   * Polls briefly because layers may not be fully initialized right after restoreState.
+   */
+  function applyDataRange(v: any, range: [number, number]) {
+    let attempts = 0
+    const maxAttempts = 20
+    const intervalMs = 300
+
+    const tryApply = () => {
+      const managedLayers = v.layerManager?.managedLayers
+      if (!managedLayers || managedLayers.length === 0) {
+        if (++attempts < maxAttempts) setTimeout(tryApply, intervalMs)
+        return
+      }
+
+      let allReady = true
+      for (const ml of managedLayers) {
+        const layer = ml.layer
+        if (!layer?.shaderControlState) { allReady = false; continue }
+        const state = layer.shaderControlState.state
+        if (!state || state.size === 0) { allReady = false; continue }
+        for (const [, entry] of state) {
+          const trackable = entry.trackable
+          if (trackable?.value && 'range' in trackable.value) {
+            trackable.value = { ...trackable.value, range, window: range }
+          }
+        }
+      }
+
+      if (!allReady && ++attempts < maxAttempts) {
+        setTimeout(tryApply, intervalMs)
+      }
+    }
+
+    setTimeout(tryApply, intervalMs)
   }
 
   /**
@@ -323,7 +497,7 @@ export function useNeuroglancer() {
       viewer.value = v
 
       // Build per-channel layers from OME-Zarr metadata
-      const { layers, isVolumetric } = await fetchChannelMetadata(source)
+      const { layers, isVolumetric, dataRange } = await fetchChannelMetadata(source)
 
       const initialState: NeuroglancerStateJSON = {
         layout: isVolumetric ? initialLayout : 'xy',
@@ -331,6 +505,12 @@ export function useNeuroglancer() {
       }
 
       v.state.restoreState(initialState)
+
+      // If we computed a data range from the actual zarr data, apply it
+      // to each layer's invlerp control after restoreState
+      if (dataRange) {
+        applyDataRange(v, dataRange)
+      }
 
       isLoading.value = false
       startPolling()

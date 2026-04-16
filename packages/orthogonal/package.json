@@ -43,5 +43,8 @@
     "type": "git",
     "url": "https://github.com/Pennsieve/pennsieve-visualization.git",
     "directory": "packages/orthogonal"
+  },
+  "dependencies": {
+    "numcodecs": "^0.3.2"
   }
 }
