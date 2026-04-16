@@ -54,6 +54,8 @@ ansiColor('xterm') {
           error("Please specify a COMMIT_HASH")
         }
 
+        currentBuild.description = "commit: ${env.COMMIT_HASH}"
+
         echo "********************************************************"
         echo ""
         echo " Deploying ${env.COMMIT_HASH} to ${env.ENVIRONMENT} "
