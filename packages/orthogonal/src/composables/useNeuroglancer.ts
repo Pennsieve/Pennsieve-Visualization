@@ -264,8 +264,8 @@ export function useNeuroglancer() {
       if (allValues.length === 0) return null
 
       allValues.sort((a, b) => a - b)
-      const p01 = allValues[Math.floor(allValues.length * 0.01)]
-      const p99 = allValues[Math.ceil(allValues.length * 0.99) - 1]
+      const p01 = allValues[0]
+      const p99 = allValues[allValues.length - 1]
       console.log(`[useNeuroglancer] computed data range from ${allValues.length} values: [${p01}, ${p99}]`)
       return [p01, p99]
     } catch (e) {

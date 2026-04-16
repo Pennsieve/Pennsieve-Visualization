@@ -1,0 +1,45 @@
+{
+  "attributes": {
+    "multiscales": [
+      {
+        "version": "0.4",
+        "name": "test_outputs",
+        "axes": [
+          {
+            "name": "x",
+            "type": "space",
+            "unit": "millimeter"
+          },
+          {
+            "name": "y",
+            "type": "space",
+            "unit": "millimeter"
+          },
+          {
+            "name": "z",
+            "type": "space",
+            "unit": "millimeter"
+          }
+        ],
+        "datasets": [
+          {
+            "path": "0",
+            "coordinateTransformations": [
+              {
+                "type": "scale",
+                "scale": [
+                  4.0,
+                  4.0,
+                  4.0
+                ]
+              }
+            ]
+          }
+        ],
+        "type": "downscale_local_mean"
+      }
+    ]
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}
