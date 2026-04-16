@@ -59,6 +59,7 @@ function buildRGBShader(): string {
   ].join('\n')
 }
 
+
 /**
  * Composable that manages Neuroglancer viewer lifecycle and
  * bridges imperative viewer state to Vue reactivity via rAF polling.
@@ -214,23 +215,32 @@ export function useNeuroglancer() {
       }
 
       if (isRGB) {
-        // RGB image: single layer with bundled channel dimension and RGB shader
+        // RGB brightfield: single layer with c^ channel dimension and RGB shader.
+        // Source transform overrides the OME-Zarr parser's default c' → c^.
+        const outputDimensions: Record<string, [number, string]> = { "c^": [1, ''] }
+        if (axes) {
+          for (const a of axes) {
+            if (a.type === 'space') outputDimensions[a.name] = [0.000001, 'm']
+          }
+        }
         return {
           isVolumetric,
           layers: [{
             type: 'image',
-            source: `zarr://${source}`,
+            source: {
+              url: `zarr://${source}`,
+              transform: { outputDimensions },
+            },
             name: 'RGB',
             shader: buildRGBShader(),
-            shaderControls: { normalized: { range: dtypeRange } },
-            ...volumeDefaults,
-            localDimensions: { "c^": [3, ''] },
+            channelDimensions: { "c^": [1, ''] },
+            ...(isVolumetric ? volumeDefaults : {}),
           }],
         }
       }
 
       if (omeroChannels && omeroChannels.length > 0) {
-        // Multi-channel: one layer per channel, each pinned to a channel index
+        // Multi-channel (fluorescence): one layer per channel, each pinned to a channel index
         return {
           isVolumetric,
           layers: omeroChannels.map((ch, i) => {
