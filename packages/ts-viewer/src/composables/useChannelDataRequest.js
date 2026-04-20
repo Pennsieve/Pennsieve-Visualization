@@ -3,7 +3,7 @@ export const useChannelDataRequest = () => {
   const openConnection = async (timeseriesDiscoverApi, packageId, userToken) => {
 
     const myConnectionPromise = new Promise((resolve, reject) => {
-      const url = timeseriesDiscoverApi + '?session=' + userToken + '&package=' + packageId
+      const url = timeseriesDiscoverApi + '?session=' + userToken + '&viewerAsset=' + packageId
       let response = null
 
       const ws = new WebSocket(url)

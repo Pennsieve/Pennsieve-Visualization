@@ -158,7 +158,7 @@ export const useWebSocket = () => {
         connectionPromise = new Promise(async (resolve, reject) => {
             try {
                 const token = userToken || await useToken()
-                const url = timeseriesDiscoverApi + '?session=' + token + '&package=' + packageId
+                const url = timeseriesDiscoverApi + '?session=' + token + '&viewerAsset=' + packageId
 
                 const ws = new WebSocket(url)
                 websocket.value = ws
