@@ -80,7 +80,11 @@ export const useWebSocket = () => {
     let onErrorHandler = null
 
     let clearChannelsCallback = null
-    let packageId = null
+    // `activeId` holds whichever ID type the caller provided — a viewer-asset
+    // UUID or a package node ID. `idParamName` tracks which it is so the
+    // WebSocket URL uses the matching query param.
+    let activeId = null
+    let idParamName = 'viewerAsset'
 
     // Configuration - can be set from outside
     let useMedian = false
@@ -128,7 +132,7 @@ export const useWebSocket = () => {
     }
 
     // ✅ FIX: Improved openWebsocket function
-    const openWebsocket = async (timeseriesDiscoverApi, pkgId, userToken) => {
+    const openWebsocket = async (timeseriesDiscoverApi, id, userToken, paramName = 'viewerAsset') => {
         // If there's already a connection in progress, wait for it
         if (connectionPromise) {
             await connectionPromise
@@ -149,7 +153,8 @@ export const useWebSocket = () => {
             }
         }
 
-        packageId = pkgId
+        activeId = id
+        idParamName = paramName
 
         // ✅ FIX: Reset initWebsocket flag for new connections
         initWebsocket.value = true
@@ -158,7 +163,7 @@ export const useWebSocket = () => {
         connectionPromise = new Promise(async (resolve, reject) => {
             try {
                 const token = userToken || await useToken()
-                const url = timeseriesDiscoverApi + '?session=' + token + '&viewerAsset=' + packageId
+                const url = timeseriesDiscoverApi + '?session=' + token + '&' + idParamName + '=' + activeId
 
                 const ws = new WebSocket(url)
                 websocket.value = ws
@@ -213,8 +218,8 @@ export const useWebSocket = () => {
             }
 
             // Clear montage
-            if (packageId) {
-                const payload = { montage: 'NOT_MONTAGED', packageId: packageId }
+            if (activeId) {
+                const payload = { montage: 'NOT_MONTAGED', packageId: activeId }
                 websocket.value.send(JSON.stringify(payload))
             }
             initWebsocket.value = false
@@ -411,10 +416,10 @@ export const useWebSocket = () => {
         let payload
         switch (montageScheme) {
             case "NOT_MONTAGED":
-                payload = { montage: "NOT_MONTAGED", packageId: packageId }
+                payload = { montage: "NOT_MONTAGED", packageId: activeId }
                 break
             default:
-                payload = { montage: "CUSTOM_MONTAGE", packageId: packageId, montageMap: montageScheme }
+                payload = { montage: "CUSTOM_MONTAGE", packageId: activeId, montageMap: montageScheme }
         }
         send(payload)
     }
@@ -452,7 +457,7 @@ export const useWebSocket = () => {
 
     // Configuration setters
     const setClearChannelsCallback = (callback) => { clearChannelsCallback = callback }
-    const setPackageId = (id) => { packageId = id }
+    const setActiveId = (id) => { activeId = id }
     const setUseMedian = (value) => { useMedian = value }
 
     return {
@@ -465,7 +470,7 @@ export const useWebSocket = () => {
         sendDumpBufferRequest,
         disconnect,
         setClearChannelsCallback,
-        setPackageId,
+        setActiveId,
         setUseMedian,
         onSegment,
         onEvent,

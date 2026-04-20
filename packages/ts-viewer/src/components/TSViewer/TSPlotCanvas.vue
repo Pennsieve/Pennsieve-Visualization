@@ -691,6 +691,7 @@ const initPlotCanvas = async () => {
         viewerStore.config.timeseriesDiscoverApi,
         activeViewer.value.content.id,
         userToken,
+        activeViewer.value.content.idType || 'viewerAsset',
       )
 
       // Only start monitoring after successful connection
