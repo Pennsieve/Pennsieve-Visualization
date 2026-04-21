@@ -142,12 +142,17 @@ export function createViewerStore(instanceId = 'default') {
     }
 
     const fetchAndSetActiveViewer = async (data) => {
-      const id = data.packageId;
+      // Prefer viewer asset UUID; fall back to package node ID. The resulting
+      // WebSocket uses `?viewerAsset=` or `?package=` accordingly.
+      const viewerAssetId = data.viewerAssetId || null;
+      const packageId = data.packageId || null;
+      const id = viewerAssetId || packageId;
+      const idType = viewerAssetId ? 'viewerAsset' : 'package';
       const token = await useToken();
       let urlSegment = config.timeseriesDiscoverApi
       let channelData = null;
-      channelData = await openConnection(urlSegment, id, token)
-      setActiveViewer({channels: channelData.res, content : { id: id}})
+      channelData = await openConnection(urlSegment, id, token, idType)
+      setActiveViewer({channels: channelData.res, content : { id, idType }})
     }
 
     const isTSFileProcessed = () => {
