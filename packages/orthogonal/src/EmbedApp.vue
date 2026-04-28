@@ -22,22 +22,29 @@ const isDev = import.meta.env.DEV
 let swReady: Promise<ServiceWorkerRegistration | null> = !isDev && navigator.serviceWorker
   ? navigator.serviceWorker.register('./sw.js').then((reg) => {
       const sw = reg.active || reg.installing || reg.waiting
+      console.log('[EmbedApp] SW registered, state:', sw?.state, 'active:', !!reg.active)
       if (!sw) return reg
       if (sw.state === 'activated') return reg
       return new Promise<ServiceWorkerRegistration>((resolve) => {
         sw.addEventListener('statechange', () => {
+          console.log('[EmbedApp] SW state changed to:', sw.state)
           if (sw.state === 'activated') resolve(reg)
         })
       })
-    }).catch(() => null)
+    }).catch((err) => { console.error('[EmbedApp] SW registration failed:', err); return null })
   : Promise.resolve(null)
 
 function sendParamsToSW(params: string): Promise<void> {
+  console.log('[EmbedApp] sendParamsToSW called, params length:', params?.length)
   return swReady.then((reg) => {
+    console.log('[EmbedApp] swReady resolved, reg?.active:', !!reg?.active)
     if (!reg?.active) return
     return new Promise<void>((resolve) => {
       const ch = new MessageChannel()
-      ch.port1.onmessage = () => resolve()
+      ch.port1.onmessage = () => {
+        console.log('[EmbedApp] SW acknowledged params')
+        resolve()
+      }
       reg.active!.postMessage(
         { type: 'set-cloudfront-params', params },
         [ch.port2]
@@ -75,12 +82,18 @@ onMounted(() => {
   if (lay) pendingLayout = lay
 
   // If no CloudFront params arrive within 500ms, assume public data
-  setTimeout(() => startViewer(), 500)
+  console.log('[EmbedApp] mounted, pendingSource:', pendingSource?.substring(0, 60))
+  setTimeout(() => {
+    console.log('[EmbedApp] 500ms timeout fired, started:', started)
+    startViewer()
+  }, 500)
 })
 
 // Listen for messages from parent window
 window.addEventListener('message', async (event) => {
   const { type, payload } = event.data || {}
+
+  if (type) console.log('[EmbedApp] received message:', type, type === 'set-cloudfront-params' ? `(payload length: ${payload?.length})` : '')
 
   switch (type) {
     case 'set-cloudfront-params':
@@ -91,6 +104,7 @@ window.addEventListener('message', async (event) => {
         // Production: send params to service worker
         await sendParamsToSW(payload)
       }
+      console.log('[EmbedApp] params sent to SW, calling startViewer, started:', started)
       startViewer()
       break
     case 'set-source':
