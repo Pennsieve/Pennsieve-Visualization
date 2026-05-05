@@ -65,9 +65,6 @@ importers:
       '@element-plus/icons-vue':
         specifier: ^2.3.1
         version: 2.3.1(vue@3.5.26(typescript@5.9.3))
-      '@niivue/niivue':
-        specifier: ^0.68.1
-        version: 0.68.1
       d3:
         specifier: ^7.9.0
         version: 7.9.0
@@ -135,6 +132,9 @@ importers:
       '@luma.gl/webgl':
         specifier: '>=9.1.0'
         version: 9.1.10(@luma.gl/core@9.1.10)
+      '@niivue/niivue':
+        specifier: ^0.68.1
+        version: 0.68.1
       '@vivjs/extensions':
         specifier: ^0.18.0
         version: 0.18.2(@deck.gl/core@9.1.15)
@@ -5082,7 +5082,7 @@ packages:
 
   uuid@3.4.0:
     resolution: {integrity: sha512-HjSDRw6gZE5JMggctHBcjVak08+KEVhSIiDzFnT9S9aegmp85S/bReBVTb4QTFaRNptJ9kuYaNhnbNEOkbKb/A==}
-    deprecated: Please upgrade  to version 7 or higher.  Older versions may use Math.random() in certain circumstances, which is known to be problematic.  See https://v8.dev/blog/math-random for details.
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   uuid@9.0.1:

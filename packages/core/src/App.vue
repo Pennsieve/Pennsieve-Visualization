@@ -133,7 +133,7 @@ const hello = 'world';
     <!-- NiiViewer Component (direct .nii.gz) -->
     <section class="component-section">
       <h2 class="component-label">&lt;NiiViewer /&gt; (.nii.gz)</h2>
-      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-path">@pennsieve-viz/micro-ct</p>
       <p class="component-url">{{ niiUrl }}</p>
       <div
         class="component-container bg-dark"
@@ -146,7 +146,7 @@ const hello = 'world';
     <!-- NiiViewer Component (OME-Zarr - SciVis) -->
     <section class="component-section">
       <h2 class="component-label">&lt;NiiViewer /&gt; (OME-Zarr SciVis)</h2>
-      <p class="component-path">@pennsieve-viz/core</p>
+      <p class="component-path">@pennsieve-viz/micro-ct</p>
       <p class="component-url">{{ niiZarrUrl }}</p>
       <div
         class="component-container bg-dark"
@@ -180,10 +180,9 @@ import {
   UMAP,
   EditIcon,
   OrthogonalFrame,
-  NiiViewer,
 } from "./index";
 import { TSViewer } from "@pennsieve-viz/tsviewer";
-import { OmeViewer, TiffViewer } from "@pennsieve-viz/micro-ct";
+import { OmeViewer, TiffViewer, NiiViewer } from "@pennsieve-viz/micro-ct";
 import "@pennsieve-viz/micro-ct/style.css";
 import "@pennsieve-viz/tsviewer/style.css";
 

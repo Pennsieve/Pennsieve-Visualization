@@ -21,5 +21,9 @@ export { useViewerControls } from "./composables/useViewerControls";
 // Utilities
 export * from "./components/ome/OrthogonalPixelSource";
 
+// NIfTI viewer
+export { NiiViewer } from "./components/nii"
+export { useNiiSource } from "./components/nii"
+
 // Types
 export * from "./components/ome/types";
