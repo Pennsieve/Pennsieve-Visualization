@@ -1,6 +1,6 @@
 {
   "name": "@pennsieve-viz/micro-ct",
-  "version": "1.0.71",
+  "version": "1.0.72",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -43,7 +43,8 @@
       "@vivjs/layers": "^0.18.0",
       "@vivjs/loaders": "^0.18.0",
       "@vivjs/views": "^0.18.0",
-      "geotiff": "^2.1.0"
+      "geotiff": "^2.1.0",
+      "@niivue/niivue": "^0.68.1"
     },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.4",

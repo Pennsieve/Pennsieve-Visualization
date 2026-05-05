@@ -19,7 +19,7 @@ export * from './data-explorer'
 export * from './umap'
 export * from './markdown'
 export * from './text-viewer'
-export * from './NiiViewer'
+// NiiViewer moved to @pennsieve-viz/micro-ct
 
 // Lazy-loaded component exports for tree-shaking (internal components)
 export const CSVViewerLazy = defineAsyncComponent(
@@ -40,9 +40,6 @@ export const MarkdownLazy = defineAsyncComponent(
 
 export const TextViewerLazy = defineAsyncComponent(
   () => import('./text-viewer').then(m => m.TextViewer)
-)
-export const NiiViewerLazy = defineAsyncComponent(
-  () => import('./NiiViewer').then(m => m.NiiViewer)
 )
 // External packages (lazy-loaded) - these remain as separate packages
 // Plotly components moved to @pennsieve-viz/plot

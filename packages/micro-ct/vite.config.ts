@@ -23,6 +23,7 @@ export default defineConfig({
         /^@deck\.gl\/.*/,
         /^@luma\.gl\/.*/,
         /^@vivjs\/.*/,
+        /^@niivue\/.*/,
       ],
       output: {
         exports: "named",
