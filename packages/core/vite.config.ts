@@ -33,6 +33,8 @@ export default defineConfig({
       external: [
         "vue",
         "pinia",
+        "element-plus",
+        "@element-plus/icons-vue",
         "@aws-amplify/auth",
         "@pennsieve-viz/tsviewer",
         "@pennsieve-viz/micro-ct",

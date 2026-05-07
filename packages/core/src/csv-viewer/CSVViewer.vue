@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
+import { ElPagination } from "element-plus";
 import { useViewerStyle, type ViewerStyleOverrides } from "../composables/useViewerStyle";
 
 const props = withDefaults(defineProps<{
