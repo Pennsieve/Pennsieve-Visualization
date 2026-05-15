@@ -151,7 +151,7 @@ export function createViewerStore(instanceId = 'default') {
       const token = await useToken();
       let urlSegment = config.timeseriesDiscoverApi
       let channelData = null;
-      channelData = await openConnection(urlSegment, id, token, idType)
+      channelData = await openConnection(urlSegment, id, token, idType, viewerAssetId ? packageId : null)
       setActiveViewer({channels: channelData.res, content : { id, idType }})
     }
 
