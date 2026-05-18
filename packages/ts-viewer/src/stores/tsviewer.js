@@ -152,7 +152,9 @@ export function createViewerStore(instanceId = 'default') {
       let urlSegment = config.timeseriesDiscoverApi
       let channelData = null;
       channelData = await openConnection(urlSegment, id, token, idType, viewerAssetId ? packageId : null)
-      setActiveViewer({channels: channelData.res, content : { id, idType }})
+      // content.id should always be packageId for API calls (e.g. /timeseries/{id}/layers)
+      const contentId = packageId || id;
+      setActiveViewer({channels: channelData.res, content : { id: contentId, idType }})
     }
 
     const isTSFileProcessed = () => {
