@@ -686,12 +686,17 @@ const initPlotCanvas = async () => {
 
   if (activeViewer.value?.content?.id) {
     try {
-      // Make sure this waits for the connection to complete
+      // Use viewerAssetId for the WebSocket ID when available, fall back to content.id (packageId)
+      const wsId = activeViewer.value.content.viewerAssetId || activeViewer.value.content.id
+      const wsIdType = activeViewer.value.content.viewerAssetId ? 'viewerAsset' : (activeViewer.value.content.idType || 'viewerAsset')
+      // Pass packageId separately so discover streaming gets both params
+      const wsPackageId = activeViewer.value.content.viewerAssetId ? activeViewer.value.content.id : null
       await openWebsocket(
         viewerStore.config.timeseriesDiscoverApi,
-        activeViewer.value.content.id,
+        wsId,
         userToken,
-        activeViewer.value.content.idType || 'viewerAsset',
+        wsIdType,
+        wsPackageId,
       )
 
       // Only start monitoring after successful connection
