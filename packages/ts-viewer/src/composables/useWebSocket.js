@@ -84,6 +84,7 @@ export const useWebSocket = () => {
     // UUID or a package node ID. `idParamName` tracks which it is so the
     // WebSocket URL uses the matching query param.
     let activeId = null
+    let activePackageId = null
     let idParamName = 'viewerAsset'
 
     // Configuration - can be set from outside
@@ -132,7 +133,7 @@ export const useWebSocket = () => {
     }
 
     // ✅ FIX: Improved openWebsocket function
-    const openWebsocket = async (timeseriesDiscoverApi, id, userToken, paramName = 'viewerAsset') => {
+    const openWebsocket = async (timeseriesDiscoverApi, id, userToken, paramName = 'viewerAsset', packageId = null) => {
         // If there's already a connection in progress, wait for it
         if (connectionPromise) {
             await connectionPromise
@@ -154,6 +155,7 @@ export const useWebSocket = () => {
         }
 
         activeId = id
+        activePackageId = packageId
         idParamName = paramName
 
         // ✅ FIX: Reset initWebsocket flag for new connections
@@ -163,7 +165,10 @@ export const useWebSocket = () => {
         connectionPromise = new Promise(async (resolve, reject) => {
             try {
                 const token = userToken || await useToken()
-                const url = timeseriesDiscoverApi + '?session=' + token + '&' + idParamName + '=' + activeId
+                let url = timeseriesDiscoverApi + '?session=' + token + '&' + idParamName + '=' + activeId
+                if (activePackageId && idParamName !== 'package') {
+                    url += '&package=' + activePackageId
+                }
 
                 const ws = new WebSocket(url)
                 websocket.value = ws
@@ -219,7 +224,7 @@ export const useWebSocket = () => {
 
             // Clear montage
             if (activeId) {
-                const payload = { montage: 'NOT_MONTAGED', packageId: activeId }
+                const payload = { montage: 'NOT_MONTAGED', packageId: activePackageId || activeId }
                 websocket.value.send(JSON.stringify(payload))
             }
             initWebsocket.value = false
@@ -416,10 +421,10 @@ export const useWebSocket = () => {
         let payload
         switch (montageScheme) {
             case "NOT_MONTAGED":
-                payload = { montage: "NOT_MONTAGED", packageId: activeId }
+                payload = { montage: "NOT_MONTAGED", packageId: activePackageId || activeId }
                 break
             default:
-                payload = { montage: "CUSTOM_MONTAGE", packageId: activeId, montageMap: montageScheme }
+                payload = { montage: "CUSTOM_MONTAGE", packageId: activePackageId || activeId, montageMap: montageScheme }
         }
         send(payload)
     }
