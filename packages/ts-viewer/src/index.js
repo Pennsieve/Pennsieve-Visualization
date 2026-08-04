@@ -8,6 +8,11 @@ import {
   useViewerStore  // Deprecated - kept for backwards compatibility
 } from './stores/tsviewer';
 import { useViewerControls } from './composables/useViewerControls';
+import {
+  TIMESERIES_ZARR,
+  TIMESERIES_WEBSOCKET,
+  isZarrAssetType
+} from './composables/streaming/assetTypes';
 
 // Primary exports for multi-instance support
 export {
@@ -19,6 +24,10 @@ export {
   // Deprecated - use createViewerStore instead
   useViewerStore
 };
+
+// Viewer-asset vocabulary, so the host app matches on the same literals this viewer does
+// rather than duplicating them.
+export { TIMESERIES_ZARR, TIMESERIES_WEBSOCKET, isZarrAssetType };
 
 export default {
   install(app) {

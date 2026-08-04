@@ -37,6 +37,8 @@ import { ref, computed, watch, onMounted, nextTick, inject } from 'vue'
 import { createViewerStore } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
+import { getClient } from "@/composables/streaming/clientRegistry"
+import { isZarrAssetType } from "@/composables/streaming/assetTypes"
 import { map } from 'ramda'
 
 // Props
@@ -345,8 +347,8 @@ const initSegmentSpans = () => {
     return
   }
 
-  if (!viewerStore.config?.timeSeriesApi) {
-    console.warn('TSScrubber: Cannot init segment spans - no timeSeriesApi configured')
+  if (!viewerStore.config?.timeSeriesApi && !isZarrSource()) {
+    console.warn('TSScrubber: Cannot init segment spans - no timeSeriesApi configured and no Zarr bundle')
     return
   }
 
@@ -362,11 +364,67 @@ const initSegmentSpans = () => {
   }
 }
 
+/**
+ * Whether this package's data comes from a Zarr bundle. Read from the active viewer rather
+ * than config because the asset type describes the package, and re-evaluated per call so a
+ * package switch is picked up without remounting the scrubber.
+ */
+const isZarrSource = () => isZarrAssetType(props.activeViewer?.content?.assetType)
+
+/** Legacy availability lookup: one REST call per channel per page of the recording. */
+const _requestSegmentSpanFromApi = async (channel, start, end) => {
+  const token = await useToken()
+  const url = `${viewerStore.config.timeSeriesApi}/ts/retrieve/segments?session=${token}&channel=${channel}&start=${start}&end=${end}`
+  return await useSendXhr(url)
+}
+
+/**
+ * Availability spans read straight from the bundle's coarsest pyramid level.
+ *
+ * Returns the same `Array<[startUs, endUs]>` the REST endpoint yields, so the bitmap fill and
+ * span walk below are shared by both paths. Returns null when there is nothing to ask for:
+ * unit channels have no pyramid and make `dataSpans` throw, and the client is absent if the
+ * scrubber runs before the plot canvas has opened the bundle.
+ *
+ * `gapThresholdUs` is one cell of the scrubber's own 5000-cell bitmap: a gap narrower than a
+ * cell cannot be drawn, so coalescing at that width matches what is actually rendered.
+ */
+const _requestSegmentSpanFromBundle = async (channel, channelIdx, start, end) => {
+  const entry = getClient(viewerStore.$id)
+  if (!entry) {
+    console.warn('TSScrubber: streaming client not ready, skipping segment spans')
+    return null
+  }
+
+  const chConfig = viewerStore.viewerChannels[channelIdx]
+  if (chConfig?.type === 'UNIT') {
+    return null
+  }
+
+  // A montaged channel id is `${leadId}_${label}`; availability follows the lead channel.
+  let bundleChannel = channel
+  const label = chConfig?.label
+  if (label && label.includes('<->') && channel.endsWith(`_${label}`)) {
+    bundleChannel = channel.slice(0, -(label.length + 1))
+  }
+
+  const span = props.ts_end - props.ts_start
+  const gapThresholdUs = Math.max(1, Math.floor(span / 5000))
+
+  return await entry.client.dataSpans({
+    channel: bundleChannel,
+    startUs: start,
+    endUs: end,
+    gapThresholdUs
+  })
+}
+
 const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
   const max_recursion = props.constants['MAXRECURSION']
 
   // Validate inputs before making API call
-  if (!viewerStore.config?.timeSeriesApi) {
+  const useBundle = isZarrSource()
+  if (!useBundle && !viewerStore.config?.timeSeriesApi) {
     console.warn('TSScrubber: Cannot request segment span - no timeSeriesApi configured')
     return
   }
@@ -377,10 +435,13 @@ const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
   }
 
   try {
-    const token = await useToken()
-    const url = `${viewerStore.config.timeSeriesApi}/ts/retrieve/segments?session=${token}&channel=${channel}&start=${start}&end=${end}`
+    const resp = useBundle
+      ? await _requestSegmentSpanFromBundle(channel, channelIdx, start, end)
+      : await _requestSegmentSpanFromApi(channel, start, end)
 
-    const resp = await useSendXhr(url)
+    if (resp === null) {
+      return
+    }
 
     // Validate that we still have the same channels (user might have switched packages)
     if (!viewerStore.viewerChannels[channelIdx] || viewerStore.viewerChannels[channelIdx].id !== channel) {

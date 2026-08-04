@@ -26,7 +26,8 @@
 import { computed, watch, onMounted, onUnmounted, reactive, ref, nextTick, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore } from '../../stores/tsviewer'
-import { useWebSocket } from '@/composables/useWebSocket'
+import { useTimeseriesTransport } from '@/composables/useTimeseriesTransport'
+import { isZarrAssetType } from '@/composables/streaming/assetTypes'
 import { useCanvasRenderer } from '@/composables/useCanvasRenderer'
 import { useTimeSeriesData } from '@/composables/useTimeSeriesData'
 import { useDataRequests } from '@/composables/useDataRequests'
@@ -61,7 +62,18 @@ const {
   workspaceMontages,
 } = storeToRefs(viewerStore)
 
-// Initialize composables
+// The viewer asset's type picks the data path: a Zarr bundle is read directly in the
+// browser, everything else streams over the discovery WebSocket.
+const isZarrSource = () => isZarrAssetType(props.activeViewer?.content?.assetType)
+
+// The token only ever travels in the request's `session` field, which the Zarr path ignores.
+// Asking Amplify for one would reject outright for a public or locally served bundle, so
+// this is re-evaluated per call rather than captured.
+const resolveUserToken = () => (isZarrSource() ? Promise.resolve(null) : useToken())
+
+// Both transports are held open and dispatched per call, so a package switch that crosses
+// asset types is picked up without remounting this component -- which matters because the
+// unmount below calls resetViewer().
 const {
   websocket,
     connectionStatus,
@@ -75,7 +87,7 @@ const {
     onEvent,
     onChannelDetails,
     onError
-} = useWebSocket()
+} = useTimeseriesTransport(isZarrSource)
 
 const {
   plotCanvasRef,
@@ -431,9 +443,7 @@ const generateAndProcessRequests = async () => {
   lastRequestStart.value = props.start
   lastRequestDuration.value = props.duration
 
-
-
-  const userToken = await useToken()
+  const userToken = await resolveUserToken()
 
   if (requests.asyncRequests.length > 0) {
     // console.log('📤 Making requests with currentRequestedSamplePeriod:', currentRequestedSamplePeriod)
@@ -664,7 +674,7 @@ const initPlotCanvas = async () => {
     }
   })
 
-  const userToken = await useToken()
+  const userToken = await resolveUserToken()
 
   // Initialize prefetch function - create a wrapper that captures current values
   initializePrefetch(

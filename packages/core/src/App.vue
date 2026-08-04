@@ -79,12 +79,21 @@ const hello = 'world';
     <section class="component-section">
       <h2 class="component-label">&lt;TSViewer /&gt;</h2>
       <p class="component-path">@pennsieve-viz/tsviewer</p>
-      <p class="component-url">no data source (websocket-based)</p>
+      <p class="component-url">
+        <label>
+          <input
+            v-model="tsUseZarr"
+            type="checkbox"
+          >
+          Zarr bundle
+        </label>
+        {{ tsUseZarr ? tsBundleUrl : "legacy websocket (nothing serves it locally, renders empty)" }}
+      </p>
       <div
         class="component-container bg-tertiary"
         style="height: 500px"
       >
-        <TSViewer />
+        <TSViewer :instance-id="TS_INSTANCE" />
       </div>
     </section>
 
@@ -171,7 +180,7 @@ const hello = 'world';
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch, onMounted } from "vue";
 import {
   CSVViewerCore,
   Markdown,
@@ -181,7 +190,12 @@ import {
   EditIcon,
   OrthogonalFrame,
 } from "./index";
-import { TSViewer } from "@pennsieve-viz/tsviewer";
+import {
+  TSViewer,
+  createViewerStore,
+  TIMESERIES_ZARR,
+  TIMESERIES_WEBSOCKET,
+} from "@pennsieve-viz/tsviewer";
 import { OmeViewer, TiffViewer, NiiViewer } from "@pennsieve-viz/micro-ct";
 import "@pennsieve-viz/micro-ct/style.css";
 import "@pennsieve-viz/tsviewer/style.css";
@@ -221,6 +235,38 @@ const csvBlobUrl = URL.createObjectURL(new Blob([csvDummyData], { type: "text/cs
 const apiUrl = ref(
   "https://temp-precision-dashboard-data.s3.us-east-1.amazonaws.com/precision_human_drg_data.parquet"
 );
+
+// TSViewer — timeseries Zarr bundle, served by scripts/serve-timeseries-zarr.mjs on :9091
+// (started automatically with `pnpm dev`). Note this is a DIFFERENT fixture and a different
+// port from the imaging OME-Zarr on :9090; see test-data/README.md.
+const TS_INSTANCE = "playground-ts";
+const tsBundleUrl = "http://localhost:9091";
+const tsUseZarr = ref(true);
+
+const configureTsViewer = async () => {
+  const store = createViewerStore(TS_INSTANCE);
+  if (!tsUseZarr.value) {
+    // Legacy websocket path: a viewer asset of the pre-existing 'timeseries' type. Nothing
+    // serves it locally, so the viewer stays empty; the toggle exists to prove the asset
+    // type is what routes, and that the fallback still routes.
+    await store.fetchAndSetActiveViewer({
+      packageId: "local-sample-bundle",
+      assetType: TIMESERIES_WEBSOCKET,
+    });
+    return;
+  }
+  await store.fetchAndSetActiveViewer({
+    packageId: "local-sample-bundle",
+    assetType: TIMESERIES_ZARR,
+    url: tsBundleUrl,
+  });
+};
+
+onMounted(configureTsViewer);
+
+// No remount needed: the canvas holds both transports and dispatches on the asset type, so
+// flipping this toggle switches a live viewer without rebuilding it.
+watch(tsUseZarr, configureTsViewer);
 
 // OrthogonalViewer (Neuroglancer) — runs in iframe for full isolation
 // Served by scripts/serve-test-zarr.py (started automatically with `pnpm dev`)
