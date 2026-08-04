@@ -4,6 +4,8 @@ import { ref, computed, reactive } from 'vue'
 import { propEq, findIndex } from 'ramda'
 import { useToken } from '@/composables/useToken'
 import { useChannelDataRequest } from '@/composables/useChannelDataRequest';
+import { acquireClient, ensureCatalog, disposeClient } from '@/composables/streaming/clientRegistry'
+import { isZarrAssetType } from '@/composables/streaming/assetTypes'
 
 // Store instance cache - maps instanceId to store instance
 const storeInstances = new Map()
@@ -141,6 +143,23 @@ export function createViewerStore(instanceId = 'default') {
         Object.assign(config, newConfig)
     }
 
+    /**
+     * Activates a package.
+     *
+     * `assetType` is the raw `asset_type` of the package's viewer asset, forwarded by the
+     * host app, and it is what selects the data path: `timeseries-zarr` reads the bundle at
+     * `url` directly in the browser, anything else (including the pre-existing `timeseries`)
+     * goes to the streaming WebSocket. It travels here rather than through `setViewerConfig`
+     * because it describes THIS package -- config is merged with Object.assign and never
+     * drops keys, so a url left over from a Zarr package would misroute the next one.
+     *
+     * @param {object} data
+     * @param {string} [data.packageId] Package node id.
+     * @param {string} [data.viewerAssetId] Viewer-asset UUID; unchanged legacy meaning.
+     * @param {string} [data.assetType] Raw viewer-asset `asset_type`.
+     * @param {string} [data.url] Bundle root URL, signed or not. Zarr path only.
+     * @param {() => Promise<string|{url: string}>} [data.onUrlExpired] Renews a signed url.
+     */
     const fetchAndSetActiveViewer = async (data) => {
       // Prefer viewer asset UUID; fall back to package node ID. The resulting
       // WebSocket uses `?viewerAsset=` or `?package=` accordingly.
@@ -148,14 +167,45 @@ export function createViewerStore(instanceId = 'default') {
       const packageId = data.packageId || null;
       const id = viewerAssetId || packageId;
       const idType = viewerAssetId ? 'viewerAsset' : 'package';
+      const assetType = data.assetType || null;
+      const url = data.url || null;
+      // content.id = packageId for API calls (e.g. /timeseries/{id}/layers)
+      // content.viewerAssetId = asset UUID for the data-streaming WebSocket
+      const contentId = packageId || id;
+      // onUrlExpired is carried through so the plot canvas can rebuild the client after a
+      // remount without the host having to re-activate the package. Vue does not proxy
+      // function values, so it survives reactive state unchanged.
+      const content = {
+        id: contentId, viewerAssetId, idType, assetType, url,
+        onUrlExpired: data.onUrlExpired || null
+      };
+
+      // Zarr bundle path. The bundle describes its own channels, so this skips both the
+      // discovery WebSocket and the Amplify token -- neither is available for a public or
+      // locally served bundle. viewerAssetId keeps its existing meaning and is still
+      // carried on `content` for the fallback path.
+      if (isZarrAssetType(assetType)) {
+        if (!url) {
+          throw new Error(`A "${assetType}" viewer asset requires a bundle url`)
+        }
+        const entry = await acquireClient(`tsviewer-${instanceId}`, url, {
+          onUrlExpired: data.onUrlExpired
+        })
+        const catalogIndex = await ensureCatalog(entry)
+        setActiveViewer({ channels: catalogIndex.details, content })
+        return
+      }
+
+      // Activating a non-bundle package is the moment any previously opened bundle becomes
+      // unreachable, so its client is released here rather than lingering until the whole
+      // viewer store is torn down.
+      disposeClient(`tsviewer-${instanceId}`)
+
       const token = await useToken();
       let urlSegment = config.timeseriesDiscoverApi
       let channelData = null;
       channelData = await openConnection(urlSegment, id, token, idType, viewerAssetId ? packageId : null)
-      // content.id = packageId for API calls (e.g. /timeseries/{id}/layers)
-      // content.viewerAssetId = asset UUID for the data-streaming WebSocket
-      const contentId = packageId || id;
-      setActiveViewer({channels: channelData.res, content : { id: contentId, viewerAssetId, idType }})
+      setActiveViewer({ channels: channelData.res, content })
     }
 
     const isTSFileProcessed = () => {
@@ -430,6 +480,10 @@ export function clearViewerStore(instanceId) {
         store.resetViewer()
         storeInstances.delete(instanceId)
     }
+    // Tearing down the store is the point at which a Zarr client can no longer be reached,
+    // so this is where it is disposed; a plain disconnect keeps it, so that reconnecting to
+    // the same bundle reuses the already-loaded catalog.
+    disposeClient(`tsviewer-${instanceId}`)
 }
 
 /**
@@ -439,6 +493,7 @@ export function clearAllViewerStores() {
     storeInstances.forEach((useStore, instanceId) => {
         const store = useStore()
         store.resetViewer()
+        disposeClient(`tsviewer-${instanceId}`)
     })
     storeInstances.clear()
 }

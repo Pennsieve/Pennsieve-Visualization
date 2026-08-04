@@ -3,8 +3,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "python3 scripts/serve-test-zarr.py & pnpm --filter @pennsieve-viz/core dev & pnpm --filter @pennsieve-viz/orthogonal dev:embed",
+    "dev": "python3 scripts/serve-test-zarr.py & node scripts/serve-timeseries-zarr.mjs & pnpm --filter @pennsieve-viz/core dev & pnpm --filter @pennsieve-viz/orthogonal dev:embed",
     "dev:embed": "pnpm --filter @pennsieve-viz/orthogonal dev:embed",
+    "dev:ts-zarr": "node scripts/serve-timeseries-zarr.mjs",
+    "test": "pnpm --filter @pennsieve-viz/tsviewer test",
     "build": "pnpm --filter @pennsieve-viz/micro-ct build && pnpm --filter @pennsieve-viz/tsviewer build && pnpm --filter @pennsieve-viz/core build",
     "build:core": "pnpm --filter @pennsieve-viz/core build",
     "build:tsviewer": "pnpm --filter @pennsieve-viz/tsviewer build",
