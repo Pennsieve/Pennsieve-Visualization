@@ -145,7 +145,7 @@ export function abortInflight(entry) {
 
 /**
  * Tears down an entry: aborts in-flight reads and drops the client, which releases the
- * reader's cached catalog and its per-channel filter state.
+ * reader's cached catalog, its cache of store responses, and its per-channel filter state.
  *
  * @param {string} storeId
  * @returns {boolean} Whether an entry was removed.

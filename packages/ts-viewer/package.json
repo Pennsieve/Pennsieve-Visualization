@@ -1,6 +1,6 @@
 {
   "name": "@pennsieve-viz/tsviewer",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "2.3.1",
-    "@pennsieve/timeseries-zarr-reader": "^0.1.0",
+    "@pennsieve/timeseries-zarr-reader": "^0.1.1",
     "core-js": "^3.8.3",
     "protobufjs": "^7.2.6",
     "ramda": "^0.28.0",
