@@ -229,8 +229,8 @@ importers:
         specifier: 2.3.1
         version: 2.3.1(vue@3.5.26(typescript@5.9.3))
       '@pennsieve/timeseries-zarr-reader':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: 0.3.0
+        version: 0.3.0
       core-js:
         specifier: ^3.8.3
         version: 3.47.0
@@ -1229,8 +1229,8 @@ packages:
     resolution: {integrity: sha512-dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg==}
     engines: {node: '>= 10.0.0'}
 
-  '@pennsieve/timeseries-zarr-reader@0.1.0':
-    resolution: {integrity: sha512-7hVGZZ11g8DPfwlXwfXgkVqAV0nsM77MlXer1IzMoM8eSLs+mNH/TtJRulANsLT61asROgNaMvN7t6VeAVofCg==}
+  '@pennsieve/timeseries-zarr-reader@0.3.0':
+    resolution: {integrity: sha512-+gPwOvUXJ5zi7PsEeMYFhkdpHQHiVrRvNaNPvuvsYspATZypd8kE5b7vUouKNXsLqlSlTmvS18NkLrYTZA+6pg==}
     engines: {node: '>=20'}
 
   '@petamoriken/float16@3.9.3':
@@ -7001,7 +7001,7 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.1
     optional: true
 
-  '@pennsieve/timeseries-zarr-reader@0.1.0':
+  '@pennsieve/timeseries-zarr-reader@0.3.0':
     dependencies:
       fili: 2.0.3
       p-limit: 7.3.1
