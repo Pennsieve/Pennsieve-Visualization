@@ -149,6 +149,13 @@ import {
 import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
 import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
+import { getClient } from '@/composables/streaming/clientRegistry'
+import { isZarrAssetType } from '@/composables/streaming/assetTypes'
+import {
+  measureAmplitudes,
+  uvPerMmToZoomMult,
+  zoomMultForAmplitudes
+} from '@/composables/streaming/autoscale'
 
 // Component imports (required for <script setup>)
 const TimeseriesScrubber = defineAsyncComponent(() => import('@/components/TSViewer/TSScrubber.vue'))
@@ -243,7 +250,20 @@ const duration = ref(0)            // Length of data in viewer in microseconds (
 const cWidth = ref(0)
 const cHeight = ref(0)
 const labelWidth = ref(0)
-const globalZoomMult = ref(1)
+/**
+ * Vertical sensitivity the viewer opens at, in microvolts per millimeter, until a bundle's
+ * own amplitude is measured. Derived rather than hardcoded as a multiplier so the opening
+ * scale is the same on a retina display as on a 1x one.
+ */
+const DEFAULT_UV_PER_MM = 100
+
+const globalZoomMult = ref(
+  uvPerMmToZoomMult(
+    DEFAULT_UV_PER_MM,
+    constants.DEFAULTDPI,
+    window.devicePixelRatio || 1
+  )
+)
 const cursorLoc = ref(1/10)
 const annotationWindowOpen = ref(false)
 const annotationLayerWindowOpen = ref(false)
@@ -308,6 +328,59 @@ const onResize = async () => {
   cHeight.value = (window_height.value - 40)
 }
 
+/**
+ * Whether this package's amplitude has already been measured, so the pass runs once per
+ * bundle. A user who has adjusted the scale is never overridden.
+ */
+let verticalScaleMeasured = false
+
+/**
+ * Sets the vertical scale from the bundle's own amplitude, once per bundle.
+ *
+ * Reads the coarsest pyramid level over the whole recording, which the availability scan
+ * has usually already fetched, and picks the sensitivity that keeps the median channel
+ * inside its row. Only the Zarr path has a reader to ask; the streaming-server path keeps
+ * `DEFAULT_UV_PER_MM`. Any failure leaves the current scale alone.
+ */
+const measureVerticalScale = async () => {
+  if (verticalScaleMeasured) {
+    return
+  }
+  if (!isZarrAssetType(activeViewer.value?.content?.assetType)) {
+    return
+  }
+  const entry = getClient(viewerStore.$id)
+  const rowHeight = cHeight.value / nrVisChannels.value
+  if (!entry || !ts_start.value || !ts_end.value || !(rowHeight > 0)) {
+    return
+  }
+  const channels = visibleChannels.value
+    .filter((channel) => channel.type !== 'UNIT')
+    .map((channel) => channel.serverId || channel.id)
+  if (channels.length === 0) {
+    return
+  }
+
+  verticalScaleMeasured = true
+  try {
+    const amplitudes = await measureAmplitudes(
+      entry.client,
+      channels,
+      ts_start.value,
+      ts_end.value
+    )
+    const zoom = zoomMultForAmplitudes(amplitudes, rowHeight)
+    if (zoom !== null) {
+      globalZoomMult.value = zoom
+      viewerCanvas.value?.renderAll?.()
+    }
+  } catch (error) {
+    // A bundle that cannot be surveyed still renders at the default scale.
+    verticalScaleMeasured = false
+    console.warn(`TSViewer: vertical autoscale skipped: ${error?.message ?? error}`)
+  }
+}
+
 // Watchers
 watch( () => activeViewer.value, async (newValue, oldValue ) => {
 
@@ -330,6 +403,10 @@ watch( () => activeViewer.value, async (newValue, oldValue ) => {
     scrubber.value.getAnnotations()
   }
 
+  // Not awaited: the first page should render at the default scale rather than wait on the
+  // amplitude pass, which re-renders once it lands.
+  void measureVerticalScale()
+
 }, {immediate: false, deep: true})
 
 // Watch for changes in number of visible channels
@@ -341,6 +418,9 @@ watch(nrVisChannels, (newCount, oldCount) => {
       if (viewerCanvas.value?.renderAll) {
         viewerCanvas.value.renderAll()
       }
+      // The channel list populating is the first point at which the reader, the time
+      // range, and the row height are all known, so this is where the pass usually runs.
+      void measureVerticalScale()
     }, 20)
   }
 })
