@@ -74,9 +74,19 @@ describe('zoomMultForAmplitudes', () => {
         expect(zoomMultForAmplitudes([100], -5)).toBeNull()
     })
 
-    it('accepts a Map of amplitudes by channel', () => {
+    it('accepts the Map that measureAmplitudes returns', () => {
+        const p2p = new Map([['a', 100], ['b', 100]])
+        expect(zoomMultForAmplitudes(p2p, 20, 0.8)).toBeCloseTo(0.16, 10)
+    })
+
+    it('accepts bare amplitude values', () => {
         const p2p = new Map([['a', 100], ['b', 100]])
         expect(zoomMultForAmplitudes(p2p.values(), 20, 0.8)).toBeCloseTo(0.16, 10)
+    })
+
+    it('returns null rather than a scale when handed nothing', () => {
+        expect(zoomMultForAmplitudes(null, 20)).toBeNull()
+        expect(zoomMultForAmplitudes(new Map(), 20)).toBeNull()
     })
 })
 

@@ -74,16 +74,19 @@ function median(values) {
  * ignored. Returns null when nothing usable is left or `rowHeight` is not positive, and the
  * caller should then keep the scale it has.
  *
- * @param {Iterable<number>} amplitudes Peak-to-peak microvolts, one per channel.
+ * @param {Map<string, number>|Iterable<number>} amplitudes Peak-to-peak microvolts per
+ *   channel, either as the Map {@link measureAmplitudes} returns or as bare values.
  * @param {number} rowHeight Height of one channel row, in canvas pixels.
  * @param {number} [fill] Fraction of the row the median swing should fill.
  * @returns {?number}
  */
 export function zoomMultForAmplitudes(amplitudes, rowHeight, fill = ROW_FILL) {
-    if (!(rowHeight > 0) || !(fill > 0)) {
+    if (!(rowHeight > 0) || !(fill > 0) || !amplitudes) {
         return null
     }
-    const usable = [...amplitudes].filter(
+    // Spreading a Map yields [key, value] pairs, so take its values explicitly.
+    const values = amplitudes instanceof Map ? amplitudes.values() : amplitudes
+    const usable = [...values].filter(
         (v) => Number.isFinite(v) && v > 0 && v <= MAX_TRUSTED_P2P_UV
     )
     const typical = median(usable)
