@@ -157,15 +157,17 @@ export const useCanvasRenderer = () => {
                                     doPolFill = false
                                 }
 
+                                // A block starting within 3px of the previous block's end
+                                // continues the same trace across a page boundary. Wider
+                                // separations are data gaps and stay open.
+                                const joinsPreviousBlock = block > 0 && lastBlockEnd !== null &&
+                                    xVec[startIndex] < (lastBlockEnd.x + 3)
+
                                 if (doPolFill) {
                                     ctx.beginPath()
 
-                                    if (block > 0) {
-                                        if (xVec[startIndex] < (lastBlockEnd.x + 3)) {
-                                            ctx.moveTo(lastBlockEnd.x, lastBlockEnd.y)
-                                        } else {
-                                            ctx.moveTo(xVec[startIndex], yVec[startIndex])
-                                        }
+                                    if (joinsPreviousBlock) {
+                                        ctx.moveTo(lastBlockEnd.x, lastBlockEnd.y)
                                     } else {
                                         ctx.moveTo(xVec[startIndex], yVec[startIndex])
                                     }
@@ -173,14 +175,12 @@ export const useCanvasRenderer = () => {
                                     for (let i = startIndex; i < (endIndex + 1); i++) {
                                         ctx.lineTo(xVec[i], yVec[i])
                                     }
-                                    for (let i2 = (endIndex - 1); i2 >= startIndex; i2--) {
+                                    for (let i2 = endIndex; i2 >= startIndex; i2--) {
                                         ctx.lineTo(xVec[i2], y2Vec[i2])
                                     }
 
-                                    if (block > 0) {
-                                        if (xVec[startIndex] < (lastBlockEnd.x + 3)) {
-                                            ctx.lineTo(lastBlockEnd.x, lastBlockEnd.y2)
-                                        }
+                                    if (joinsPreviousBlock) {
+                                        ctx.lineTo(lastBlockEnd.x, lastBlockEnd.y2)
                                     }
 
                                     ctx.closePath()
@@ -197,8 +197,11 @@ export const useCanvasRenderer = () => {
 
                                 // Now trace the max values as a single line. This helps with making traces clear.
                                 ctx.beginPath()
-                                ctx.moveTo(xVec[startIndex], yVec[startIndex])
-
+                                if (joinsPreviousBlock) {
+                                    ctx.moveTo(lastBlockEnd.x, lastBlockEnd.y)
+                                } else {
+                                    ctx.moveTo(xVec[startIndex], yVec[startIndex])
+                                }
                                 for (let i = startIndex; i < (endIndex + 1); i++) {
                                     ctx.lineTo(xVec[i], yVec[i])
                                 }
