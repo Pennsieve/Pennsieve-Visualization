@@ -117,7 +117,7 @@ export const useCanvasRenderer = () => {
                     }
                 } else if (curChannelView.selected) {
                     ctx.strokeStyle = 'rgb(249,162,58)'
-                    ctx.fillStyle = 'rgb(3249,162,58)'
+                    ctx.fillStyle = 'rgb(249,162,58)'
                 } else if (channelType === 'Neural') {
                     ctx.strokeStyle = 'rgb(249,162,58)'
                 } else {
