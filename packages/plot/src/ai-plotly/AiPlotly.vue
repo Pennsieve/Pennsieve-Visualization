@@ -2,7 +2,7 @@
 <script setup>
 import { ref, onMounted, watch } from "vue";
 import { ElMessage } from "element-plus";
-import Plotly from "plotly.js-dist";
+import Plotly from "plotly.js";
 import { GeneralDataManager } from "./generalizedDataManager";
 
 // Props

@@ -1,4 +1,4 @@
-import {fetchAuthSession} from "aws-amplify/auth";
+import {fetchAuthSession, signOut} from "@aws-amplify/auth";
 
 export async function useToken() {
     try {
@@ -12,5 +12,5 @@ export async function useToken() {
 }
 
 export async function useLogout() {
-    Auth.logout()
+    signOut()
 }

@@ -11,7 +11,6 @@
 
 <script setup lang="ts">
 import { defineProps, onMounted, ref, defineEmits } from 'vue'
-import { pathOr } from 'ramda'
 
 import DbduckViewer from './DataExplorer.vue'
 
@@ -45,7 +44,7 @@ onMounted(async () => {
   }
 
   // Mode B: Pennsieve pkg + api
-  const pkgId = pathOr('', ['content','id'], props.pkg)
+  const pkgId = props.pkg?.content?.id ?? ''
   if (!pkgId) {
     console.error('[DuckDBViewerWrapper] Missing pkg.id , and no srcUrl provided.')
     return
