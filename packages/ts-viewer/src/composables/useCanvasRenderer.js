@@ -125,120 +125,142 @@ export const useCanvasRenderer = () => {
                     ctx.fillStyle = 'black'
                 }
 
-                let lastBlockEnd = null
+                const realSamplePeriod = 1000000 * (1 / curChannelView.sf)
+
+                // Bins under 3 samples wide do not read as a band, so the channel draws ticks
+                // instead of a filled envelope. The decision is made for the whole channel,
+                // which keeps every block of it in one path.
                 let doPolFill = true
-                let realSamplePeriod = 1000000 * (1 / curChannelView.sf)
-
                 for (let block = 0; block < nrBlocks; block++) {
+                    const curBlock = curChannelData.blocks[block]
+                    if (curBlock.nrPoints > 0 && curBlock.isMinMax &&
+                        (curBlock.samplePeriod / realSamplePeriod) < 3) {
+                        doPolFill = false
+                    }
+                }
 
+                // A block starting within `joinPx` of the previous block's end continues the
+                // same trace across a page boundary. Wider separations are data gaps and stay
+                // open.
+                const joinsPrevious = (lastEnd, x, joinPx) => {
+                    return lastEnd !== null && x < (lastEnd.x + joinPx)
+                }
+
+                // Both passes below paint one path per channel. Two paths that abut at a
+                // fractional x composite to less than full coverage, which leaves a light
+                // seam down the trace at every page boundary.
+                let lastBlockEnd = null
+                let hasBand = false
+
+                ctx.beginPath()
+                for (let block = 0; block < nrBlocks; block++) {
                     const curBlock = curChannelData.blocks[block]
 
                     if (curBlock.nrPoints === 0) {
                         continue
                     }
 
-                    const curData = curBlock.cData
-                    const curDataLength = curBlock.nrPoints
-                    const xVec = curData[0]
-                    const yVec = curData[1]
-                    const y2Vec = curData[2]
-
-                    let startIndex = curBlock.renderStartIndex
-                    let endIndex = curBlock.renderEndIndex
+                    const xVec = curBlock.cData[0]
+                    const yVec = curBlock.cData[1]
+                    const y2Vec = curBlock.cData[2]
+                    const startIndex = curBlock.renderStartIndex
+                    const endIndex = curBlock.renderEndIndex
 
                     ctxb.clearRect(Math.floor(xVec[startIndex]), Math.floor(curChannelView.rowBaseline - blurHeight / 2), Math.ceil(xVec[endIndex] - xVec[startIndex] + 2), blurHeight + 1)
 
-                    // Render based on type
-                    switch (curBlock.type) {
-                        case 'Continuous':
-                        case 'realtime':
-                            if (curBlock.isMinMax) {
-                                if ((curBlock.samplePeriod / realSamplePeriod) < 3) {
-                                    doPolFill = false
-                                }
+                    const isContinuous = curBlock.type === 'Continuous' || curBlock.type === 'realtime'
+                    if (isContinuous && curBlock.isMinMax) {
+                        if (doPolFill) {
+                            const joined = joinsPrevious(lastBlockEnd, xVec[startIndex], 3)
 
-                                // A block starting within 3px of the previous block's end
-                                // continues the same trace across a page boundary. Wider
-                                // separations are data gaps and stay open.
-                                const joinsPreviousBlock = block > 0 && lastBlockEnd !== null &&
-                                    xVec[startIndex] < (lastBlockEnd.x + 3)
-
-                                if (doPolFill) {
-                                    ctx.beginPath()
-
-                                    if (joinsPreviousBlock) {
-                                        ctx.moveTo(lastBlockEnd.x, lastBlockEnd.y)
-                                    } else {
-                                        ctx.moveTo(xVec[startIndex], yVec[startIndex])
-                                    }
-
-                                    for (let i = startIndex; i < (endIndex + 1); i++) {
-                                        ctx.lineTo(xVec[i], yVec[i])
-                                    }
-                                    for (let i2 = endIndex; i2 >= startIndex; i2--) {
-                                        ctx.lineTo(xVec[i2], y2Vec[i2])
-                                    }
-
-                                    if (joinsPreviousBlock) {
-                                        ctx.lineTo(lastBlockEnd.x, lastBlockEnd.y2)
-                                    }
-
-                                    ctx.closePath()
-                                    ctx.fill()
-                                } else {
-                                    ctx.beginPath()
-                                    for (let i = startIndex; i < (endIndex + 1); i++) {
-                                        ctx.lineTo(xVec[i], yVec[i])
-                                        ctx.lineTo(xVec[i], y2Vec[i])
-                                        ctx.moveTo(xVec[i], yVec[i])
-                                    }
-                                    ctx.stroke()
-                                }
-
-                                // Now trace the max values as a single line. This helps with making traces clear.
-                                ctx.beginPath()
-                                if (joinsPreviousBlock) {
-                                    ctx.moveTo(lastBlockEnd.x, lastBlockEnd.y)
-                                } else {
-                                    ctx.moveTo(xVec[startIndex], yVec[startIndex])
-                                }
-                                for (let i = startIndex; i < (endIndex + 1); i++) {
-                                    ctx.lineTo(xVec[i], yVec[i])
-                                }
-                                ctx.stroke()
-
-
+                            if (joined) {
+                                ctx.moveTo(lastBlockEnd.x, lastBlockEnd.y)
                             } else {
-                                if (block === 0) {
-                                    ctx.beginPath()
-                                    ctx.moveTo(xVec[startIndex], yVec[startIndex])
-                                } else if (xVec[startIndex] > (lastBlockEnd.x + 2)) {
-                                    ctx.moveTo(xVec[startIndex], yVec[startIndex])
-                                }
-                                for (let i = startIndex; i < (endIndex + 1); i++) {
-                                    ctx.lineTo(xVec[i], yVec[i])
-                                }
-                                if (block === (nrBlocks - 1)) {
-                                    ctx.stroke()
-                                }
+                                ctx.moveTo(xVec[startIndex], yVec[startIndex])
                             }
-                            break
 
-                        case 'Neural':
-                            ctx.beginPath()
-                            for (let i = 0; i < curDataLength; i++) {
+                            for (let i = startIndex; i < (endIndex + 1); i++) {
+                                ctx.lineTo(xVec[i], yVec[i])
+                            }
+                            for (let i2 = endIndex; i2 >= startIndex; i2--) {
+                                ctx.lineTo(xVec[i2], y2Vec[i2])
+                            }
+
+                            if (joined) {
+                                ctx.lineTo(lastBlockEnd.x, lastBlockEnd.y2)
+                            }
+
+                            ctx.closePath()
+                        } else {
+                            for (let i = startIndex; i < (endIndex + 1); i++) {
                                 ctx.moveTo(xVec[i], yVec[i])
                                 ctx.lineTo(xVec[i], y2Vec[i])
                             }
-                            ctx.stroke()
+                        }
+                        hasBand = true
+                    }
+
+                    lastBlockEnd = {
+                        x: xVec[curBlock.nrPoints - 1],
+                        y: yVec[curBlock.nrPoints - 1],
+                        y2: y2Vec[curBlock.nrPoints - 1]
+                    }
+                }
+                if (hasBand) {
+                    if (doPolFill) {
+                        ctx.fill()
+                    } else {
+                        ctx.stroke()
+                    }
+                }
+
+                // Trace the max values as a single line. This helps with making traces clear.
+                lastBlockEnd = null
+                let hasTrace = false
+
+                ctx.beginPath()
+                for (let block = 0; block < nrBlocks; block++) {
+                    const curBlock = curChannelData.blocks[block]
+
+                    if (curBlock.nrPoints === 0) {
+                        continue
+                    }
+
+                    const xVec = curBlock.cData[0]
+                    const yVec = curBlock.cData[1]
+                    const y2Vec = curBlock.cData[2]
+                    const startIndex = curBlock.renderStartIndex
+                    const endIndex = curBlock.renderEndIndex
+
+                    switch (curBlock.type) {
+                        case 'Continuous':
+                        case 'realtime':
+                            if (!joinsPrevious(lastBlockEnd, xVec[startIndex], curBlock.isMinMax ? 3 : 2)) {
+                                ctx.moveTo(xVec[startIndex], yVec[startIndex])
+                            }
+                            for (let i = startIndex; i < (endIndex + 1); i++) {
+                                ctx.lineTo(xVec[i], yVec[i])
+                            }
+                            hasTrace = true
+                            break
+
+                        case 'Neural':
+                            for (let i = 0; i < curBlock.nrPoints; i++) {
+                                ctx.moveTo(xVec[i], yVec[i])
+                                ctx.lineTo(xVec[i], y2Vec[i])
+                            }
+                            hasTrace = true
                             break
                     }
 
                     lastBlockEnd = {
-                        x: xVec[curDataLength - 1],
-                        y: yVec[curDataLength - 1],
-                        y2: y2Vec[curDataLength - 1]
+                        x: xVec[curBlock.nrPoints - 1],
+                        y: yVec[curBlock.nrPoints - 1],
+                        y2: y2Vec[curBlock.nrPoints - 1]
                     }
+                }
+                if (hasTrace) {
+                    ctx.stroke()
                 }
             }
         }

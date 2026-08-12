@@ -41,6 +41,10 @@ const paths = (ops) => {
     return out
 }
 
+// Where each sub-path of a path begins. A page boundary inside a sub-path is drawn
+// without a break; one that starts a sub-path is drawn as a separate shape.
+const subPathStarts = (path) => path.ops.filter((o) => o.op === 'moveTo').map((o) => o.args)
+
 const identity = { chId: 'srv-1', label: 'Ch 1', clientId: 'ch1', unit: 'uV' }
 
 // One min/max page of zero-valued bins: startUs on the shared bin grid.
@@ -94,22 +98,34 @@ const renderBlocks = (blocks, { sampleRateHz = 1000 } = {}) => {
 }
 
 describe('renderData min/max blocks', () => {
-    it('joins the fill and the max trace across adjacent blocks', () => {
+    it('paints every block of a channel in one fill and one trace', () => {
         const drawn = renderBlocks([
             minMaxPage(0, BINS, PERIOD),
             minMaxPage(400000, BINS, PERIOD)
         ])
         const fills = drawn.filter((p) => p.end === 'fill')
         const strokes = drawn.filter((p) => p.end === 'stroke')
-        expect(fills).toHaveLength(2)
-        expect(strokes).toHaveLength(2)
+        expect(fills).toHaveLength(1)
+        expect(strokes).toHaveLength(1)
+    })
 
-        expect(fills[1].ops[0]).toEqual({ op: 'moveTo', args: [99, 50] })
-        expect(fills[1].ops[fills[1].ops.length - 2]).toEqual({ op: 'lineTo', args: [99, 51] })
+    it('joins the fill and the trace across adjacent blocks', () => {
+        const drawn = renderBlocks([
+            minMaxPage(0, BINS, PERIOD),
+            minMaxPage(400000, BINS, PERIOD)
+        ])
+        const fill = drawn.find((p) => p.end === 'fill')
+        const stroke = drawn.find((p) => p.end === 'stroke')
 
-        expect(strokes[0].ops[0]).toEqual({ op: 'moveTo', args: [0, 50] })
-        expect(strokes[1].ops[0]).toEqual({ op: 'moveTo', args: [99, 50] })
-        expect(strokes[1].ops[1]).toEqual({ op: 'lineTo', args: [100, 50] })
+        // The second block's polygon starts at the first block's last point, not its own.
+        expect(subPathStarts(fill)).toEqual([[0, 50], [99, 50]])
+        expect(fill.ops).toContainEqual({ op: 'lineTo', args: [99, 51] })
+
+        // The trace crosses the page boundary inside one sub-path.
+        expect(subPathStarts(stroke)).toEqual([[0, 50]])
+        const seam = stroke.ops.findIndex((o) => o.args[0] === 99)
+        expect(stroke.ops[seam]).toEqual({ op: 'lineTo', args: [99, 50] })
+        expect(stroke.ops[seam + 1]).toEqual({ op: 'lineTo', args: [100, 50] })
     })
 
     it('includes the last bin in the fill bottom edge', () => {
@@ -124,25 +140,32 @@ describe('renderData min/max blocks', () => {
             minMaxPage(0, BINS, PERIOD),
             minMaxPage(412000, BINS, PERIOD)
         ])
-        const fills = drawn.filter((p) => p.end === 'fill')
-        const strokes = drawn.filter((p) => p.end === 'stroke')
+        const fill = drawn.find((p) => p.end === 'fill')
+        const stroke = drawn.find((p) => p.end === 'stroke')
 
-        expect(fills[1].ops[0]).toEqual({ op: 'moveTo', args: [103, 50] })
-        expect(fills[1].ops.some((o) => o.args[0] === 99)).toBe(false)
-        expect(strokes[1].ops[0]).toEqual({ op: 'moveTo', args: [103, 50] })
+        expect(subPathStarts(fill)).toEqual([[0, 50], [103, 50]])
+        expect(subPathStarts(stroke)).toEqual([[0, 50], [103, 50]])
+
+        // The second block's polygon reaches back to nothing on the far side of the gap.
+        const second = fill.ops.slice(fill.ops.findIndex((o, i) => o.op === 'moveTo' && i > 0))
+        expect(second.some((o) => o.args[0] === 99)).toBe(false)
     })
 
-    it('joins the max trace across blocks when bins are under 3 sample periods', () => {
+    it('joins the trace across blocks when bins are under 3 sample periods', () => {
         const drawn = renderBlocks([
             minMaxPage(0, BINS, PERIOD),
             minMaxPage(400000, BINS, PERIOD)
         ], { sampleRateHz: 500 })
         const fills = drawn.filter((p) => p.end === 'fill')
         const strokes = drawn.filter((p) => p.end === 'stroke')
-        expect(fills).toHaveLength(0)
-        expect(strokes).toHaveLength(4)
 
-        expect(strokes[3].ops[0]).toEqual({ op: 'moveTo', args: [99, 50] })
-        expect(strokes[3].ops[1]).toEqual({ op: 'lineTo', args: [100, 50] })
+        // Ticks and the trace, one path each.
+        expect(fills).toHaveLength(0)
+        expect(strokes).toHaveLength(2)
+
+        const trace = strokes[1]
+        expect(subPathStarts(trace)).toEqual([[0, 50]])
+        const seam = trace.ops.findIndex((o) => o.args[0] === 99)
+        expect(trace.ops[seam + 1]).toEqual({ op: 'lineTo', args: [100, 50] })
     })
 })
