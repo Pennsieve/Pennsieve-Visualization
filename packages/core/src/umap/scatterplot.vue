@@ -8,8 +8,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
-import { zoom as d3Zoom, zoomIdentity } from 'd3-zoom'
-import { select } from 'd3-selection'
+import * as d3 from 'd3'
 
 const emit = defineEmits(['updateColorMap'])
 
@@ -358,10 +357,10 @@ function initVisualization() {
   data = generateData()
   programInfo = prepareBuffers(gl, program, data)
 
-  transform = zoomIdentity
+  transform = d3.zoomIdentity
 
-  const sel = select(canvasRef.value)
-  zoom = d3Zoom<HTMLCanvasElement, unknown>()
+  const sel = d3.select(canvasRef.value)
+  zoom = d3.zoom<HTMLCanvasElement, unknown>()
     .scaleExtent([0.1, 100])
     .extent([[0, 0], [cssWidth, cssHeight]])
     .translateExtent([[-1e6, -1e6], [1e6, 1e6]])
@@ -423,9 +422,9 @@ function handleWheelZoom(e: WheelEvent) {
   const panTermY = clipY - sNew * (dp.y - cy)
   const yNew = -0.5 * height * panTermY
 
-  const next = zoomIdentity.translate(xNew, yNew).scale(kNew)
+  const next = d3.zoomIdentity.translate(xNew, yNew).scale(kNew)
   transform = next
-  select(canvasRef.value!).call(zoom.transform as any, next)
+  d3.select(canvasRef.value!).call(zoom.transform as any, next)
 }
 
 function handleMouseMove(e: MouseEvent) {
@@ -498,7 +497,7 @@ function handleMouseLeave() {
 function handleResize() {
   if (!canvasRef.value || !gl) return
   sizeCanvasForDPR(canvasRef.value, gl)
-  select(canvasRef.value)
+  d3.select(canvasRef.value)
     .call((zoom as any).extent([[0, 0], [cssWidth, cssHeight]]))
     .call(zoom.transform as any, transform)
   drawScatterplot(gl, programInfo, 2, highlightedPoint)
@@ -577,8 +576,8 @@ watch(() => props.forceRegenerate, () => {
     gl.deleteBuffer(programInfo.colorBuffer)
   }
   programInfo = prepareBuffers(gl, program, data)
-  transform = zoomIdentity
-  if (canvasRef.value && zoom) select(canvasRef.value).call(zoom.transform, transform)
+  transform = d3.zoomIdentity
+  if (canvasRef.value && zoom) d3.select(canvasRef.value).call(zoom.transform, transform)
   rebuildColorBufferForMode()
   drawScatterplot(gl, programInfo, 2, null)
 })

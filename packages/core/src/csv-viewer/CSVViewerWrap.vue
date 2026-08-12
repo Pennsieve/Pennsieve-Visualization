@@ -12,6 +12,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { pathOr } from 'ramda'
 import { useGetToken } from '../composables/useGetToken'
 import CSVViewer from './CSVViewer.vue'
 import type { ViewerStyleOverrides } from '../composables/useViewerStyle'
@@ -49,7 +50,7 @@ onMounted(async () => {
   }
 
   // Mode B: Pennsieve pkg + api
-  const pkgId = props.pkg?.content?.id ?? ''
+  const pkgId = pathOr('', ['content', 'id'], props.pkg)
   if (!pkgId) {
     console.error('[CSVViewerWrap] Missing pkg.id, and no srcUrl provided.')
     return
