@@ -1,5 +1,6 @@
 // @/composables/useDataRequests.js
 import { ref, onUnmounted, readonly } from 'vue'
+import { BASE_PAGE_SIZE } from '@/composables/streaming/paging'
 
 export const useDataRequests = () => {
     // State from original
@@ -59,7 +60,7 @@ export const useDataRequests = () => {
     }
 
     // Generate points (from original requestData logic)
-    const generatePoints = (showChannels, start, duration, viewData, requestedPages, constants, rsPeriod, ts_end, segmIndexOf, getChannelIdFn) => {
+    const generatePoints = (showChannels, start, duration, viewData, requestedPages, constants, rsPeriod, ts_end, segmIndexOf, getChannelIdFn, pageSize = BASE_PAGE_SIZE) => {
         viewData.start = start
         viewData.duration = duration
 
@@ -86,13 +87,11 @@ export const useDataRequests = () => {
             }
         }
 
-        return requestData(showChannels, start, duration, viewData, requestedPages, constants, rsPeriod, ts_end, segmIndexOf, getChannelIdFn)
+        return requestData(showChannels, start, duration, viewData, requestedPages, constants, rsPeriod, ts_end, segmIndexOf, getChannelIdFn, pageSize)
     }
 
     // Request data (from original)
-    const requestData = (showChannels, start, duration, viewData, requestedPages, constants, rsPeriod, ts_end, segmIndexOf, getChannelIdFn) => {
-        const pageSize = 15000000
-
+    const requestData = (showChannels, start, duration, viewData, requestedPages, constants, rsPeriod, ts_end, segmIndexOf, getChannelIdFn, pageSize = BASE_PAGE_SIZE) => {
         // Init async requests for viewport pages
         aSyncRequests.value = []
 

@@ -65,10 +65,12 @@ function makeCData(nrVal) {
  * Y values are negated (screen coordinates grow downwards) and minMax data stays
  * interleaved across rows 1 and 2. `pageStart` must equal `req.startTime` exactly: it is
  * the key of the viewer's `requestedPages` map, and a page never completes if it differs.
+ * `requestedSamplePeriod` echoes the request's `pixelWidth`; the viewer discards a block
+ * whose value no longer matches the viewport's resolution.
  *
  * @param {{startUs: number, samplePeriodUs: number, isMinMax: boolean, data: Float64Array}} segment - Reader segment.
  * @param {{chId: string, label: string, clientId: string, unit: string}} identity - Trace identity echoing the request.
- * @param {{startTime: number, endTime: number}} req - Parsed page request.
+ * @param {{startTime: number, endTime: number, pixelWidth: number}} req - Parsed page request.
  * @param {{useMedian?: boolean}} [options] - `useMedian` defaults to false.
  * @returns {object} Legacy segment block; `nrPoints === 0` when nothing survives clipping.
  */
@@ -130,6 +132,7 @@ export function buildContinuousSegm(segment, identity, req, options = {}) {
         lastUsed: 0,
         unit: identity.unit,
         samplePeriod: period,
+        requestedSamplePeriod: req.pixelWidth,
         pageStart: req.startTime,
         pageEnd: req.endTime,
         startTs: startTs,
@@ -153,11 +156,11 @@ export function buildContinuousSegm(segment, identity, req, options = {}) {
  *
  * The viewer decrements a per-page, per-channel counter on every response, so a trace
  * that emits nothing leaves the page pending until the stuck-request sweeper fires. This
- * block drains the counter instead; it is dispatched with envelope type `gap` and is
- * never cached.
+ * block drains the counter instead. It is dispatched with envelope type `gap`, and the
+ * viewer caches it like a data block so the page is not requested again.
  *
  * @param {{chId: string, label: string, clientId: string, unit: string}} identity - Trace identity echoing the request.
- * @param {{startTime: number, endTime: number}} req - Parsed page request.
+ * @param {{startTime: number, endTime: number, pixelWidth: number}} req - Parsed page request.
  * @returns {object} Legacy segment block with no points.
  */
 export function buildGapSegm(identity, req) {
@@ -166,6 +169,7 @@ export function buildGapSegm(identity, req) {
         lastUsed: 0,
         unit: identity.unit,
         samplePeriod: 0,
+        requestedSamplePeriod: req.pixelWidth,
         pageStart: req.startTime,
         pageEnd: req.endTime,
         startTs: req.startTime,
@@ -198,7 +202,7 @@ export function buildGapSegm(identity, req) {
  *
  * @param {{samplePeriodUs: number, isResampled: boolean, times: Float64Array}} batch - Reader event batch.
  * @param {{chId: string, label: string, clientId: string, unit: string}} identity - Trace identity echoing the request.
- * @param {{startTime: number, endTime: number}} req - Parsed page request.
+ * @param {{startTime: number, endTime: number, pixelWidth: number}} req - Parsed page request.
  * @returns {object} Legacy Neural block.
  */
 export function buildNeuralSegm(batch, identity, req) {
@@ -211,6 +215,7 @@ export function buildNeuralSegm(batch, identity, req) {
         lastUsed: 0,
         unit: 'uV',
         samplePeriod: batch.samplePeriodUs,
+        requestedSamplePeriod: req.pixelWidth,
         pageStart: req.startTime,
         pageEnd: req.endTime,
         startTs: req.startTime,

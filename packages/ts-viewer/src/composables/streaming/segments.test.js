@@ -2,14 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { buildContinuousSegm, buildGapSegm, buildNeuralSegm } from './segments.js'
 
 const CONTINUOUS_KEYS = [
-    'chId', 'lastUsed', 'unit', 'samplePeriod', 'pageStart', 'pageEnd', 'startTs',
-    'isMinMax', 'unitM', 'type', 'nrPoints', 'cData', 'parsedData', 'median', 'sumElem',
-    'nrValidPoints', 'name', 'label'
+    'chId', 'lastUsed', 'unit', 'samplePeriod', 'requestedSamplePeriod', 'pageStart',
+    'pageEnd', 'startTs', 'isMinMax', 'unitM', 'type', 'nrPoints', 'cData', 'parsedData',
+    'median', 'sumElem', 'nrValidPoints', 'name', 'label'
 ]
 
 const NEURAL_KEYS = [
-    'chId', 'lastUsed', 'unit', 'samplePeriod', 'pageStart', 'pageEnd', 'startTs',
-    'isMinMax', 'unitM', 'type', 'nrPoints', 'parsedData', 'cData', 'name', 'label'
+    'chId', 'lastUsed', 'unit', 'samplePeriod', 'requestedSamplePeriod', 'pageStart',
+    'pageEnd', 'startTs', 'isMinMax', 'unitM', 'type', 'nrPoints', 'parsedData', 'cData',
+    'name', 'label'
 ]
 
 const identity = { chId: 'ch-1', label: 'Ch 1', clientId: 'ch-1', unit: 'uV' }
