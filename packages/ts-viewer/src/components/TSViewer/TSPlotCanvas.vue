@@ -28,6 +28,7 @@ import { storeToRefs } from 'pinia'
 import { createViewerStore } from '../../stores/tsviewer'
 import { useTimeseriesTransport } from '@/composables/useTimeseriesTransport'
 import { isZarrAssetType } from '@/composables/streaming/assetTypes'
+import { adaptivePageSize, BASE_PAGE_SIZE } from '@/composables/streaming/paging'
 import { useCanvasRenderer } from '@/composables/useCanvasRenderer'
 import { useTimeSeriesData } from '@/composables/useTimeSeriesData'
 import { useDataRequests } from '@/composables/useDataRequests'
@@ -65,6 +66,11 @@ const {
 // The viewer asset's type picks the data path: a Zarr bundle is read directly in the
 // browser, everything else streams over the discovery WebSocket.
 const isZarrSource = () => isZarrAssetType(props.activeViewer?.content?.assetType)
+
+// A Zarr bundle answers a wide window from its pyramid in a few reads, so the page span
+// grows with the viewport instead of splitting it into dozens of fixed 15-second
+// columns. The legacy streaming service keeps the fixed span it was built around.
+const currentPageSize = () => (isZarrSource() ? adaptivePageSize(props.duration) : BASE_PAGE_SIZE)
 
 // The token only ever travels in the request's `session` field, which the Zarr path ignores.
 // Asking Amplify for one would reject outright for a public or locally served bundle, so
@@ -369,8 +375,9 @@ const generateAndProcessRequests = async () => {
   })
 
   const currentRsPeriod = computedRsPeriod.value
+  const pageSize = currentPageSize()
 
-  const requests = generatePoints(
+  const buildRequests = () => generatePoints(
     showChannels,
     props.start,
     props.duration,
@@ -380,8 +387,11 @@ const generateAndProcessRequests = async () => {
     currentRsPeriod,
     props.ts_end,
     segmIndexOf,
-    getChannelId
+    getChannelId,
+    pageSize
   )
+
+  let requests = buildRequests()
 
   const currentRequestedSamplePeriod = Math.ceil(currentRsPeriod)
   let shouldDumpBuffer = false
@@ -403,11 +413,14 @@ const generateAndProcessRequests = async () => {
     }
   }
 
-  // Check for too many pending requests
-  const MAX_PENDING_REQUESTS = 15
-  if (requestedPages.value.size > MAX_PENDING_REQUESTS) {
+  // A healthy pass never has more pages pending than the viewport plus the prefetch
+  // horizon, so the backlog cap scales with the page count instead of sitting at a
+  // fixed 15, which a wide window used to exceed just by existing.
+  const viewportPages = Math.ceil(props.duration / pageSize) + 1
+  const maxPendingRequests = viewportPages + props.constants.PREFETCHPAGES + 5
+  if (requestedPages.value.size > maxPendingRequests) {
     shouldDumpBuffer = true
-    dumpReason = `Too many pending requests: ${requestedPages.value.size} > ${MAX_PENDING_REQUESTS}`
+    dumpReason = `Too many pending requests: ${requestedPages.value.size} > ${maxPendingRequests}`
   }
 
   // Check for high stale data rate
@@ -427,8 +440,17 @@ const generateAndProcessRequests = async () => {
         clearRequests()
         staleDataCounter.value = 0
 
-        // Brief delay to let server process dump request
-        await new Promise(resolve => setTimeout(resolve, 50))
+        // Brief delay to let the legacy server process the dump request. The Zarr
+        // client aborts synchronously, so its next requests can go out at once.
+        if (!isZarrSource()) {
+          await new Promise(resolve => setTimeout(resolve, 50))
+        }
+
+        // The first pass skipped every page that was pending when it ran, and the dump
+        // discarded exactly those pages. Rebuild against the now-empty bookkeeping so
+        // the viewport is requested in full; without this the dumped pages are never
+        // fetched again until the next user interaction.
+        requests = buildRequests()
       }
     } finally {
       isDumpingBuffer.value = false
@@ -493,7 +515,10 @@ const handleAutoScale = () => {
 }
 
 // Throttled functions (from original) - Create these AFTER function definitions
-const throttledGetRenderData = createThrottle(renderDataOnMessage, 250, { leading: false })
+// Leading edge so the first block of a burst paints immediately, with the trailing call
+// catching whatever lands inside the window. The Zarr reader answers a whole viewport in
+// one burst, so a trailing-only delay held every first paint back by the full wait.
+const throttledGetRenderData = createThrottle(renderDataOnMessage, 100)
 const throttledDataRender = createThrottle(() => renderAll(), 50)
 
 // Watchers (from original)
@@ -587,16 +612,14 @@ onSegment((segmentData) => {
     }
   }
 
-  // 🔄 EXISTING LOGIC (unchanged)
-  // console.log('✅ SEGMENT RECEIVED:', {
-  //   pageStart: segmentData.pageStart,
-  //   type: segmentData.type,
-  //   channelId: segmentData.data?.chId || segmentData.data?.source || segmentData.data?.id,
-  //   channelName: segmentData.data?.label || segmentData.data?.name,
-  //   nrPoints: segmentData.data?.nrPoints,
-  //   startTs: segmentData.data?.startTs,
-  //   hasValidation: typeof isDataCurrentForViewport === 'function'
-  // })
+  // A block requested before the last resolution change must not enter the cache: the
+  // request pass would treat its page as fulfilled and never fetch it at the current
+  // resolution. Its page entry was already cleared when the resolution changed.
+  if (!isDataCurrentForViewport(segmentData.data)) {
+    staleDataCounter.value++
+    return
+  }
+  staleDataCounter.value = 0
 
   dataCallback(segmentData)
 

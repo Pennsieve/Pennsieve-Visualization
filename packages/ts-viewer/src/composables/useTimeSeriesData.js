@@ -196,14 +196,25 @@ export const useTimeSeriesData = () => {
                 let addData = false
                 let curSegments = curChData && curChData.segments
 
-                if (curSegments && obj.type !== 'gap') {
+                // An empty block with the full block shape is cached like a data block:
+                // it records that the page was answered, so the next request pass does
+                // not request the same empty span again on every render. A gap notice
+                // without a block shape is still skipped.
+                const cacheable = obj.type !== 'gap' || (obj.data && Array.isArray(obj.data.parsedData))
+
+                if (curSegments && cacheable) {
                     addData = true
                     if (curSegments.length > 0) {
                         let fIndex = segmIndexOf(curSegments, obj.data.startTs, true, 0)
 
                         while (curSegments[fIndex] && curSegments[fIndex].pageStart === obj.data.pageStart) {
                             if (curSegments[fIndex].startTs === obj.data.startTs) {
-                                addData = false
+                                // A cached empty block yields to a data block for the same span.
+                                if (curSegments[fIndex].nrPoints === 0 && obj.data.nrPoints > 0) {
+                                    curSegments.splice(fIndex, 1)
+                                } else {
+                                    addData = false
+                                }
                                 break
                             }
                             fIndex++
@@ -294,6 +305,10 @@ export const useTimeSeriesData = () => {
                 if (curBlocks[j].type !== 'Continuous') {
                     continue
                 }
+                // An empty block has no deviation and would turn the average into NaN.
+                if (!curBlocks[j].parsedData || curBlocks[j].parsedData[1].length === 0) {
+                    continue
+                }
                 sumMedian += standardDeviation(curBlocks[j].parsedData[1])
                 nrSeg++
             }
@@ -331,11 +346,24 @@ export const useTimeSeriesData = () => {
         currentRequestedSamplePeriod.value = Math.ceil(rsPeriod)
     }
 
-// Check if data is current for the viewport (simple implementation)
+    /**
+     * Whether a block was produced for the viewport's current resolution.
+     *
+     * `requestedSamplePeriod` echoes the pixelWidth of the request that produced the
+     * block. A block from before a zoom changed the resolution is rejected here so it
+     * cannot park in the segment cache at the wrong level, where the request pass would
+     * treat its page as fulfilled and never replace it. A block without a positive value
+     * is accepted: the legacy streaming server does not always fill the field.
+     */
     const isDataCurrentForViewport = (segmentData) => {
-        // Simple validation - you can make this more sophisticated
-        // For now, just check if the data has a valid timestamp
-        return segmentData && segmentData.startTs && segmentData.startTs > 0
+        if (!segmentData) {
+            return false
+        }
+        const requested = Number(segmentData.requestedSamplePeriod)
+        if (Number.isFinite(requested) && requested > 0 && requested !== currentRequestedSamplePeriod.value) {
+            return false
+        }
+        return true
     }
 
 

@@ -8,7 +8,7 @@
         :precision="durationPrecision"
         :step="durationStep"
         :min="0.01"
-        :max="constants['MAXDURATION']"
+        :max="maxDurationInSeconds"
         controls-position="right">
 
         <template #suffix>
@@ -135,11 +135,12 @@ import IconNextPage from "../icons/IconNextPage.vue"
 import IconStopwatch from "../icons/IconStopwatch.vue"
 import IconControllerPlay from "@/components/icons/IconControllerPlay.vue"
 import IconControllerPause from "@/components/icons/IconControllerPause.vue"
+import { durationStepFor, durationPrecisionFor } from '@/utils/durationStep'
 
 // Props
 const props = defineProps({
-  constants: {
-    type: Object,
+  maxDuration: {
+    type: Number,
     required: true
   },
   duration: {
@@ -182,7 +183,6 @@ const emit = defineEmits([
 // Reactive data
 const showTimeZoom = ref(true)
 const showPlaybackSpeed = ref(true)
-const selectedTimeRange = ref(0)
 const isPlaying = ref(false)
 const selectedPlaySpeed = ref(null)
 const intervalTimer = ref(null)
@@ -217,85 +217,28 @@ const iconPlay = computed(() => {
   }
 })
 
-// Store the previous value to detect direction of change
-let previousDuration = ref(props.duration / 1e6)
-
+// A typed length is passed through as entered. Only the spinner arrows move on the decade
+// ladder, by way of the step below.
 const durationInSeconds = computed({
-  // getter
   get() {
     return props.duration / 1e6
   },
-  // setter
   set(newValue) {
-    const currentValue = props.duration / 1e6
-    const isIncreasing = newValue > currentValue
-    const isDecreasing = newValue < currentValue
-    
-    // Ensure minimum value
-    let validValue = Math.max(0.01, newValue)
-    
-    // Handle boundary transitions specially
-    if (currentValue === 0.1 && isIncreasing) {
-      validValue = 0.2 // Jump from 0.1 to 0.2 when increasing
-    } else if (currentValue === 0.1 && isDecreasing) {
-      validValue = 0.09 // Jump from 0.1 to 0.09 when decreasing
-    } else if (currentValue === 1 && isIncreasing) {
-      validValue = 2 // Jump from 1 to 2 when increasing
-    } else if (currentValue === 1 && isDecreasing) {
-      validValue = 0.9 // Jump from 1 to 0.9 when decreasing
-    } else if (currentValue === 10 && isIncreasing) {
-      validValue = 20 // Jump from 10 to 20 when increasing
-    } else if (currentValue === 10 && isDecreasing) {
-      validValue = 9 // Jump from 10 to 9 when decreasing
-    } else {
-      // Round to appropriate precision to avoid floating point issues
-      if (validValue < 0.095) {
-        validValue = Math.round(validValue * 100) / 100 // Round to 0.01
-      } else if (validValue < 0.95) {
-        validValue = Math.round(validValue * 10) / 10 // Round to 0.1
-      } else if (validValue < 9.5) {
-        validValue = Math.round(validValue) // Round to 1
-      } else if (validValue < 95) {
-        validValue = Math.round(validValue / 10) * 10 // Round to 10
-      } else {
-        validValue = Math.round(validValue / 100) * 100 // Round to 100
-      }
+    // Clearing the field reports an empty value. Hold the current window rather than
+    // sending NaN to the renderer.
+    if (!Number.isFinite(newValue)) {
+      return
     }
-    
-    previousDuration.value = validValue
-    emit('updateDuration', validValue)
+    emit('updateDuration', Math.max(0.01, newValue))
   }
 })
 
-// Dynamic step size based on current duration
-const durationStep = computed(() => {
-  const currentDuration = durationInSeconds.value
-  
-  // Regular step logic
-  if (currentDuration < 0.1) {
-    return 0.01 // Step by 0.01 second below 0.1 second
-  } else if (currentDuration < 1) {
-    return 0.1 // Step by 0.1 second below 1 second
-  } else if (currentDuration < 10) {
-    return 1 // Step by 1 second below 10 seconds
-  } else if (currentDuration < 100) {
-    return 10 // Step by 10 seconds below 100 seconds
-  } else {
-    return 100 // Step by 100 seconds for 100+ seconds
-  }
-})
+// The prop arrives in microseconds, like `duration`. The input works in seconds.
+const maxDurationInSeconds = computed(() => props.maxDuration / 1e6)
 
-// Dynamic precision based on current duration
-const durationPrecision = computed(() => {
-  const currentDuration = durationInSeconds.value
-  if (currentDuration < 1) {
-    return 2 // Show 2 decimal places below 1 second (0.01, 0.10, etc.)
-  } else if (currentDuration < 10) {
-    return 1 // Show 1 decimal place below 10 seconds (1.0, 2.0, etc.)
-  } else {
-    return 0 // Show whole seconds for 10+ seconds
-  }
-})
+const durationStep = computed(() => durationStepFor(durationInSeconds.value))
+
+const durationPrecision = computed(() => durationPrecisionFor(durationInSeconds.value))
 
 
 const toggleTimeZoom = () => {
@@ -328,10 +271,6 @@ const incrementZoom = () => {
 
 const decrementZoom = () => {
   emit('decrementZoom')
-}
-
-const updateDuration = () => {
-  emit('updateDuration', selectedTimeRange.value)
 }
 
 const nextAnnotation = () => {

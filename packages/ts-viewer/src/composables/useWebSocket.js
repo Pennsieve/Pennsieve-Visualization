@@ -372,6 +372,9 @@ export const useWebSocket = () => {
                     lastUsed: segment.lastUsed,
                     unit: segment.unit,
                     samplePeriod: segment.samplePeriod,
+                    // Zero when the server leaves the field unset; the viewer treats a
+                    // non-positive value as unknown and accepts the block.
+                    requestedSamplePeriod: segment.requestedSamplePeriod,
                     pageStart: segment.pageStart,
                     pageEnd: segment.pageEnd,
                     startTs: startTs,
