@@ -83,7 +83,7 @@
 
     <TimeseriesViewerToolbar
       v-if="!isPreview"
-      :constants="constants"
+      :max-duration="maxDuration"
       :duration="duration"
       :start="start"
       v-model:globalZoomMult="globalZoomMult"
@@ -183,7 +183,7 @@ const constants = {
   CURSOROFFSET: 5,            // Offset of cursor canvas
   SEGMENTSPAN: 1209600000000, // One week of gap-data is returned per request.
   MAXRECURSION: 20,           // Maximum recursion depth of gap-data requests (max 2 years)
-  MAXDURATION: 600000000,     // Maximum duration window (5min)
+  MAXDURATION: 600000000,     // Maximum duration window for the legacy streaming service (5min)
   INITDURATION: 15000000      // Initial duration window  (15sec)
 }
 
@@ -295,6 +295,24 @@ const hideLabelInfo = computed(() => {
 
 const nrVisChannels = computed(() => {
   return visibleChannels.value.length
+})
+
+/**
+ * Maximum duration window, in microseconds.
+ *
+ * `constants.MAXDURATION` exists to stop the legacy WebSocket streaming service from
+ * falling over on a wide request. The Zarr transport reads pages directly from the
+ * browser and has no such backend to protect, so a Zarr viewer is bounded only by the
+ * length of the recording itself.
+ */
+const maxDuration = computed(() => {
+  if (!isZarrAssetType(activeViewer.value?.content?.assetType)) {
+    return constants.MAXDURATION
+  }
+  if (ts_start.value === null || ts_end.value === null) {
+    return constants.MAXDURATION
+  }
+  return ts_end.value - ts_start.value
 })
 
 // Methods that need to be defined early (used in watchers)
@@ -697,8 +715,8 @@ const setGlobalZoom = (value) => {
 }
 
 const setDuration = (value) => {
-  if (value > constants.MAXDURATION) {
-    duration.value = constants.MAXDURATION
+  if (value > maxDuration.value) {
+    duration.value = maxDuration.value
   } else {
     duration.value = value
   }

@@ -8,7 +8,7 @@
         :precision="durationPrecision"
         :step="durationStep"
         :min="0.01"
-        :max="constants['MAXDURATION']"
+        :max="maxDuration"
         controls-position="right">
 
         <template #suffix>
@@ -138,8 +138,8 @@ import IconControllerPause from "@/components/icons/IconControllerPause.vue"
 
 // Props
 const props = defineProps({
-  constants: {
-    type: Object,
+  maxDuration: {
+    type: Number,
     required: true
   },
   duration: {
