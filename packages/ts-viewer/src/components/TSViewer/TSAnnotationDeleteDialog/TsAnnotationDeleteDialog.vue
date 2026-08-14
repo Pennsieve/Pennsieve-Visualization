@@ -35,10 +35,6 @@
 </template>
 
 <script>
-import {
-  pathOr, propOr
-} from 'ramda'
-
 import BfDialogHeader from '@/components/Shared/bf-dialog-header/BfDialogHeader.vue'
 import DialogBody from '@/components/Shared/dialog-body/DialogBody.vue'
 import BfLibraryButton from '@/components/Shared/bf-library-button/BFLibraryButton.vue'

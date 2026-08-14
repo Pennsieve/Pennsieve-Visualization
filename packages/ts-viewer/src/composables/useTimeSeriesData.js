@@ -1,6 +1,5 @@
 // @/composables/useTimeSeriesData.js
 import {reactive, ref} from 'vue'
-import {propOr} from "ramda";
 
 export const useTimeSeriesData = () => {
     // Data structures from original
