@@ -75,7 +75,7 @@ export default {
     IconSelection
   },
 
-  emits: ['closeWindow', 'update:visible'],
+  emits: ['closeWindow', 'update:visible', 'setFilters'],
   mixins: [
   ],
   watch: {
@@ -201,16 +201,13 @@ export default {
     onButtonClick: function () {
     },
     submitForm: function (e) {
-      // EventBus.$emit('active-viewer-action', {
-      //   method: 'setTimeseriesFilters',
-      //   payload: {
-      //     selChannels: this.onChannels,
-      //     filterType: this.selectedFilter,
-      //     input0: this.input0,
-      //     input1: this.input1,
-      //     notchFreq: this.selectedNotch
-      //   }
-      // })
+      this.$emit('setFilters', {
+        selChannels: this.onChannels,
+        filterType: this.selectedFilter,
+        input0: this.input0,
+        input1: this.input1,
+        notchFreq: this.selectedNotch
+      })
       this.$emit('closeWindow')
     },
   }

@@ -962,6 +962,12 @@ const setFilters = (payload) => {
     let channelId = payload.selChannels[i]
     let channel = find(propEq('id', channelId), viewerChannels.value)
 
+    // An id with no channel row would throw below and skip the invalidate that
+    // refetches the filtered signal.
+    if (!channel) {
+      continue
+    }
+
     if (payload.filterType === 'clear') {
       channel.filter = {}
     } else {
