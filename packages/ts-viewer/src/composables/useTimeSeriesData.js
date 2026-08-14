@@ -183,11 +183,10 @@ export const useTimeSeriesData = () => {
         )
 
         if (!curChData) {
-            // Stale response from a previous channel config — discard silently
+            // Stale response from a previous channel config: discard silently
             return
         }
 
-        // ✅ PROCESS THE DATA (existing logic)
         switch (obj.type) {
             case 'gap':
             case 'Neural':
@@ -222,7 +221,7 @@ export const useTimeSeriesData = () => {
                     }
                 }
 
-                // ✅ CRITICAL: Update request counter for the CORRECT channel
+                // Update the request counter for this channel
                 let requestedPage = requestedPages.value.get(obj.data.pageStart)
                 if (requestedPage) {
                     let countForChannel = requestedPage.counter.get(curChData.id)
@@ -237,12 +236,6 @@ export const useTimeSeriesData = () => {
                     if (countForChannel > 0) {
                         countForChannel = countForChannel - 1
                         requestedPage.counter.set(curChData.id, countForChannel)
-
-                        // console.log('📊 Updated counter for channel:', {
-                        //     channelId: curChData.id,
-                        //     pageStart: obj.data.pageStart,
-                        //     newCount: countForChannel
-                        // })
                     }
 
                     // Check if page is complete
@@ -257,10 +250,6 @@ export const useTimeSeriesData = () => {
 
                         if (isComplete) {
                             requestedPages.value.delete(obj.data.pageStart)
-                            // console.log('✅ Page completed and removed:', {
-                            //     pageStart: obj.data.pageStart,
-                            //     remainingPages: requestedPages.value.size
-                            // })
                         }
                     }
                 }

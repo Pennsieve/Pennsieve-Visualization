@@ -59,9 +59,6 @@ pennsieve-visualization/
 │   ├── orthogonal/        # @pennsieve-viz/orthogonal
 │   ├── ts-viewer/         # @pennsieve-viz/tsviewer
 │   └── micro-ct/          # @pennsieve-viz/micro-ct
-├── src/                   # Dev playground app (not published)
-│   ├── store/duckdbStore.js
-│   └── main.js
 ├── pnpm-workspace.yaml
 └── package.json
 ```

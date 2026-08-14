@@ -21,32 +21,15 @@ export const useDataRequests = () => {
         preFetchRequestFnc = function() {
             const nrPending = aSyncPreRequests.value.length
             if (nrPending > 0) {
-                // ✅ More lenient prefetch blocking for montaged channels
-                const maxPendingPages = 5 // Increased from 3
+                const maxPendingPages = 5
                 const currentPendingSize = requestedPagesRef.value?.size || 0
 
-                // console.log('🔍 Prefetch check:', {
-                //     pendingRequests: nrPending,
-                //     currentPendingPages: currentPendingSize,
-                //     maxAllowed: maxPendingPages,
-                //     nextRequest: aSyncPreRequests.value[0]
-                // })
-
                 if (currentPendingSize < maxPendingPages) {
-                    // console.log('🚀 Starting prefetch request:', {
-                    //     start: aSyncPreRequests.value[0].start,
-                    //     channels: aSyncPreRequests.value[0].channels.map(ch => ({
-                    //         id: ch.id,
-                    //         serverId: ch.serverId,
-                    //         label: ch.label
-                    //     }))
-                    // })
-
                     const success = requestDataFromServer([aSyncPreRequests.value[0]])
                     if (success) {
                         aSyncPreRequests.value.splice(0, 1)
                     } else {
-                        console.warn('❌ Prefetch request failed')
+                        console.warn('Prefetch request failed')
                         // Stop prefetching if requests are failing
                         clearInterval(prefetchTimer.value)
                         isPrefetching.value = false
@@ -304,21 +287,6 @@ export const useDataRequests = () => {
 
         const datasetEndTime = ts_end
 
-        // console.log('📤 Processing requests:', {
-        //     count: requests.length,
-        //     requests: requests.map(req => ({
-        //         start: req.start,
-        //         duration: req.duration,
-        //         isInViewport: req.isInViewport,
-        //         channelCount: req.channels.length,
-        //         channels: req.channels.map(ch => ({
-        //             id: ch.id,
-        //             serverId: ch.serverId,
-        //             label: ch.label
-        //         }))
-        //     }))
-        // })
-
         for (let i = 0; i < requests.length; i++) {
             let curRequest
             if (i === 0) {
@@ -329,58 +297,38 @@ export const useDataRequests = () => {
                 curRequest = requests[i]
             }
 
-            // Check for last block
+            // Clamp to the recording end
             let requestEndTime = curRequest.start + curRequest.duration
-            
-            // Debug logging for invalid request issue
+
             if (curRequest.start >= datasetEndTime) {
-                console.error('❌ Request start time is beyond dataset end!', {
+                console.error('Request start time is beyond dataset end:', {
                     requestStart: curRequest.start,
-                    requestDuration: curRequest.duration,
-                    calculatedEndTime: requestEndTime,
-                    datasetEndTime: datasetEndTime,
-                    isStartAfterEnd: curRequest.start >= datasetEndTime
+                    datasetEndTime: datasetEndTime
                 })
             }
-            
+
             if (requestEndTime > datasetEndTime) {
-                console.warn('📊 Clamping request end time to dataset boundary:', {
-                    original: requestEndTime,
-                    clamped: datasetEndTime,
-                    requestStart: curRequest.start,
-                    duration: curRequest.duration
-                })
                 requestEndTime = datasetEndTime
             }
-            
-            // This should never happen - skip the request if it does
+
+            // An invalid request closes the websocket on the server side; skip it
             if (requestEndTime <= curRequest.start) {
-                console.error('🚨 CRITICAL: Invalid request detected - endTime <= startTime! Skipping request.', {
+                console.error('Invalid request, endTime <= startTime, skipping:', {
                     startTime: curRequest.start,
                     endTime: requestEndTime,
-                    duration: curRequest.duration,
-                    datasetEndTime: datasetEndTime,
-                    originalEndTime: curRequest.start + curRequest.duration
+                    datasetEndTime: datasetEndTime
                 })
-                continue // Skip this invalid request to prevent WebSocket closure
+                continue
             }
 
             const ws = websocket
             if (ws && ws.readyState === 1) {
-                // ✅ ENHANCED: Better virtual channel mapping for montaged channels
                 const virtualChannels = curRequest.channels.map(channel => {
-                    const serverChannelId = channel.serverId || channel.id
-                    const channelName = channel.label || channel.name
-
-                    // console.log('🔗 Mapping channel for request:', {
-                    //     clientId: channel.id,
-                    //     serverId: serverChannelId,
-                    //     label: channelName
-                    // })
-
                     return {
-                        id: serverChannelId,  // Server expects serverId
-                        name: channelName
+                        // The server expects the serverId; montaged traces keep
+                        // their composite label
+                        id: channel.serverId || channel.id,
+                        name: channel.label || channel.name
                     }
                 })
 
@@ -393,14 +341,6 @@ export const useDataRequests = () => {
                     pixelWidth: curRequest.pixelWidth,
                     virtualChannels
                 }
-
-                // console.log('📡 Sending WebSocket request:', {
-                //     startTime: req.startTime,
-                //     endTime: req.endTime,
-                //     isInViewport: curRequest.isInViewport,
-                //     virtualChannels: req.virtualChannels,
-                //     pixelWidth: req.pixelWidth
-                // })
 
                 const reqJson = JSON.stringify(req)
                 ws.send(reqJson)
@@ -418,27 +358,13 @@ export const useDataRequests = () => {
                     counter: channelCounter,
                     subPageCount: NaN,
                     ts: Date.now(),
-                    inViewport: curRequest.isInViewport,
-                    // Add debug info
-                    channels: curRequest.channels.map(ch => ({
-                        id: ch.id,
-                        serverId: ch.serverId,
-                        label: ch.label
-                    }))
+                    inViewport: curRequest.isInViewport
                 }
 
                 requestedPages.set(curRequest.start, requestInfo)
-
-                // console.log('✅ Request tracked:', {
-                //     pageStart: curRequest.start,
-                //     channelCount: nrChannels,
-                //     isInViewport: curRequest.isInViewport,
-                //     totalTrackedPages: requestedPages.size
-                // })
             } else {
-                console.error('❌ WebSocket not ready for sending requests:', {
-                    readyState: ws?.readyState,
-                    wsExists: !!ws
+                console.error('WebSocket not ready for sending requests:', {
+                    readyState: ws?.readyState
                 })
                 return false
             }

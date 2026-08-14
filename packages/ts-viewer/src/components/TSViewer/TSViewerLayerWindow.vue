@@ -21,9 +21,6 @@
           <div class="input-section">
             Select Color:
             <el-select v-model="selectedColor" placeholder="Select">
-              <!-- <div slot="prefix">
-                  <circle-icon class="team-avatar" icon="icon-color" :currentColor="selectedColor"></circle-icon>
-              </div> -->
               <el-option
                 v-for="item in colorOptions"
                 :key="item.value"
@@ -66,14 +63,12 @@
 
 <script>
 
-    import CircleIcon from "../icons/CircleIcon/CircleIcon.vue";
     import BfLibraryButton from "../Shared/bf-library-button/BFLibraryButton.vue";
 
     export default {
         name: 'AnnotationLayerWindow',
 
         components:{
-          CircleIcon,
           BfLibraryButton
         },
         props: {

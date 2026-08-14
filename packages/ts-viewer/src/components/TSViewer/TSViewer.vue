@@ -620,8 +620,6 @@ const onAnnLayersInitialized = () => {
 }
 
 const onChannelsInitialized = () => {
-  // console.log('update scrubber')
-
 }
 
 const onPageBack = () => {
@@ -804,7 +802,7 @@ onMounted(() => {
     return
   }
 
-  var style = window.getComputedStyle(element, null)
+  const style = window.getComputedStyle(element, null)
   const hhh = parseInt(style.getPropertyValue('height'))
 
   const toolbarOffset = props.isPreview ? 0 : 100

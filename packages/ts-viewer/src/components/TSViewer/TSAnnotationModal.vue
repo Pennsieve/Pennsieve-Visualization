@@ -320,12 +320,6 @@ const getUTCTimeString = (d) => {
       ('0' + d.getUTCMinutes()).slice(-2) + ':' + ('0' + d.getUTCSeconds()).slice(-2) );
   }
 }
-
-// Register components
-const components = {
-  IconSelection,
-  'bf-library-button': BfLibraryButton
-}
 </script>
 
 <style lang="scss" scoped>
