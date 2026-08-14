@@ -101,6 +101,7 @@
       ref="filterWindow"
       :visible="filterWindowOpen"
       @update:visible="filterWindowOpen = $event"
+      @setFilters="setTimeseriesFilters"
       @closeWindow="onCloseFilterWindow"
     />
 
@@ -183,7 +184,7 @@ const constants = {
   CURSOROFFSET: 5,            // Offset of cursor canvas
   SEGMENTSPAN: 1209600000000, // One week of gap-data is returned per request.
   MAXRECURSION: 20,           // Maximum recursion depth of gap-data requests (max 2 years)
-  MAXDURATION: 600000000,     // Maximum duration window for the legacy streaming service (5min)
+  MAXDURATION: 600000000,     // Maximum duration window for the legacy streaming service (10min)
   INITDURATION: 15000000      // Initial duration window  (15sec)
 }
 

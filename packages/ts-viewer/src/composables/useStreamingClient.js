@@ -287,6 +287,7 @@ export function useStreamingClient() {
         }
         const parsed = legacyFilterToSpec(message)
         if (parsed.kind === 'ignore') {
+            reportError({ error: `Filter not applied: ${parsed.reason}` })
             return
         }
 
