@@ -546,8 +546,6 @@ const _onMouseMove = (e) => {
   const mY = e.clientY - cCoord.top
   const mX = e.clientX - cCoord.left
 
-  // console.log('TSViewerCanvas: _onMouseMove called with tool:', viewerActiveTool.value, 'pointerMode:', pointerMode.value, 'mouseDown:', mouseDown.value)
-
   switch (viewerActiveTool.value) {
     case 'pan':
       if (mouseDown.value) {

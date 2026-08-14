@@ -70,8 +70,7 @@ export function useHandleXhrError(err) {
     const optionalStatus = prop('status', err)
     let status
     if (optionalStatus === undefined) {
-        // emit ajaxError
-        console.log(err)
+        console.error(err)
         return
     } else {
         status = err.status
@@ -90,14 +89,12 @@ export function useHandleXhrError(err) {
         })
     } // logout
     else if (status === 401) {
-        // debugger
         return useHandleLogout()
     }
     else {
         err.json().then(errorJson => {
           if (errorJson) {
             const msg = errorJson.message
-            console.log('error message is ', msg)
             EventBus.$emit('ajaxError', {
               detail: {
                 type: 'info',

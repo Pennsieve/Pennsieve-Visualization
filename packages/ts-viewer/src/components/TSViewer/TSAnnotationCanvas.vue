@@ -139,13 +139,6 @@ watch(
 
 // Lifecycle
 onMounted(async () => {
-  // EventBus.$on('active-viewer-action', (action) => {
-  //   if (action.method === 'renderCanvas') {
-  //     console.log('Re-rendering canvas due to layer visibility change')
-  //     renderCanvas()
-  //   }
-  // }) TODO
-
   try {
     await loadLayers(props.activeViewer, emit)
     await checkAnnotationRange(
@@ -159,10 +152,6 @@ onMounted(async () => {
     console.error('Error initializing annotations:', error)
   }
 })
-
-// onUnmounted(() => {
-//   EventBus.$off('active-viewer-action')
-// }) TODO
 
 // Expose methods for parent component
 defineExpose({

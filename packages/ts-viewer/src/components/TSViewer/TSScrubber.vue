@@ -19,7 +19,6 @@
           <canvas id="iCanvas" class="canvas" ref="iCanvas"
                   :width="_cpCanvasScaler(cWidth, pixelRatio, 0)"
                   :height="_cpCanvasScaler(viewportHeight, pixelRatio, 0)"
-                  @click="_onTap"
                   @mousemove="_onMouseMove"
                   @mousedown="_onMouseDown"
                   @mouseup="_onMouseUp"
@@ -262,13 +261,6 @@ const getUTCDateString = (d, s, c) => {
 }
 
 // Mouse Interactions
-// const _onTap = (e) => {
-//   const cCoord = iCanvas.value.getBoundingClientRect()
-//   const cClickOffset = e.clientX - cCoord.left
-//   const realStart = (cClickOffset / scrubberCWidth.value) * (props.ts_end - props.ts_start)
-//   emit('setStart', realStart + props.ts_start)
-// }
-
 const _onMouseMove = (e) => {
   if (!mouseDown.value) {
     const cCoord = iCanvas.value.getBoundingClientRect()

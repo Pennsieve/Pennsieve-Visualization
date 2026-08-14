@@ -80,7 +80,7 @@ export const useWebSocket = () => {
     let onErrorHandler = null
 
     let clearChannelsCallback = null
-    // `activeId` holds whichever ID type the caller provided — a viewer-asset
+    // `activeId` holds whichever ID type the caller provided: a viewer-asset
     // UUID or a package node ID. `idParamName` tracks which it is so the
     // WebSocket URL uses the matching query param.
     let activeId = null
@@ -90,10 +90,8 @@ export const useWebSocket = () => {
     // Configuration - can be set from outside
     let useMedian = false
 
-    // ✅ FIX: Add connection promise tracking
     let connectionPromise = null
 
-    // ✅ FIX: Helper function to wait for WebSocket to close
     const waitForWebSocketToClose = (ws, timeout = 2000) => {
         return new Promise((resolve) => {
             if (!ws || ws.readyState === WebSocket.CLOSED) {
@@ -114,7 +112,6 @@ export const useWebSocket = () => {
         })
     }
 
-    // ✅ FIX: Improved disconnect function
     const disconnect = async () => {
         if (websocket.value) {
             const ws = websocket.value
@@ -132,14 +129,13 @@ export const useWebSocket = () => {
         connectionPromise = null
     }
 
-    // ✅ FIX: Improved openWebsocket function
     const openWebsocket = async (timeseriesDiscoverApi, id, userToken, paramName = 'viewerAsset', packageId = null) => {
         // If there's already a connection in progress, wait for it
         if (connectionPromise) {
             await connectionPromise
         }
 
-        // ✅ FIX: Handle all WebSocket states, including CLOSING
+        // Handle all WebSocket states, including CLOSING
         if (websocket.value) {
             const currentState = websocket.value.readyState
 
@@ -149,7 +145,7 @@ export const useWebSocket = () => {
 
                 await disconnect()
 
-                // ✅ FIX: Add a small delay to ensure clean disconnection
+                // Small delay so the old socket closes before the new one opens
                 await new Promise(resolve => setTimeout(resolve, 100))
             }
         }
@@ -158,10 +154,9 @@ export const useWebSocket = () => {
         activePackageId = packageId
         idParamName = paramName
 
-        // ✅ FIX: Reset initWebsocket flag for new connections
         initWebsocket.value = true
 
-        // ✅ FIX: Create connection promise to prevent race conditions
+        // A shared promise so concurrent open calls wait on one connection
         connectionPromise = new Promise(async (resolve, reject) => {
             try {
                 const token = userToken || await useToken()
@@ -191,7 +186,6 @@ export const useWebSocket = () => {
                     reject(error)
                 }
 
-                // ✅ FIX: Add timeout for connection
                 setTimeout(() => {
                     if (ws.readyState === WebSocket.CONNECTING) {
                         ws.close()
@@ -448,7 +442,7 @@ export const useWebSocket = () => {
             websocket.value.send(JSON.stringify(message))
             return true
         }
-        console.warn('⚠️ Cannot send dump buffer request - WebSocket not connected')
+        console.warn('Cannot send dump buffer request: WebSocket not connected')
         return false
     }
 
@@ -458,7 +452,6 @@ export const useWebSocket = () => {
     const onChannelDetails = (handler) => { onChannelDetailsHandler = handler }
     const onError = (handler) => { onErrorHandler = handler }
 
-    // ✅ FIX: Improved cleanup
     onUnmounted(async () => {
         await disconnect()
     })

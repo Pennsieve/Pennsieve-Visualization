@@ -127,7 +127,6 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import IconTimeschale from '../icons/IconTimeschale.vue'
 import IconPreviousPage from "../icons/IconPreviousPage.vue"
 import IconNextAnnotationLeftFacing from "../icons/IconNextAnnotationLeftFacing.vue"
 import IconNextAnnotationRightFacing from "@/components/icons/IconNextAnnotationRightFacing.vue"
