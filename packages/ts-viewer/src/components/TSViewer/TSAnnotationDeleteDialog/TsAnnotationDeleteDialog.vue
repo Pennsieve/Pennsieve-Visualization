@@ -39,9 +39,9 @@ import {
   pathOr, propOr
 } from 'ramda'
 
-import BfDialogHeader from '@/components/shared/bf-dialog-header/BfDialogHeader.vue'
-import DialogBody from '@/components/shared/dialog-body/DialogBody.vue'
-import BfLibraryButton from '@/components/shared/bf-library-button/BfLibraryButton.vue'
+import BfDialogHeader from '@/components/Shared/bf-dialog-header/BfDialogHeader.vue'
+import DialogBody from '@/components/Shared/dialog-body/DialogBody.vue'
+import BfLibraryButton from '@/components/Shared/bf-library-button/BFLibraryButton.vue'
 import IconWarningCircle from '@/components/icons/IconWarningCircle.vue'
 
 export default {

@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Scoped to tsviewer: packages/core has pre-existing type errors that are
+      # outside this cleanup. Widen to `pnpm -r type-check` when core is fixed.
+      - run: pnpm --filter @pennsieve-viz/tsviewer type-check
+      - run: pnpm build
+      - run: pnpm --filter @pennsieve-viz/tsviewer test
+
+  # Installs the packed tarball outside the workspace and imports it. Workspace
+  # hoisting cannot mask a missing or misdeclared dependency here; this is the
+  # failure mode that forced the revert of PR #70.
+  pack-smoke:
+    runs-on: ubuntu-latest
+    # Known-red until the packaging fixes land: dist currently bundles
+    # element-plus chunks and imports aws-amplify/auth, which is not a
+    # declared dependency. Flip to required when the packaging PR merges.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @pennsieve-viz/tsviewer build
+      - run: pnpm --filter @pennsieve-viz/tsviewer pack --pack-destination "$RUNNER_TEMP"
+      - name: install tarball in isolation and import it
+        run: |
+          mkdir "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
+          npm init -y > /dev/null
+          npm install "$RUNNER_TEMP"/pennsieve-viz-tsviewer-*.tgz vue pinia element-plus
+          node -e "import('@pennsieve-viz/tsviewer').then(m => { if (!m.TSViewer || !m.createViewerStore) { console.error('missing exports'); process.exit(1) } console.log('smoke ok') })"
+          test -f node_modules/@pennsieve-viz/tsviewer/dist/style.css

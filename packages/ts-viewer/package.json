@@ -23,7 +23,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "test": "vitest run"
+    "test": "vitest run",
+    "type-check": "vue-tsc --noEmit -p tsconfig.typecheck.json"
   },
   "dependencies": {
     "@element-plus/icons-vue": "2.3.1",

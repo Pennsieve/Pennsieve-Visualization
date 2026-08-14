@@ -42,7 +42,7 @@ importers:
         specifier: ^5.8.3
         version: 5.9.3
       vite:
-        specifier: ^6.0.0-alpha.24
+        specifier: ^6.4.1
         version: 6.4.1(@types/node@25.0.3)(sass-embedded@1.97.0)(sass@1.97.0)(terser@5.44.1)
       vite-plugin-dts:
         specifier: ^4.3.0

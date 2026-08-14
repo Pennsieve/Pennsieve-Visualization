@@ -111,7 +111,7 @@ import { storeToRefs } from 'pinia'
 import IconSelection from "../icons/IconSelection.vue"
 
 // Async component imports
-const BfLibraryButton = defineAsyncComponent(() => import('@/components/shared/bf-library-button/BfLibraryButton.vue'))
+const BfLibraryButton = defineAsyncComponent(() => import('@/components/Shared/bf-library-button/BFLibraryButton.vue'))
 
 // Define props
 const props = defineProps({
