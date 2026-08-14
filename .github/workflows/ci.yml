@@ -22,6 +22,18 @@ jobs:
       - run: pnpm build
       - run: pnpm --filter @pennsieve-viz/tsviewer test
 
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
   # Installs the packed tarball outside the workspace and imports it. Workspace
   # hoisting cannot mask a missing or misdeclared dependency here; this is the
   # failure mode that forced the revert of PR #70.
