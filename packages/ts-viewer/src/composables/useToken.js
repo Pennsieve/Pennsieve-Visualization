@@ -1,16 +1,14 @@
-import {fetchAuthSession} from "aws-amplify/auth";
-
+/**
+ * Returns the current Amplify access token, or null when @aws-amplify/auth
+ * is not installed or no session exists. The import is dynamic so the
+ * optional peer dependency stays optional.
+ */
 export async function useToken() {
     try {
-        return fetchAuthSession().then((session) => {
-            return session?.tokens?.accessToken.toString();
-            }
-        );
-    } catch (error) {
-        console.error(error);
+        const { fetchAuthSession } = await import('@aws-amplify/auth')
+        const session = await fetchAuthSession()
+        return session?.tokens?.accessToken.toString()
+    } catch {
+        return null
     }
-}
-
-export async function useLogout() {
-    Auth.logout()
 }

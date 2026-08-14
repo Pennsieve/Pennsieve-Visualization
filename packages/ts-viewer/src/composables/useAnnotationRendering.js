@@ -3,7 +3,6 @@ import { ref, computed, inject } from 'vue'
 import { createViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import { useToken } from "@/composables/useToken"
-import { propOr, pathOr } from 'ramda'
 import { sortAnnotations, annIndexOf, getLayer } from '@/utils/annotationUtils'
 
 /**
@@ -223,8 +222,8 @@ export function useAnnotationRendering(storeInstance = null) {
     }
 
     const renderLinkedPackageIcon = async (ctx, linkedPackageDTO, startX, offsetY, halfHeight, height) => {
-        const preview = pathOr({}, ['objects', 'view', 1, 'content'], linkedPackageDTO)
-        const fileType = propOr('', 'fileType', preview)
+        const preview = linkedPackageDTO?.objects?.view?.[1]?.content ?? {}
+        const fileType = preview?.fileType ?? ''
         const img = new Image()
 
         if (fileType === 'PNG') {

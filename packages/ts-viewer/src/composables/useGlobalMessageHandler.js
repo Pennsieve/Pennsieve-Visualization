@@ -1,15 +1,14 @@
 import { onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { pathOr, propOr } from 'ramda'
 import EventBus from '../utils/event-bus'
 
 export function useGlobalMessageHandler() {
   const onToast = (evt) => {
-    const detailMsg = pathOr('', ['detail', 'msg'], evt)
-    const message = propOr(detailMsg, 'msg', evt)
-    const type = pathOr('info', ['detail', 'type'], evt).toLowerCase()
-    const showClose = pathOr(false, ['detail', 'showClose'], evt)
-    const duration = pathOr(3000, ['detail', 'duration'], evt)
+    const detailMsg = evt?.detail?.msg ?? ''
+    const message = evt?.msg ?? detailMsg
+    const type = (evt?.detail?.type ?? 'info').toLowerCase()
+    const showClose = evt?.detail?.showClose ?? false
+    const duration = evt?.detail?.duration ?? 3000
 
     if (!message) {
       return

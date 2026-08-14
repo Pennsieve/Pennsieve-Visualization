@@ -13,7 +13,7 @@ import { createViewerStore } from '../stores/tsviewer'
 export function useTsAnnotation(storeInstance = null) {
     // Use provided store, inject from parent, or fall back to default
     const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
-    const { viewerChannels, viewerAnnotations } = storeToRefs(viewerStore)
+    const { viewerChannels, viewerAnnotations, activeAnnotation } = storeToRefs(viewerStore)
 
     // Helper function to get channel ID
     const getChannelId = (channel) => {

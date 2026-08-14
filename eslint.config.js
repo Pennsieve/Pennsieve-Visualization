@@ -70,16 +70,4 @@ export default defineConfigWithVueTs(
       "no-useless-escape": "warn",
     },
   },
-  // Live bugs that lint found; fixes are staged in the cleanup PR. Restore
-  // no-undef to an error for these files when it lands.
-  {
-    files: [
-      "packages/ts-viewer/src/composables/useToken.js",
-      "packages/ts-viewer/src/composables/useTsAnnotation.js",
-      "packages/ts-viewer/src/mixins/logout-handler/logout_handler_composable.js",
-    ],
-    rules: {
-      "no-undef": "warn",
-    },
-  },
 );

@@ -47,7 +47,6 @@ export default defineConfig({
         "pinia",
         "element-plus",
         "@aws-amplify/auth",
-        "aws-amplify/auth",
       ],
       output: {
         exports: "named",

@@ -1,6 +1,5 @@
 // @/composables/useChannelProcessing.js
 import { computed, reactive, ref, watch, readonly } from 'vue'
-import { head, propOr, findIndex, propEq } from 'ramda'
 
 export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspaceMontages, activeViewer) => {    // Processing state
     const processingStats = reactive({
@@ -44,19 +43,19 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     const getChannelId = (channel) => {
         if (!channel) return ''
         // Use the id field (which is unique for client-side)
-        return propOr('', 'id', channel)
+        return channel?.id ?? ''
     }
 
     const getServerChannelId = (channel) => {
         if (!channel) return ''
-        return propOr('', 'serverId', channel) || propOr('', 'id', channel)
+        return (channel?.serverId ?? '') || (channel?.id ?? '')
     }
 
     /**
      * Get clean channel identifier without montage modifications
      */
     const getRawChannelId = (channel) => {
-        return propOr('', 'id', channel)
+        return channel?.id ?? ''
     }
     /**
      * Get base channel identifier (strips montage suffix)
@@ -65,12 +64,12 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     const getBaseChannelId = (channel) => {
         if (!channel) return ''
 
-        let id = propOr('', 'id', channel)
+        let id = channel?.id ?? ''
 
         // Handle montage IDs - remove channel name suffix for montaged channels
         if (isViewingMontage.value && typeof id === 'string') {
             const parts = id.split('_')
-            id = parts.length > 1 ? head(parts) : id
+            id = parts.length > 1 ? parts[0] : id
         }
 
         return id

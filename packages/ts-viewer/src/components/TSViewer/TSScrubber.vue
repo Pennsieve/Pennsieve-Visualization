@@ -38,7 +38,6 @@ import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import { getClient } from "@/composables/streaming/clientRegistry"
 import { isZarrAssetType } from "@/composables/streaming/assetTypes"
-import { map } from 'ramda'
 
 // Props
 const props = defineProps({
@@ -538,7 +537,7 @@ const getAnnotations = async () => {
 
   try {
     const token = await useToken()
-    const layerIds = map(obj => obj.id, viewerStore.viewerAnnotations)
+    const layerIds = viewerStore.viewerAnnotations.map(obj => obj.id)
     const endTime = props.ts_end
     const baseUrl = `${viewerStore.config.apiUrl}/timeseries/${currentViewerId}/annotations/window`
     let url = baseUrl + `?api_key=${token}&aggregation=count&start=${props.ts_start}&end=${props.ts_end}&period=${period.value}&mergePeriods=true`
