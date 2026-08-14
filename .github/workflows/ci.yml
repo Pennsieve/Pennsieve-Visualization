@@ -52,7 +52,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @pennsieve-viz/tsviewer build
-      - run: pnpm --filter @pennsieve-viz/tsviewer pack --pack-destination "$RUNNER_TEMP"
+      # pnpm pack is not filter-aware; run it from the package directory.
+      - run: pnpm pack --pack-destination "$RUNNER_TEMP"
+        working-directory: packages/ts-viewer
       - name: install tarball in isolation and import it
         run: |
           mkdir "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
