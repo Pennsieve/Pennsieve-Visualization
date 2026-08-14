@@ -67,7 +67,7 @@
 <script>
 
     import CircleIcon from "../icons/CircleIcon/CircleIcon.vue";
-    import BfLibraryButton from "../shared/bf-library-button/BfLibraryButton.vue";
+    import BfLibraryButton from "../Shared/bf-library-button/BFLibraryButton.vue";
 
     export default {
         name: 'AnnotationLayerWindow',
