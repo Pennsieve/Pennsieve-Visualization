@@ -57,17 +57,4 @@ jobs:
           npm init -y > /dev/null
           npm install "$RUNNER_TEMP"/pennsieve-viz-tsviewer-*.tgz vue pinia element-plus
           test -f node_modules/@pennsieve-viz/tsviewer/dist/style.css
-          set +e
-          OUT=$(node -e "import('@pennsieve-viz/tsviewer').then(m => { if (!m.TSViewer || !m.createViewerStore) { console.error('missing exports'); process.exit(1) } console.log('smoke ok') })" 2>&1)
-          STATUS=$?
-          echo "$OUT"
-          if [ "$STATUS" -ne 0 ]; then
-            # One known defect is tolerated: dist imports aws-amplify/auth,
-            # which is not a declared dependency. The fix is staged in the
-            # cleanup PR; delete this branch when it lands.
-            if echo "$OUT" | grep -q "Cannot find package 'aws-amplify'"; then
-              echo "::warning::pack-smoke: known defect, dist imports aws-amplify/auth which is not a declared dependency"
-              exit 0
-            fi
-            exit "$STATUS"
-          fi
+          node -e "import('@pennsieve-viz/tsviewer').then(m => { if (!m.TSViewer || !m.createViewerStore) { console.error('missing exports'); process.exit(1) } console.log('smoke ok') })"
