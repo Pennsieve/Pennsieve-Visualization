@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import dts from "vite-plugin-dts";
 import path from "path";
 import { resolve } from "path";
 import AutoImport from "unplugin-auto-import/vite";
@@ -10,13 +11,21 @@ export default defineConfig({
   plugins: [
     vue(),
     AutoImport({
-      resolvers: [ElementPlusResolver()],
+      // importStyle false keeps element-plus style deep-imports out of dist;
+      // consumers load element-plus CSS themselves.
+      resolvers: [ElementPlusResolver({ importStyle: false })],
       imports: ["vue"],
       dts: false,
     }),
     Components({
-      resolvers: [ElementPlusResolver()],
+      resolvers: [ElementPlusResolver({ importStyle: false })],
       dts: false,
+    }),
+    dts({
+      include: ["src"],
+      exclude: ["src/**/*.test.js", "src/**/*.test.ts"],
+      tsconfigPath: resolve(__dirname, "tsconfig.json"),
+      entryRoot: "src",
     }),
   ],
   css: {
@@ -36,25 +45,27 @@ export default defineConfig({
   },
   build: {
     lib: {
-      entry: resolve(__dirname, "src/index.js"),
+      entry: resolve(__dirname, "src/index.ts"),
       name: "TSViewer",
       formats: ["es", "cjs"],
       fileName: (format) => `index.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
+      // Regex externals so deep imports (element-plus/es/components/*, the
+      // zarr reader's wasm chunks) stay external too. tiny-emitter stays
+      // bundled: it ships no exports map, so an externalized subpath import
+      // breaks node ESM consumers.
       external: [
-        "vue",
-        "pinia",
-        "element-plus",
-        "@aws-amplify/auth",
+        /^vue$/,
+        /^pinia($|\/)/,
+        /^element-plus($|\/)/,
+        /^@element-plus\//,
+        /^@aws-amplify\//,
+        /^@pennsieve\/timeseries-zarr-reader($|\/)/,
+        /^protobufjs($|\/)/,
       ],
       output: {
         exports: "named",
-        globals: {
-          vue: "Vue",
-          pinia: "Pinia",
-          "element-plus": "ElementPlus",
-        },
         assetFileNames: (a) =>
           a.name?.endsWith(".css") ? "style.css" : "assets/[name][extname]",
       },
