@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import { StreamingClient } from '@pennsieve/timeseries-zarr-reader'
+import type { QueryOptions } from '@pennsieve/timeseries-zarr-reader'
 import { FileStore } from '@pennsieve/timeseries-zarr-reader/node'
 import { buildCatalogIndex } from './channelDetails'
+import type { CatalogIndex } from './channelDetails'
 import { parseRequest, partitionRequest } from './translate'
 import { buildContinuousSegm, buildNeuralSegm } from './segments'
+import type { ContinuousSegmentBlock, SegmentBlock } from './segments'
+
+type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
 /**
  * Exercises the adapter's request-to-block pipeline against the real committed bundle,
@@ -19,13 +24,13 @@ const START = 1704067200000000
 const SECOND = 1000000
 
 /** Drives one page through the pipeline exactly as the shim does. */
-async function runPage(client, catalogIndex, wire) {
+async function runPage(client: StreamingClient, catalogIndex: CatalogIndex, wire: unknown) {
     const req = parseRequest(wire)
     const { groups, unitTraces, invalid } = partitionRequest(req, catalogIndex, new Map())
-    const blocks = []
+    const blocks: SegmentBlock[] = []
 
     for (const group of groups) {
-        const options = {
+        const options: Mutable<QueryOptions> = {
             startUs: req.startTime,
             endUs: req.endTime,
             pixelWidthUs: req.pixelWidth,
@@ -62,8 +67,8 @@ async function runPage(client, catalogIndex, wire) {
 }
 
 describe('adapter pipeline against the committed bundle', () => {
-    let client
-    let catalogIndex
+    let client: StreamingClient
+    let catalogIndex: CatalogIndex
 
     beforeAll(async () => {
         client = new StreamingClient({ store: new FileStore(BUNDLE) })
@@ -133,7 +138,7 @@ describe('adapter pipeline against the committed bundle', () => {
             virtualChannels: [{ id: 'sineA', name: 'Sine A' }],
         })
 
-        const block = blocks[0]
+        const block = blocks[0] as ContinuousSegmentBlock
         expect(block.isMinMax).toBe(false)
         expect(block.nrPoints).toBe(20)
         for (let i = 0; i < block.nrPoints; i++) {
@@ -147,7 +152,7 @@ describe('adapter pipeline against the committed bundle', () => {
 
     it('tiles adjacent pages with no duplicated timestamp and no hole', async () => {
         const pageSize = 7 * SECOND
-        const wireFor = (pageStart) => ({
+        const wireFor = (pageStart: number) => ({
             minMax: true,
             startTime: pageStart,
             endTime: pageStart + pageSize,
@@ -162,7 +167,7 @@ describe('adapter pipeline against the committed bundle', () => {
         expect(second.nrPoints).toBeGreaterThan(0)
 
         // Each page keeps only bins starting inside its own half-open window.
-        for (const [block, pageStart] of [[first, START], [second, START + pageSize]]) {
+        for (const [block, pageStart] of [[first, START], [second, START + pageSize]] as const) {
             for (let i = 0; i < block.nrPoints; i++) {
                 expect(block.parsedData[0][i]).toBeGreaterThanOrEqual(pageStart)
                 expect(block.parsedData[0][i]).toBeLessThan(pageStart + pageSize)

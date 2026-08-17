@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { legacyFilterToSpec, validateSpecForRate, specSignature } from './filters'
+import type { LegacyBandFilterMessage, LegacyCutoffFilterMessage } from './filters'
 
 // Verbatim algebra from TSViewerCanvas.vue setFilters, so the round-trip tests
 // exercise the numbers the viewer actually puts on the wire.
-const wireBandpass = (input0, input1, channels = ['ch']) => ({
+const wireBandpass = (input0: number, input1: number, channels = ['ch']): LegacyBandFilterMessage => ({
     filter: 'bandpass',
     filterParameters: [4, (input0 + input1) / 2, Math.abs((input1 - input0) / 2)],
     channels
 })
 
-const wireBandstop = (notchFreq, channels = ['ch']) => ({
+const wireBandstop = (notchFreq: number, channels = ['ch']): LegacyBandFilterMessage => ({
     filter: 'bandstop',
     filterParameters: [4, notchFreq, 10],
     channels
@@ -163,8 +164,8 @@ describe('legacyFilterToSpec', () => {
 })
 
 describe('validateSpecForRate', () => {
-    const lowpass = (over) => ({ type: 'lowpass', order: 4, cutoffHz: 60, ...over })
-    const bandpass = (over) => ({ type: 'bandpass', order: 4, lowHz: 1, highHz: 100, ...over })
+    const lowpass = (over?: object) => ({ type: 'lowpass', order: 4, cutoffHz: 60, ...over })
+    const bandpass = (over?: object) => ({ type: 'bandpass', order: 4, lowHz: 1, highHz: 100, ...over })
 
     it('accepts an in-range cutoff filter', () => {
         expect(validateSpecForRate(lowpass(), 500)).toEqual({ ok: true })
@@ -304,7 +305,7 @@ describe('regression pins found by adversarial review', () => {
     })
 
     it('copies the channel list on the set branch, not just on clear', () => {
-        const msg = { filter: 'lowpass', filterParameters: [4, 60], channels: ['a'] }
+        const msg: LegacyCutoffFilterMessage = { filter: 'lowpass', filterParameters: [4, 60], channels: ['a'] }
         legacyFilterToSpec(msg).channels.push('b')
         expect(msg.channels).toEqual(['a'])
     })

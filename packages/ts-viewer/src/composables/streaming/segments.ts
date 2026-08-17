@@ -1,4 +1,48 @@
-// @/composables/streaming/segments.js
+// @/composables/streaming/segments.ts
+
+import type { EventBatch, Segment } from '@pennsieve/timeseries-zarr-reader'
+import type { ParsedRequest, TraceIdentity } from './translate'
+
+export type PageRequest = Pick<ParsedRequest, 'startTime' | 'endTime' | 'pixelWidth'>
+
+export interface SegmentBlockBase {
+    chId: string
+    lastUsed: number
+    unit: string
+    samplePeriod: number
+    requestedSamplePeriod: number
+    pageStart: number
+    pageEnd: number
+    startTs: number
+    isMinMax: boolean
+    unitM: number
+    type: 'Continuous' | 'Neural'
+    nrPoints: number
+    cData: Float32Array[]
+    parsedData: Float64Array[]
+    name: string
+    label: string
+}
+
+export interface ContinuousSegmentBlock extends SegmentBlockBase {
+    type: 'Continuous'
+    median: number
+    sumElem: number
+    nrValidPoints: number
+}
+
+export interface NeuralSegmentBlock extends SegmentBlockBase {
+    type: 'Neural'
+}
+
+export type SegmentBlock = ContinuousSegmentBlock | NeuralSegmentBlock
+
+export interface SegmentEnvelope {
+    pageStart: number
+    data: SegmentBlock
+    type: 'Continuous' | 'Neural' | 'gap'
+    nrResponses: number
+}
 
 /**
  * Index of the first bin of `segment` whose start time is at or after `boundaryUs`.
@@ -13,12 +57,12 @@
  * is claimed by the earlier page only: page A's exclusive end index and page B's first
  * index are the same expression evaluated on the same boundary value.
  *
- * @param {{startUs: number, samplePeriodUs: number}} segment - Reader segment.
- * @param {number} boundaryUs - Page boundary, in microseconds.
- * @param {number} binCount - Number of bins in the segment; the result is clamped to it.
- * @returns {number} Index in [0, binCount].
+ * @param segment - Reader segment.
+ * @param boundaryUs - Page boundary, in microseconds.
+ * @param binCount - Number of bins in the segment; the result is clamped to it.
+ * @returns Index in [0, binCount].
  */
-function firstBinAtOrAfter(segment, boundaryUs, binCount) {
+function firstBinAtOrAfter(segment: Segment, boundaryUs: number, binCount: number): number {
     const period = segment.samplePeriodUs
     let i = Math.ceil((boundaryUs - segment.startUs) / period)
     if (!Number.isFinite(i) || i < 0) {
@@ -39,11 +83,11 @@ function firstBinAtOrAfter(segment, boundaryUs, binCount) {
 /**
  * Three zero-filled Float32Array rows of `nrVal` entries, for the renderer to fill.
  *
- * @param {number} nrVal - Row length.
- * @returns {Float32Array[]} Three independent rows.
+ * @param nrVal - Row length.
+ * @returns Three independent rows.
  */
-function makeCData(nrVal) {
-    const cData = new Array(3)
+function makeCData(nrVal: number): Float32Array[] {
+    const cData: Float32Array[] = new Array(3)
     let k = 0
     while (k < 3) {
         cData[k] = new Float32Array(nrVal)
@@ -68,13 +112,18 @@ function makeCData(nrVal) {
  * `requestedSamplePeriod` echoes the request's `pixelWidth`; the viewer discards a block
  * whose value no longer matches the viewport's resolution.
  *
- * @param {{startUs: number, samplePeriodUs: number, isMinMax: boolean, data: Float64Array}} segment - Reader segment.
- * @param {{chId: string, label: string, clientId: string, unit: string}} identity - Trace identity echoing the request.
- * @param {{startTime: number, endTime: number, pixelWidth: number}} req - Parsed page request.
- * @param {{useMedian?: boolean}} [options] - `useMedian` defaults to false.
- * @returns {object} Legacy segment block; `nrPoints === 0` when nothing survives clipping.
+ * @param segment - Reader segment.
+ * @param identity - Trace identity echoing the request.
+ * @param req - Parsed page request.
+ * @param options - `useMedian` defaults to false.
+ * @returns Legacy segment block; `nrPoints === 0` when nothing survives clipping.
  */
-export function buildContinuousSegm(segment, identity, req, options = {}) {
+export function buildContinuousSegm(
+    segment: Segment,
+    identity: TraceIdentity,
+    req: PageRequest,
+    options: { useMedian?: boolean } = {}
+): ContinuousSegmentBlock {
     const period = segment.samplePeriodUs
     const binCount = segment.isMinMax ? segment.data.length / 2 : segment.data.length
     const clippable = binCount > 0 && period > 0
@@ -83,7 +132,7 @@ export function buildContinuousSegm(segment, identity, req, options = {}) {
     const nrVal = endExcl - first
     const startTs = segment.startUs + first * period
 
-    const parsedData = new Array(3)
+    const parsedData: Float64Array[] = new Array(3)
     let sumElem = 0
     let nrValidPoints = 0
     let i = 0
@@ -159,11 +208,11 @@ export function buildContinuousSegm(segment, identity, req, options = {}) {
  * block drains the counter instead. It is dispatched with envelope type `gap`, and the
  * viewer caches it like a data block so the page is not requested again.
  *
- * @param {{chId: string, label: string, clientId: string, unit: string}} identity - Trace identity echoing the request.
- * @param {{startTime: number, endTime: number, pixelWidth: number}} req - Parsed page request.
- * @returns {object} Legacy segment block with no points.
+ * @param identity - Trace identity echoing the request.
+ * @param req - Parsed page request.
+ * @returns Legacy segment block with no points.
  */
-export function buildGapSegm(identity, req) {
+export function buildGapSegm(identity: TraceIdentity, req: PageRequest): ContinuousSegmentBlock {
     return {
         chId: identity.chId,
         lastUsed: 0,
@@ -200,12 +249,16 @@ export function buildGapSegm(identity, req) {
  * the viewer matches responses on chId AND label, and every unit-channel response would
  * otherwise be discarded as stale.
  *
- * @param {{samplePeriodUs: number, isResampled: boolean, times: Float64Array}} batch - Reader event batch.
- * @param {{chId: string, label: string, clientId: string, unit: string}} identity - Trace identity echoing the request.
- * @param {{startTime: number, endTime: number, pixelWidth: number}} req - Parsed page request.
- * @returns {object} Legacy Neural block.
+ * @param batch - Reader event batch.
+ * @param identity - Trace identity echoing the request.
+ * @param req - Parsed page request.
+ * @returns Legacy Neural block.
  */
-export function buildNeuralSegm(batch, identity, req) {
+export function buildNeuralSegm(
+    batch: Pick<EventBatch, 'samplePeriodUs' | 'isResampled' | 'times'>,
+    identity: TraceIdentity,
+    req: PageRequest
+): NeuralSegmentBlock {
     const nrVal = batch.times.length
     const times = Float64Array.from(batch.times)
     const parsedData = [times, Float64Array.from(batch.times)]

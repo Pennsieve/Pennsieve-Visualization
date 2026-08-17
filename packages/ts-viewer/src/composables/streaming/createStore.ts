@@ -1,4 +1,5 @@
 import { loadReader } from './loadReader'
+import type { FetchStore } from '@pennsieve/timeseries-zarr-reader'
 
 /**
  * Shared FetchStore options.
@@ -17,11 +18,8 @@ const REFRESH_MARGIN_MS = 5 * 60 * 1000
 /**
  * Removes one trailing slash. Reader store keys always begin with `/`, so a base URL that
  * keeps its own trailing slash produces a double slash and a 404 on some origins.
- *
- * @param {string} url
- * @returns {string}
  */
-export function stripTrailingSlash(url) {
+export function stripTrailingSlash(url: string): string {
     return url.endsWith('/') ? url.slice(0, -1) : url
 }
 
@@ -34,10 +32,9 @@ export function stripTrailingSlash(url) {
  * produce `.../prefix/?Policy=...` + `/zarr.json`. Splitting here lets the caller pass one
  * already-signed URL and have every object request signed correctly.
  *
- * @param {string} url
- * @returns {{base: string, search: string}} `search` is '' for an unsigned URL.
+ * @returns `search` is '' for an unsigned URL.
  */
-export function splitSignedUrl(url) {
+export function splitSignedUrl(url: string): { base: string; search: string } {
     const mark = url.indexOf('?')
     const rawBase = mark === -1 ? url : url.slice(0, mark)
     const search = mark === -1 ? '' : url.slice(mark + 1)
@@ -59,16 +56,13 @@ export function splitSignedUrl(url) {
  * substitution -- which is NOT standard base64url. AWS replaces `+` with `-`, `=` with `_`,
  * and `/` with `~`, so decoding has to reverse exactly that. (Standard base64url would map
  * `_` back to `/`; doing that here fails on the padding `=` that ends most policies, which
- * would make this silently return null for essentially every real signature.)
+ * would make this silently return null for nearly every real signature.)
  *
  * Reading the expiry lets a renewal happen before a read fails rather than after. Any parse
  * failure returns null, which falls back to renewing reactively on the first 403 -- so this
  * is an optimization, never a dependency.
- *
- * @param {string} search
- * @returns {?number}
  */
-export function policyExpiryMs(search) {
+export function policyExpiryMs(search: string): number | null {
     try {
         const policy = new URLSearchParams(search).get('Policy')
         if (!policy) {
@@ -83,12 +77,21 @@ export function policyExpiryMs(search) {
 }
 
 /** Accepts either a bare URL string or `{url}` from the host's refresh callback. */
-function readRefreshedUrl(result) {
+function readRefreshedUrl(result: string | { url: string } | null | undefined): string {
     const url = typeof result === 'string' ? result : result?.url
     if (typeof url !== 'string' || url.length === 0) {
         throw new Error('onUrlExpired must resolve to a bundle URL')
     }
     return url
+}
+
+export interface CreateStoreOptions {
+    /** Resolves a fresh URL. */
+    onUrlExpired?: () => Promise<string | { url: string } | null | undefined>
+    /** Injectable for tests. */
+    fetchImpl?: (request: Request) => Promise<Response>
+    /** Injectable clock for tests. */
+    now?: () => number
 }
 
 /**
@@ -104,14 +107,10 @@ function readRefreshedUrl(result) {
  * `onUrlExpired` callback to renew it. An unsigned URL with no callback needs no interception
  * at all and gets a plain store.
  *
- * @param {string} url Bundle root, signed or not, with or without a trailing slash.
- * @param {object} [options]
- * @param {() => Promise<string|{url: string}>} [options.onUrlExpired] Resolves a fresh URL.
- * @param {typeof fetch} [options.fetchImpl] Injectable for tests.
- * @param {() => number} [options.now] Injectable clock for tests.
- * @returns {Promise<object>} A zarrita FetchStore.
+ * @param url Bundle root, signed or not, with or without a trailing slash.
+ * @returns A zarrita FetchStore.
  */
-export async function createStoreForUrl(url, options = {}) {
+export async function createStoreForUrl(url: string, options: CreateStoreOptions = {}): Promise<FetchStore> {
     if (typeof url !== 'string' || url.length === 0) {
         throw new Error('createStoreForUrl: a bundle URL is required')
     }
@@ -138,7 +137,7 @@ export async function createStoreForUrl(url, options = {}) {
     // key even after a renewal moves the base.
     const initialBase = base
     let expiresAtMs = policyExpiryMs(search)
-    let pending = null
+    let pending: Promise<void> | null = null
 
     const refresh = () => {
         if (pending === null) {
@@ -168,7 +167,7 @@ export async function createStoreForUrl(url, options = {}) {
     const isExpiring = () =>
         onUrlExpired !== null && expiresAtMs !== null && now() >= expiresAtMs - REFRESH_MARGIN_MS
 
-    const addressOf = (requestUrl) => {
+    const addressOf = (requestUrl: string) => {
         if (!requestUrl.startsWith(initialBase)) {
             // The store only ever asks for `initialBase + key`. Anything else is a bug, and
             // concatenating it onto the base would produce a doubled-up URL whose 403 looks
@@ -181,7 +180,7 @@ export async function createStoreForUrl(url, options = {}) {
 
     // `new Request(url, request)` is the documented way to redirect a store request while
     // keeping its Range header and abort signal intact.
-    const signedFetch = async (request) => {
+    const signedFetch = async (request: Request) => {
         if (isExpiring()) {
             // Best effort: the signature in hand is still valid, so a failed pre-emptive
             // renewal must not fail a read the current one could have served.

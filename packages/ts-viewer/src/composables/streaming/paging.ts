@@ -1,4 +1,4 @@
-// @/composables/streaming/paging.js
+// @/composables/streaming/paging.ts
 
 /** Client page span at the narrowest zoom, in microseconds. */
 export const BASE_PAGE_SIZE = 15000000
@@ -15,10 +15,10 @@ const TARGET_VIEW_PAGES = 4
  * base, so every coarse page boundary lies on a boundary of every finer span and page
  * starts stay aligned across zoom levels.
  *
- * @param {number} durationUs Viewport duration, in microseconds.
- * @returns {number} Page span, at least `BASE_PAGE_SIZE`.
+ * @param durationUs Viewport duration, in microseconds.
+ * @returns Page span, at least `BASE_PAGE_SIZE`.
  */
-export function adaptivePageSize(durationUs) {
+export function adaptivePageSize(durationUs: number): number {
     if (!Number.isFinite(durationUs) || durationUs <= 0) {
         return BASE_PAGE_SIZE
     }

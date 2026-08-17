@@ -1,27 +1,36 @@
-// @/composables/streaming/translate.js
+// @/composables/streaming/translate.ts
 
 import { specSignature } from './filters'
+import type { ChannelInfo, FilterSpec, MontagePair } from '@pennsieve/timeseries-zarr-reader'
+import type { CatalogIndex } from './channelDetails'
 
 /** Separator the viewer puts between a montage pair's two channel NAMES. */
 const MONTAGE_SEPARATOR = '<->'
 
-/**
- * @typedef {object} TraceIdentity
- * @property {string} chId Server channel id exactly as the request carried it.
- * @property {string} label Channel label exactly as the request carried it.
- * @property {string} clientId The viewer's client-side unique id for the trace.
- * @property {string} unit Physical unit from the catalog; '' when unknown.
- */
+export interface TraceIdentity {
+    /** Server channel id exactly as the request carried it. */
+    chId: string
+    /** Channel label exactly as the request carried it. */
+    label: string
+    /** The viewer's client-side unique id for the trace. */
+    clientId: string
+    /** Physical unit from the catalog; '' when unknown. */
+    unit: string
+}
 
-/**
- * @typedef {object} QueryGroup
- * @property {string} key Grouping key; equal keys mean one reader query can serve both traces.
- * @property {?object} filterSpec FilterSpec for every trace in the group, or null.
- * @property {boolean} isMontage
- * @property {string[]} [channels] Bundle channel ids; present only when isMontage is false.
- * @property {Array<{lead: string, secondary: string}>} [montage] Present only when isMontage is true.
- * @property {TraceIdentity[]} traces Parallel to channels/montage, index for index.
- */
+export interface QueryGroup {
+    /** Grouping key; equal keys mean one reader query can serve both traces. */
+    key: string
+    /** FilterSpec for every trace in the group, or null. */
+    filterSpec: FilterSpec | null
+    isMontage: boolean
+    /** Bundle channel ids; present only when isMontage is false. */
+    channels?: string[]
+    /** Present only when isMontage is true. */
+    montage?: MontagePair[]
+    /** Parallel to channels/montage, index for index. */
+    traces: TraceIdentity[]
+}
 
 /**
  * Reads the filter that applies to one trace.
@@ -30,12 +39,8 @@ const MONTAGE_SEPARATOR = '<->'
  * `selChannels` taken from `viewerChannels[].id`, which is `createVirtualChannel`'s
  * `uniqueId`. Looking a montaged trace up by its server id would silently return the
  * unfiltered spec of its lead channel.
- *
- * @param {Map<string, object>|undefined} filterRegistry
- * @param {string} clientId
- * @returns {?object} FilterSpec or null.
  */
-function lookupFilter(filterRegistry, key) {
+function lookupFilter(filterRegistry: Map<string, FilterSpec> | undefined, key: string): FilterSpec | null {
     if (!filterRegistry || typeof filterRegistry.get !== 'function') {
         return null
     }
@@ -51,28 +56,43 @@ function lookupFilter(filterRegistry, key) {
  * they do, the filter lookup misses silently and the trace renders unfiltered while the user
  * believes a filter is applied. Server id plus label is the one pairing both sides hold
  * directly; it is also exactly what `dataCallback` matches a response on.
- *
- * @param {*} serverId
- * @param {*} label
- * @returns {string}
  */
-export function filterKey(serverId, label) {
+export function filterKey(serverId: unknown, label: unknown): string {
     return `${serverId}|${label}`
 }
 
-/**
- * @param {{id: string, name: string}} vc
- * @param {string} clientId
- * @param {string} unit
- * @returns {TraceIdentity}
- */
-function identityFor(vc, clientId, unit) {
+function identityFor(vc: WireVirtualChannel, clientId: string, unit: string): TraceIdentity {
     return {
         chId: vc.id,
         label: vc.name,
         clientId: clientId,
         unit: unit
     }
+}
+
+export interface WireVirtualChannel {
+    id: string
+    name: string
+}
+
+interface WireRequest {
+    session: unknown
+    packageId: unknown
+    startTime: number
+    endTime: number
+    pixelWidth: number
+    minMax?: unknown
+    virtualChannels?: WireVirtualChannel[]
+}
+
+export interface ParsedRequest {
+    session: unknown
+    packageId: unknown
+    startTime: number
+    endTime: number
+    pixelWidth: number
+    raw: boolean
+    virtualChannels: WireVirtualChannel[]
 }
 
 /**
@@ -89,18 +109,17 @@ function identityFor(vc, clientId, unit) {
  *
  * `pixelWidth` is microseconds per pixel column and maps straight onto `pixelWidthUs`.
  *
- * @param {string|object} json Raw JSON string or the parsed request object.
- * @returns {{session: *, packageId: *, startTime: number, endTime: number, pixelWidth: number, raw: boolean, virtualChannels: Array<{id: string, name: string}>}}
+ * @param json Raw JSON string or the parsed request object.
  * @throws {Error} When the input is not parseable JSON or is not a JSON object.
  */
-export function parseRequest(json) {
-    let msg = json
+export function parseRequest(json: unknown): ParsedRequest {
+    let msg = json as WireRequest
 
     if (typeof json === 'string') {
         try {
             msg = JSON.parse(json)
         } catch (error) {
-            throw new Error(`Unparseable data request: ${error.message}`)
+            throw new Error(`Unparseable data request: ${(error as SyntaxError).message}`)
         }
     }
 
@@ -131,10 +150,13 @@ export function parseRequest(json) {
  * The client id is what the filter registry and the viewer's channel list are keyed by; the
  * SERVER id is what the reader queries and what a response must echo.
  *
- * @param {{id: *, name: *}} vc One entry of the request's `virtualChannels`.
- * @returns {string} '' when the entry carries no usable id.
+ * @param vc One entry of the request's `virtualChannels`.
+ * @returns '' when the entry carries no usable id.
  */
-export function reconstructClientId(vc, catalogIndex) {
+export function reconstructClientId(
+    vc: Partial<WireVirtualChannel> | null | undefined,
+    catalogIndex?: Pick<CatalogIndex, 'byId'>
+): string {
     const id = vc && vc.id !== undefined && vc.id !== null ? String(vc.id) : ''
     const name = vc && typeof vc.name === 'string' ? vc.name : ''
     return isMontageLabel(vc, catalogIndex) ? `${id}_${name}` : id
@@ -150,18 +172,29 @@ export function reconstructClientId(vc, catalogIndex) {
  * against the catalog distinguishes the two cases exactly.
  *
  * Without a catalog (callers that only need the id shape) it falls back to the separator test.
- *
- * @param {{id: *, name: *}} vc
- * @param {{byId: Map<string, object>}} [catalogIndex]
- * @returns {boolean}
  */
-export function isMontageLabel(vc, catalogIndex) {
+export function isMontageLabel(
+    vc: Partial<WireVirtualChannel> | null | undefined,
+    catalogIndex?: Pick<CatalogIndex, 'byId'>
+): boolean {
     const name = vc && typeof vc.name === 'string' ? vc.name : ''
     if (!name.includes(MONTAGE_SEPARATOR)) {
         return false
     }
-    const info = catalogIndex?.byId?.get(vc?.id)
+    const info = catalogIndex?.byId?.get(vc?.id as string)
     return info ? info.name !== name : true
+}
+
+export interface ResolvedMontagePair {
+    ok: true
+    pair: MontagePair
+    leadInfo: ChannelInfo
+    secondaryInfo: ChannelInfo
+}
+
+export interface RejectedMontagePair {
+    ok: false
+    reason: string
 }
 
 /**
@@ -179,13 +212,11 @@ export function isMontageLabel(vc, catalogIndex) {
  * alignment (equal rates but offset sample phases), which cannot be seen in ChannelInfo. That
  * one remains a residual failure and surfaces later as a rejected query, handled by the
  * caller's per-group error path.
- *
- * @param {{id: string, name: string}} vc
- * @param {{byId: Map<string, object>, byName: Map<string, object>}} catalogIndex
- * @returns {{ok: true, pair: {lead: string, secondary: string}, leadInfo: object, secondaryInfo: object}
- *          | {ok: false, reason: string}}
  */
-export function resolveMontagePair(vc, catalogIndex) {
+export function resolveMontagePair(
+    vc: WireVirtualChannel,
+    catalogIndex: Pick<CatalogIndex, 'byId' | 'byName'>
+): ResolvedMontagePair | RejectedMontagePair {
     const name = vc && typeof vc.name === 'string' ? vc.name : ''
     const parts = name.split(MONTAGE_SEPARATOR)
 
@@ -251,19 +282,26 @@ export function resolveMontagePair(vc, catalogIndex) {
  * Group order is first-appearance order over the request's channels, so the same request
  * always produces the same groups in the same sequence.
  *
- * @param {{virtualChannels: Array<{id: string, name: string}>}} req Parsed request.
- * @param {{byId: Map<string, object>, byName: Map<string, object>}} catalogIndex
- * @param {Map<string, object>} [filterRegistry] Active FilterSpec per client channel id.
- * @returns {{groups: QueryGroup[], unitTraces: TraceIdentity[], invalid: Array<{identity: TraceIdentity, reason: string}>}}
+ * @param req Parsed request.
+ * @param filterRegistry Active FilterSpec per client channel id.
  */
-export function partitionRequest(req, catalogIndex, filterRegistry) {
-    const groups = []
-    const byKey = new Map()
-    const unitTraces = []
-    const invalid = []
+export function partitionRequest(
+    req: Pick<ParsedRequest, 'virtualChannels'>,
+    catalogIndex: Pick<CatalogIndex, 'byId' | 'byName'>,
+    filterRegistry?: Map<string, FilterSpec>
+): { groups: QueryGroup[]; unitTraces: TraceIdentity[]; invalid: Array<{ identity: TraceIdentity; reason: string }> } {
+    const groups: QueryGroup[] = []
+    const byKey = new Map<string, QueryGroup>()
+    const unitTraces: TraceIdentity[] = []
+    const invalid: Array<{ identity: TraceIdentity; reason: string }> = []
     const virtualChannels = req && Array.isArray(req.virtualChannels) ? req.virtualChannels : []
 
-    const addToGroup = (isMontage, member, identity, filterSpec) => {
+    const addToGroup = (
+        isMontage: boolean,
+        member: string | MontagePair,
+        identity: TraceIdentity,
+        filterSpec: FilterSpec | null
+    ) => {
         const key = `${specSignature(filterSpec)}|${isMontage ? 'montage' : 'channels'}`
         let group = byKey.get(key)
 
@@ -276,9 +314,9 @@ export function partitionRequest(req, catalogIndex, filterRegistry) {
         }
 
         if (isMontage) {
-            group.montage.push(member)
+            group.montage!.push(member as MontagePair)
         } else {
-            group.channels.push(member)
+            group.channels!.push(member as string)
         }
         group.traces.push(identity)
     }
@@ -286,7 +324,7 @@ export function partitionRequest(req, catalogIndex, filterRegistry) {
     for (const vc of virtualChannels) {
         if (vc === null || typeof vc !== 'object' || Array.isArray(vc)) {
             invalid.push({
-                identity: { chId: undefined, label: undefined, clientId: '', unit: '' },
+                identity: { chId: undefined, label: undefined, clientId: '', unit: '' } as unknown as TraceIdentity,
                 reason: 'Virtual channel entry is not an object'
             })
             continue
