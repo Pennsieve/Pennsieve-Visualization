@@ -18,7 +18,7 @@ const ok = (status = 200) => new Response(new Uint8Array([1, 2, 3]), { status })
  * base64, then `+`->`-`, `=`->`_`, `/`->`~`. Using plain base64 here would not exercise the
  * substitution and would hide a wrong decode.
  */
-const policyFor = (epochSeconds) =>
+const policyFor = (epochSeconds: number) =>
     btoa(JSON.stringify({
         Statement: [{ Resource: `${BASE}/*`, Condition: { DateLessThan: { 'AWS:EpochTime': epochSeconds } } }]
     })).replace(/\+/g, '-').replace(/=/g, '_').replace(/\//g, '~')
@@ -93,8 +93,8 @@ describe('createStoreForUrl', () => {
     })
 
     it('carries the signing query onto every object request, preserving Range', async () => {
-        const seen = []
-        const fetchImpl = vi.fn(async (request) => {
+        const seen: Array<{ url: string; range: string | null }> = []
+        const fetchImpl = vi.fn(async (request: Request) => {
             seen.push({ url: request.url, range: request.headers.get('range') })
             return ok(206)
         })
@@ -164,7 +164,7 @@ describe('createStoreForUrl', () => {
         const clock = 1_000_000_000_000
         const nearlyExpired = policyFor((clock + 60_000) / 1000)
         const onUrlExpired = vi.fn(async () => `${BASE}/?Policy=${policyFor((clock + 3600_000) / 1000)}`)
-        const fetchImpl = vi.fn(async () => ok())
+        const fetchImpl = vi.fn<(request: Request) => Promise<Response>>(async () => ok())
 
         const store = await createStoreForUrl(`${BASE}/?Policy=${nearlyExpired}`, {
             fetchImpl, onUrlExpired, now: () => clock
@@ -192,10 +192,10 @@ describe('createStoreForUrl', () => {
     })
 
     it('collapses concurrent renewals into one call to the host', async () => {
-        let release
+        let release!: (value?: unknown) => void
         const gate = new Promise((resolve) => { release = resolve })
         const onUrlExpired = vi.fn(async () => { await gate; return `${BASE}/?Policy=FRESH` })
-        const fetchImpl = vi.fn(async (request) =>
+        const fetchImpl = vi.fn(async (request: Request) =>
             request.url.includes('Policy=FRESH') ? ok() : new Response(null, { status: 403 }))
 
         const store = await createStoreForUrl(`${BASE}/?${SIG}`, { fetchImpl, onUrlExpired })
@@ -225,7 +225,7 @@ describe('createStoreForUrl', () => {
     })
 })
 
-describe('renewal robustness (regressions found by adversarial review)', () => {
+describe('renewal edge cases', () => {
     it('serves the read on the current signature when a proactive renewal fails', async () => {
         const clock = 1_000_000_000_000
         const onUrlExpired = vi.fn(async () => { throw new Error('packages-service down') })
@@ -252,18 +252,18 @@ describe('renewal robustness (regressions found by adversarial review)', () => {
             `${BASE}/?Policy=${policyFor((clock + 60_000) / 1000)}`,
             { fetchImpl, onUrlExpired, now: () => clock }
         )
-        for (const key of ['/a.json', '/b.json', '/c.json', '/d.json']) {
+        for (const key of ['/a.json', '/b.json', '/c.json', '/d.json'] as const) {
             await store.get(key)
         }
         expect(onUrlExpired).toHaveBeenCalledTimes(1)
     })
 
     it('does not renew twice when a peer already refreshed the signature', async () => {
-        let released
+        let released!: (value?: unknown) => void
         const gate = new Promise((resolve) => { released = resolve })
         const onUrlExpired = vi.fn(async () => { await gate; return `${BASE}/?Policy=FRESH` })
         // Everything 403s until the fresh signature is in play.
-        const fetchImpl = vi.fn(async (request) =>
+        const fetchImpl = vi.fn(async (request: Request) =>
             request.url.includes('Policy=FRESH') ? ok() : new Response(null, { status: 403 }))
 
         const store = await createStoreForUrl(`${BASE}/?${SIG}`, { fetchImpl, onUrlExpired })
@@ -275,7 +275,7 @@ describe('renewal robustness (regressions found by adversarial review)', () => {
 
     it('normalizes the base so a request splits back into its key', async () => {
         // A base with a redundant path segment or default port still has to round-trip.
-        const fetchImpl = vi.fn(async () => ok())
+        const fetchImpl = vi.fn<(request: Request) => Promise<Response>>(async () => ok())
         const store = await createStoreForUrl(`https://assets.pennsieve.net:443/O19/abc/?${SIG}`, { fetchImpl })
         await store.get('/zarr.json')
         const url = new URL(fetchImpl.mock.calls[0][0].url)

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import type { EventBatch, Segment } from '@pennsieve/timeseries-zarr-reader'
 import { buildContinuousSegm, buildGapSegm, buildNeuralSegm } from './segments.js'
 
 const CONTINUOUS_KEYS = [
@@ -15,7 +16,7 @@ const NEURAL_KEYS = [
 
 const identity = { chId: 'ch-1', label: 'Ch 1', clientId: 'ch-1', unit: 'uV' }
 
-const req = (startTime, endTime) => ({
+const req = (startTime: number, endTime: number) => ({
     session: 'sess',
     packageId: 'pkg',
     startTime,
@@ -24,7 +25,7 @@ const req = (startTime, endTime) => ({
     raw: false
 })
 
-const rawSegment = (startUs, samplePeriodUs, values) => ({
+const rawSegment = (startUs: number, samplePeriodUs: number, values: number[]): Segment => ({
     channel: 'ch-1',
     startUs,
     samplePeriodUs,
@@ -32,7 +33,7 @@ const rawSegment = (startUs, samplePeriodUs, values) => ({
     data: Float64Array.from(values)
 })
 
-const minMaxSegment = (startUs, samplePeriodUs, values) => ({
+const minMaxSegment = (startUs: number, samplePeriodUs: number, values: number[]): Segment => ({
     channel: 'ch-1',
     startUs,
     samplePeriodUs,
@@ -51,7 +52,7 @@ const PAGE = 15000000
 // to one ULP; they are still far below one sample period.
 const ULP = 0.25
 
-const gridSegment = (firstGlobalBin, binCount) => ({
+const gridSegment = (firstGlobalBin: number, binCount: number): Segment => ({
     channel: 'ch-1',
     startUs: EPOCH + firstGlobalBin * P512,
     samplePeriodUs: P512,
@@ -254,7 +255,7 @@ describe('buildContinuousSegm page seams at 512 Hz', () => {
     })
 
     it('places every bin inside its own half-open page window', () => {
-        for (const [segm, page] of [[segmA, pageA], [segmB, pageB]]) {
+        for (const [segm, page] of [[segmA, pageA], [segmB, pageB]] as const) {
             const times = segm.parsedData[0]
             for (let i = 0; i < times.length; i++) {
                 expect(times[i]).toBeGreaterThanOrEqual(page.startTime)
@@ -352,7 +353,7 @@ describe('buildGapSegm', () => {
 })
 
 describe('buildNeuralSegm', () => {
-    const batch = (times) => ({
+    const batch = (times: number[]): EventBatch => ({
         channel: 'unitA',
         startUs: 0,
         endUs: 10000,

@@ -1,4 +1,6 @@
-// @/composables/streaming/autoscale.js
+// @/composables/streaming/autoscale.ts
+
+import type { QueryOptions, Segment } from '@pennsieve/timeseries-zarr-reader'
 
 /** Millimeters per inch, for converting a pixel scale to the toolbar's uV/mm reading. */
 const MM_PER_INCH = 25.4
@@ -20,6 +22,9 @@ const ROW_FILL = 0.8
  */
 const MAX_TRUSTED_P2P_UV = 100_000
 
+/** The fields of a reader `Segment` the amplitude pass reads. */
+export type EnvelopeSegment = Pick<Segment, 'channel' | 'isMinMax'> & { readonly data: ArrayLike<number> }
+
 /**
  * Peak-to-peak amplitude of each trace in a set of min/max envelope segments.
  *
@@ -27,11 +32,12 @@ const MAX_TRUSTED_P2P_UV = 100_000
  * `[min, max, ...]` pairs; raw data is read as plain samples. Non-finite values are gaps
  * and are skipped, so a channel that is entirely gap contributes nothing.
  *
- * @param {Array<{channel: string, data: ArrayLike<number>, isMinMax: boolean}>} segments
- * @returns {Map<string, number>} Peak-to-peak microvolts per channel, omitting empty ones.
+ * @returns Peak-to-peak microvolts per channel, omitting empty ones.
  */
-export function peakToPeakByChannel(segments) {
-    const out = new Map()
+export function peakToPeakByChannel(
+    segments: readonly EnvelopeSegment[] | null | undefined
+): Map<string, number> {
+    const out = new Map<string, number>()
     for (const segment of segments || []) {
         const data = segment?.data
         if (!data || data.length === 0) {
@@ -55,7 +61,7 @@ export function peakToPeakByChannel(segments) {
 }
 
 /** Median of a numeric list. Returns null for an empty list. */
-function median(values) {
+function median(values: readonly number[]): number | null {
     if (values.length === 0) {
         return null
     }
@@ -74,13 +80,16 @@ function median(values) {
  * ignored. Returns null when nothing usable is left or `rowHeight` is not positive, and the
  * caller should then keep the scale it has.
  *
- * @param {Map<string, number>|Iterable<number>} amplitudes Peak-to-peak microvolts per
+ * @param amplitudes Peak-to-peak microvolts per
  *   channel, either as the Map {@link measureAmplitudes} returns or as bare values.
- * @param {number} rowHeight Height of one channel row, in canvas pixels.
- * @param {number} [fill] Fraction of the row the median swing should fill.
- * @returns {?number}
+ * @param rowHeight Height of one channel row, in canvas pixels.
+ * @param fill Fraction of the row the median swing should fill.
  */
-export function zoomMultForAmplitudes(amplitudes, rowHeight, fill = ROW_FILL) {
+export function zoomMultForAmplitudes(
+    amplitudes: Map<string, number> | Iterable<number> | null | undefined,
+    rowHeight: number,
+    fill = ROW_FILL
+): number | null {
     if (!(rowHeight > 0) || !(fill > 0) || !amplitudes) {
         return null
     }
@@ -102,24 +111,19 @@ export function zoomMultForAmplitudes(amplitudes, rowHeight, fill = ROW_FILL) {
  * Mirrors the toolbar's own conversion, so a caller can log or seed a value in the units a
  * user sees.
  *
- * @param {number} zoomMult
- * @param {number} dpi Reference pixels per inch.
- * @param {number} devicePixelRatio
- * @returns {number} Microvolts per millimeter.
+ * @param dpi Reference pixels per inch.
+ * @returns Microvolts per millimeter.
  */
-export function zoomMultToUvPerMm(zoomMult, dpi, devicePixelRatio) {
+export function zoomMultToUvPerMm(zoomMult: number, dpi: number, devicePixelRatio: number): number {
     return (dpi * devicePixelRatio) / (zoomMult * MM_PER_INCH)
 }
 
 /**
  * Converts a sensitivity in microvolts per millimeter to a vertical zoom multiplier.
  *
- * @param {number} uvPerMm
- * @param {number} dpi Reference pixels per inch.
- * @param {number} devicePixelRatio
- * @returns {number}
+ * @param dpi Reference pixels per inch.
  */
-export function uvPerMmToZoomMult(uvPerMm, dpi, devicePixelRatio) {
+export function uvPerMmToZoomMult(uvPerMm: number, dpi: number, devicePixelRatio: number): number {
     return (dpi * devicePixelRatio) / (uvPerMm * MM_PER_INCH)
 }
 
@@ -133,22 +137,31 @@ const SURVEY_COLUMNS = 2000
  * level, which is the same level and the same chunks the availability scan reads, so a
  * client that has already drawn the scrubber serves this from its cache.
  *
- * @param {object} client A reader `StreamingClient`.
- * @param {string[]} channels Continuous channel ids. Unit channels must be excluded.
- * @param {number} startUs
- * @param {number} endUs
- * @param {?AbortSignal} [signal]
- * @returns {Promise<Map<string, number>>} Peak-to-peak microvolts per channel.
+ * @param client A reader `StreamingClient`.
+ * @param channels Continuous channel ids. Unit channels must be excluded.
+ * @returns Peak-to-peak microvolts per channel.
  */
-export async function measureAmplitudes(client, channels, startUs, endUs, signal = null) {
+export async function measureAmplitudes(
+    client: { query(options: QueryOptions): AsyncIterable<EnvelopeSegment> } | null | undefined,
+    channels: readonly string[],
+    startUs: number,
+    endUs: number,
+    signal: AbortSignal | null = null
+): Promise<Map<string, number>> {
     if (!client || !Array.isArray(channels) || channels.length === 0) {
         return new Map()
     }
     if (!(endUs > startUs)) {
         return new Map()
     }
-    const segments = []
-    const query = {
+    const segments: EnvelopeSegment[] = []
+    const query: {
+        channels: readonly string[]
+        startUs: number
+        endUs: number
+        pixelWidthUs: number
+        signal?: AbortSignal
+    } = {
         channels,
         startUs,
         endUs,

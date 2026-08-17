@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { adaptivePageSize, BASE_PAGE_SIZE } from './paging.js'
+import { adaptivePageSize, BASE_PAGE_SIZE } from './paging'
 
 const SECOND = 1000000
 

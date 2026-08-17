@@ -1,3 +1,5 @@
+type ReaderModule = typeof import('@pennsieve/timeseries-zarr-reader')
+
 /**
  * Loads the Zarr reader on first use, and only then.
  *
@@ -9,16 +11,13 @@
  *
  * The numcodecs codecs (zstd/blosc/lz4) split off further on their own, and only zstd is
  * fetched for these bundles.
- *
- * @type {?Promise<object>}
  */
-let readerPromise = null
+let readerPromise: Promise<ReaderModule> | null = null
 
 /**
- * @returns {Promise<typeof import('@pennsieve/timeseries-zarr-reader')>} The reader module,
- *   loaded once and shared by every caller.
+ * @returns The reader module, loaded once and shared by every caller.
  */
-export function loadReader() {
+export function loadReader(): Promise<ReaderModule> {
     if (readerPromise === null) {
         readerPromise = import('@pennsieve/timeseries-zarr-reader')
     }

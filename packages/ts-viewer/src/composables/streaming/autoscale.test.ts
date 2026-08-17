@@ -6,8 +6,9 @@ import {
     uvPerMmToZoomMult,
     measureAmplitudes
 } from './autoscale'
+import type { QueryOptions } from '@pennsieve/timeseries-zarr-reader'
 
-const envelope = (channel, values) => ({
+const envelope = (channel: string, values: number[]) => ({
     channel,
     data: Float64Array.from(values),
     isMinMax: true
@@ -52,7 +53,7 @@ describe('zoomMultForAmplitudes', () => {
 
     it('uses the median so one loud channel does not set the scale', () => {
         const withOutlier = zoomMultForAmplitudes([100, 100, 100, 900], 20, 0.8)
-        const without = zoomMultForAmplitudes([100, 100, 100], 20, 0.8)
+        const without = zoomMultForAmplitudes([100, 100, 100], 20, 0.8)!
         expect(withOutlier).toBeCloseTo(without, 10)
     })
 
@@ -109,9 +110,9 @@ describe('sensitivity conversion', () => {
 })
 
 describe('measureAmplitudes', () => {
-    const clientYielding = (segments) => ({
-        calls: [],
-        query(options) {
+    const clientYielding = (segments: ReturnType<typeof envelope>[]) => ({
+        calls: [] as QueryOptions[],
+        query(options: QueryOptions) {
             this.calls.push(options)
             return (async function* () {
                 for (const s of segments) yield s
