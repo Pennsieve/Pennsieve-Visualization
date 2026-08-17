@@ -1,5 +1,5 @@
 <template>
-  <div class="ps-viewer data-explorer" :style="rootStyle">
+  <div class="ps-viewer data-explorer">
     <div class="data-explorer-content">
       <!-- Query Panel -->
 

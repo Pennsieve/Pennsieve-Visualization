@@ -156,7 +156,7 @@ onMounted(async () => {
       emit
     )
   } catch (error) {
-    console.error('Error initializing annotations:', error)
+    console.warn('Error initializing annotations:', error)
   }
 })
 

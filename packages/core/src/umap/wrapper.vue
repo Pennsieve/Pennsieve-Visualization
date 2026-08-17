@@ -1,5 +1,5 @@
 <template>
-  <div class="ps-viewer umap-container" :style="rootStyle">
+  <div class="ps-viewer umap-container">
     <WebGLScatterplot
       :data="store.pointData"
       :metaData="store.metaData"

@@ -25,7 +25,7 @@ export function useAnnotationLayers(storeInstance = null) {
         const annLayers = []
 
         // If no layers exist, create a default layer
-        if (response.results.length === 0) {
+        if (!response?.results || response.results.length === 0) {
             const payload = {
                 name: 'Default',
                 color: '#18BA62',

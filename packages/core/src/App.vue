@@ -40,7 +40,7 @@ const hello = 'world';
     <section class="component-section">
       <h2 class="component-label">&lt;CSVViewer /&gt;</h2>
       <p class="component-path">@pennsieve-viz/core</p>
-      <p class="component-url">{{ csvUrl }}</p>
+      <p class="component-url">CSV (blob)</p>
       <div
         class="component-container bg-tertiary"
         style="height: 400px"
