@@ -21,7 +21,6 @@ export default defineConfig({
         "vue",
         "pinia",
         "plotly.js",
-        "plotly.js-dist",
         "element-plus",
         "@duckdb/duckdb-wasm",
         "@pennsieve-viz/core",

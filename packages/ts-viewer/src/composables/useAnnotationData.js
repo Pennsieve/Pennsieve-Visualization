@@ -205,6 +205,7 @@ export function useAnnotationData(storeInstance = null) {
 
     const findNextAnnotation = (curTime) => {
         const annLayer = viewerStore.getViewerActiveLayer()
+        if (!annLayer?.annotations?.length) return null
         const index = annIndexOf(annLayer.annotations, curTime, false)
 
         if (index < annLayer.annotations.length) {
@@ -218,6 +219,7 @@ export function useAnnotationData(storeInstance = null) {
 
     const findPreviousAnnotation = (curTime) => {
         const annLayer = viewerStore.getViewerActiveLayer()
+        if (!annLayer?.annotations?.length) return null
         const index = annIndexOf(annLayer.annotations, curTime, true)
 
         if (annLayer.annotations[index].start < curTime) {
