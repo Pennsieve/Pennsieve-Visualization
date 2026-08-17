@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
+import type { ChannelInfo, FilterSpec } from '@pennsieve/timeseries-zarr-reader'
 import { buildCatalogIndex } from './channelDetails'
 import { parseRequest, reconstructClientId, resolveMontagePair, partitionRequest, filterKey } from './translate'
+import type { QueryGroup, RejectedMontagePair, ResolvedMontagePair } from './translate'
 
 const START_US = 1704067200000000
 
 // Pennsieve node ids carry both colons and underscores, which is what makes the
 // viewer's `${id}_${name}` client id unsplittable.
-const chan = (id, name, over = {}) => ({
+const chan = (id: string, name: string, over: Partial<ChannelInfo> = {}): ChannelInfo => ({
     id,
     name,
     unit: 'uV',
@@ -32,7 +34,7 @@ const catalog = buildCatalogIndex([
 ])
 
 // Shape built by useDataRequests.js before JSON.stringify.
-const wireRequest = (virtualChannels, over = {}) => ({
+const wireRequest = (virtualChannels: unknown[], over: Record<string, unknown> = {}) => ({
     session: 'a.jwt.token',
     minMax: true,
     startTime: START_US,
@@ -43,18 +45,18 @@ const wireRequest = (virtualChannels, over = {}) => ({
     ...over
 })
 
-const LOWPASS = { type: 'lowpass', order: 4, cutoffHz: 60 }
+const LOWPASS: FilterSpec = { type: 'lowpass', order: 4, cutoffHz: 60 }
 // Same filter, keys written in a different order: must land in the same group.
-const LOWPASS_REORDERED = { cutoffHz: 60, order: 4, type: 'lowpass' }
-const HIGHPASS = { type: 'highpass', order: 4, cutoffHz: 0.5 }
+const LOWPASS_REORDERED: FilterSpec = { cutoffHz: 60, order: 4, type: 'lowpass' }
+const HIGHPASS: FilterSpec = { type: 'highpass', order: 4, cutoffHz: 0.5 }
 
 /** Asserts the invariant every emitted group must satisfy for query() to accept it. */
-const expectGroupShape = (group) => {
+const expectGroupShape = (group: QueryGroup) => {
     const hasChannels = Object.prototype.hasOwnProperty.call(group, 'channels')
     const hasMontage = Object.prototype.hasOwnProperty.call(group, 'montage')
     expect(hasChannels).toBe(!hasMontage)
     expect(hasChannels).toBe(!group.isMontage)
-    const members = hasChannels ? group.channels : group.montage
+    const members = (hasChannels ? group.channels : group.montage)!
     expect(members.length).toBe(group.traces.length)
     expect(members.length).toBeGreaterThan(0)
 }
@@ -108,7 +110,7 @@ describe('parseRequest', () => {
 describe('reconstructClientId', () => {
     // Verbatim from useChannelProcessing.js createVirtualChannel, the only place the
     // viewer mints a client-side id.
-    const viewerClientId = (id, name, isViewingMontage) => (isViewingMontage ? `${id}_${name}` : id)
+    const viewerClientId = (id: string, name: string, isViewingMontage: boolean) => (isViewingMontage ? `${id}_${name}` : id)
 
     it('returns the bare server id for a plain channel', () => {
         expect(reconstructClientId({ id: C3, name: 'C3' })).toBe(C3)
@@ -143,7 +145,7 @@ describe('reconstructClientId', () => {
 
 describe('resolveMontagePair', () => {
     it('resolves lead by id and secondary by name', () => {
-        const out = resolveMontagePair({ id: C3, name: 'C3<->Cz' }, catalog)
+        const out = resolveMontagePair({ id: C3, name: 'C3<->Cz' }, catalog) as ResolvedMontagePair
         expect(out.ok).toBe(true)
         expect(out.pair).toEqual({ lead: C3, secondary: CZ })
         expect(out.leadInfo.name).toBe('C3')
@@ -152,7 +154,7 @@ describe('resolveMontagePair', () => {
 
     it('ignores the lead NAME in the label and trusts the request id', () => {
         // The label's lead segment is display text; the id is authoritative.
-        const out = resolveMontagePair({ id: C4, name: 'C3<->Cz' }, catalog)
+        const out = resolveMontagePair({ id: C4, name: 'C3<->Cz' }, catalog) as ResolvedMontagePair
         expect(out.ok).toBe(true)
         expect(out.pair).toEqual({ lead: C4, secondary: CZ })
     })
@@ -163,7 +165,7 @@ describe('resolveMontagePair', () => {
     })
 
     it('rejects a label with more than one separator', () => {
-        const out = resolveMontagePair({ id: C3, name: 'C3<->Cz<->Pz' }, catalog)
+        const out = resolveMontagePair({ id: C3, name: 'C3<->Cz<->Pz' }, catalog) as RejectedMontagePair
         expect(out.ok).toBe(false)
         expect(out.reason).toMatch(/is not exactly/)
     })
@@ -209,11 +211,11 @@ describe('partitionRequest', () => {
         expect(out.groups).toHaveLength(2)
         out.groups.forEach(expectGroupShape)
 
-        const plain = out.groups.find((g) => !g.isMontage)
+        const plain = out.groups.find((g) => !g.isMontage)!
         expect(plain.channels).toEqual([C3])
         expect(plain.traces).toEqual([{ chId: C3, label: 'C3', clientId: C3, unit: 'uV' }])
 
-        const montaged = out.groups.find((g) => g.isMontage)
+        const montaged = out.groups.find((g) => g.isMontage)!
         expect(montaged.montage).toEqual([{ lead: C4, secondary: CZ }])
         expect(montaged.traces).toEqual([
             { chId: C4, label: 'C4<->Cz', clientId: `${C4}_C4<->Cz`, unit: 'mV' }
@@ -250,7 +252,7 @@ describe('partitionRequest', () => {
     })
 
     it('groups by filter spec, keyed by server id and label', () => {
-        const filters = new Map([
+        const filters = new Map<string, FilterSpec>([
             [filterKey(C3, 'C3'), LOWPASS],
             [filterKey(CZ, 'Cz'), LOWPASS_REORDERED],
             [filterKey(C4, 'C4'), HIGHPASS]
@@ -274,7 +276,7 @@ describe('partitionRequest', () => {
     })
 
     it('looks a montaged filter up by its composite label, not the bare lead id', () => {
-        const filters = new Map([[filterKey(C3, 'C3<->Cz'), LOWPASS], [filterKey(C3, 'C3'), HIGHPASS]])
+        const filters = new Map<string, FilterSpec>([[filterKey(C3, 'C3<->Cz'), LOWPASS], [filterKey(C3, 'C3'), HIGHPASS]])
         const req = parseRequest(wireRequest([{ id: C3, name: 'C3<->Cz' }]))
         const out = partitionRequest(req, catalog, filters)
         expect(out.groups[0].filterSpec).toBe(LOWPASS)
@@ -305,7 +307,7 @@ describe('partitionRequest', () => {
 
         for (const group of out.groups) {
             expectGroupShape(group)
-            group.channels.forEach((id, i) => {
+            group.channels!.forEach((id, i) => {
                 expect(group.traces[i].chId).toBe(id)
             })
         }
@@ -341,7 +343,7 @@ describe('partitionRequest', () => {
     })
 
     it('orders groups by first appearance, repeatably', () => {
-        const filters = new Map([[filterKey(C4, 'C4'), HIGHPASS], [filterKey(CZ, 'Cz'), LOWPASS]])
+        const filters = new Map<string, FilterSpec>([[filterKey(C4, 'C4'), HIGHPASS], [filterKey(CZ, 'Cz'), LOWPASS]])
         const req = parseRequest(wireRequest([
             { id: C4, name: 'C4' },
             { id: PZ, name: 'Pz' },

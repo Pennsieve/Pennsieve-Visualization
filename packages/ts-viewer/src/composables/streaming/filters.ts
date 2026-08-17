@@ -1,11 +1,10 @@
-// @/composables/streaming/filters.js
+// @/composables/streaming/filters.ts
 //
 // Translation between the legacy filter wire messages the viewer builds
 // (TSViewerCanvas.vue setFilters, TSPlotCanvas.vue clear-channels callback) and
 // the reader's FilterSpec.
-//
-// FilterSpec = { type: 'lowpass'|'highpass', order, cutoffHz }
-//            | { type: 'bandpass'|'bandstop', order, lowHz, highHz }
+
+import type { FilterSpec } from '@pennsieve/timeseries-zarr-reader'
 
 /** Largest order the reader's cascade builder accepts (timeseries-zarr-reader src/filter.ts MAX_ORDER). */
 const MAX_ORDER = 12
@@ -16,6 +15,58 @@ const UNFILTERED_SIGNATURE = 'unfiltered'
 const CUTOFF_TYPES = ['lowpass', 'highpass']
 const BAND_TYPES = ['bandpass', 'bandstop']
 
+export type CutoffFilterSpec = Extract<FilterSpec, { type: 'lowpass' | 'highpass' }>
+export type BandFilterSpec = Extract<FilterSpec, { type: 'bandpass' | 'bandstop' }>
+
+// Wire shapes (TSViewerCanvas.vue setFilters).
+
+export interface LegacyCutoffFilterMessage {
+    filter: 'lowpass' | 'highpass'
+    filterParameters: readonly [order: number | string, cutoff: number | string]
+    channels?: readonly string[]
+}
+
+export interface LegacyBandFilterMessage {
+    filter: 'bandpass' | 'bandstop'
+    filterParameters: readonly [order: number | string, center: number | string, halfWidth: number | string]
+    channels?: readonly string[]
+}
+
+export interface LegacyClearFilterMessage {
+    channelFiltersToClear: readonly string[]
+}
+
+export type LegacyFilterMessage =
+    | LegacyCutoffFilterMessage
+    | LegacyBandFilterMessage
+    | LegacyClearFilterMessage
+
+// Every result variant declares the other variants' fields as optional undefined, so a
+// caller can read `result.spec` or `result.reason` without narrowing on `kind` first.
+
+export interface LegacyFilterSet<S extends FilterSpec = FilterSpec> {
+    kind: 'set'
+    spec: S
+    channels: string[]
+    reason?: undefined
+}
+
+export interface LegacyFilterClear {
+    kind: 'clear'
+    channels: string[]
+    spec?: undefined
+    reason?: undefined
+}
+
+export interface LegacyFilterIgnore {
+    kind: 'ignore'
+    reason: string
+    spec?: undefined
+    channels?: undefined
+}
+
+export type LegacyFilterResult = LegacyFilterSet | LegacyFilterClear | LegacyFilterIgnore
+
 /**
  * Reads positional wire parameters as finite numbers.
  *
@@ -23,20 +74,18 @@ const BAND_TYPES = ['bandpass', 'bandstop']
  * band centre can arrive as a string; coercing here keeps `center + halfWidth`
  * from becoming string concatenation.
  *
- * @param {unknown} params
- * @param {number} count
- * @returns {number[] | null} `count` finite numbers, or null if unreadable
+ * @returns `count` finite numbers, or null if unreadable
  */
-function readParams(params, count) {
+function readParams(params: unknown, count: number): number[] | null {
     if (!Array.isArray(params) || params.length < count) return null
-    const out = []
+    const out: number[] = []
     for (let i = 0; i < count; i++) {
         const raw = params[i]
         // Only numbers and numeric strings are readable. Bare Number() would turn JSON `null`
         // into 0, and `null` is exactly what an untouched modal field becomes: the viewer
         // parseFloats it to NaN, and JSON.stringify encodes NaN as null. Coercing that to 0
         // would register a 0 Hz cutoff that the reader then rejects on every read, instead of
-        // the message simply being ignored -- and it would classify differently depending on
+        // the message being ignored -- and it would classify differently depending on
         // whether the message happened to cross JSON.
         if (typeof raw !== 'number' && typeof raw !== 'string') return null
         const n = Number(raw)
@@ -49,11 +98,6 @@ function readParams(params, count) {
 /**
  * Translates one legacy filter wire message into a FilterSpec plus the channel
  * ids it applies to.
- *
- * Wire shapes (TSViewerCanvas.vue setFilters):
- *   { filter: 'lowpass'|'highpass', filterParameters: [order, cutoff], channels }
- *   { filter: 'bandpass'|'bandstop', filterParameters: [order, center, halfWidth], channels }
- *   { channelFiltersToClear: [ids] }
  *
  * Band edges are recovered as `center - halfWidth` / `center + halfWidth`,
  * inverting the viewer's `center = (f0 + f1) / 2`, `halfWidth = |f1 - f0| / 2`.
@@ -69,12 +113,13 @@ function readParams(params, count) {
  *
  * Never throws: an unreadable message returns kind 'ignore' with a reason.
  *
- * @param {any} msg parsed JSON from the fake socket's send()
- * @returns {{kind: 'set', spec: object, channels: string[]}
- *          | {kind: 'clear', channels: string[]}
- *          | {kind: 'ignore', reason: string}}
+ * @param msg parsed JSON from the fake socket's send()
  */
-export function legacyFilterToSpec(msg) {
+export function legacyFilterToSpec(msg: LegacyCutoffFilterMessage): LegacyFilterSet<CutoffFilterSpec>
+export function legacyFilterToSpec(msg: LegacyBandFilterMessage): LegacyFilterSet<BandFilterSpec>
+export function legacyFilterToSpec(msg: LegacyClearFilterMessage): LegacyFilterClear
+export function legacyFilterToSpec(msg: unknown): LegacyFilterResult
+export function legacyFilterToSpec(msg: any): LegacyFilterResult {
     if (msg === null || typeof msg !== 'object' || Array.isArray(msg)) {
         return { kind: 'ignore', reason: 'filter message is not an object' }
     }
@@ -105,21 +150,33 @@ export function legacyFilterToSpec(msg) {
         }
     }
 
-    const channels = Array.isArray(msg.channels) ? msg.channels.slice() : []
+    const channels: string[] = Array.isArray(msg.channels) ? msg.channels.slice() : []
     const order = params[0]
 
     if (isCutoff) {
-        return { kind: 'set', spec: { type, order, cutoffHz: params[1] }, channels }
+        return { kind: 'set', spec: { type: type as CutoffFilterSpec['type'], order, cutoffHz: params[1] }, channels }
     }
 
     const center = params[1]
     const halfWidth = params[2]
     return {
         kind: 'set',
-        spec: { type, order, lowHz: center - halfWidth, highHz: center + halfWidth },
+        spec: { type: type as BandFilterSpec['type'], order, lowHz: center - halfWidth, highHz: center + halfWidth },
         channels
     }
 }
+
+/** A FilterSpec as far as the validator trusts one: any spec-shaped object qualifies. */
+export interface FilterSpecLike {
+    type: string
+    order: number
+    cutoffHz?: number
+    lowHz?: number
+    highHz?: number
+    [key: string]: unknown
+}
+
+export type SpecValidation = { ok: true; reason?: undefined } | { ok: false; reason: string }
 
 /**
  * Checks a FilterSpec against one channel's native sampling rate.
@@ -128,15 +185,16 @@ export function legacyFilterToSpec(msg) {
  * src/filter.ts), in the same order, so the adapter can turn a hard reader
  * failure into a per-channel error message and leave other channels alone.
  *
- * @param {object|null|undefined} spec
- * @param {number} rateHz the channel's native rate, not the resampled one
- * @returns {{ok: true} | {ok: false, reason: string}}
+ * @param rateHz the channel's native rate, not the resampled one
  */
-export function validateSpecForRate(spec, rateHz) {
+export function validateSpecForRate(
+    spec: FilterSpecLike | null | undefined,
+    rateHz: number | undefined
+): SpecValidation {
     if (spec === null || spec === undefined) {
         return { ok: false, reason: 'no filter spec' }
     }
-    if (!Number.isFinite(rateHz) || rateHz <= 0) {
+    if (!Number.isFinite(rateHz) || rateHz! <= 0) {
         return { ok: false, reason: `channel rate must be a positive number (got ${rateHz})` }
     }
     if (!Number.isInteger(spec.order) || spec.order < 1 || spec.order > MAX_ORDER) {
@@ -146,9 +204,9 @@ export function validateSpecForRate(spec, rateHz) {
         }
     }
 
-    const nyquistHz = rateHz / 2
-    const inRange = (freqHz, label) =>
-        Number.isFinite(freqHz) && freqHz > 0 && freqHz < nyquistHz
+    const nyquistHz = rateHz! / 2
+    const inRange = (freqHz: number | undefined, label: string) =>
+        Number.isFinite(freqHz) && freqHz! > 0 && freqHz! < nyquistHz
             ? null
             : `${label} must be above 0 and below the Nyquist frequency of ${nyquistHz} Hz (got ${freqHz})`
 
@@ -159,7 +217,7 @@ export function validateSpecForRate(spec, rateHz) {
     if (BAND_TYPES.includes(spec.type)) {
         const reason = inRange(spec.lowHz, 'lowHz') || inRange(spec.highHz, 'highHz')
         if (reason !== null) return { ok: false, reason }
-        if (spec.lowHz >= spec.highHz) {
+        if (spec.lowHz! >= spec.highHz!) {
             return {
                 ok: false,
                 reason: `lowHz must be below highHz (got ${spec.lowHz} and ${spec.highHz})`
@@ -176,11 +234,8 @@ export function validateSpecForRate(spec, rateHz) {
  * Equal specs produce equal strings whatever order their keys were written in;
  * any differing field produces a different string. A missing spec maps to the
  * unfiltered sentinel, so filtered and unfiltered channels never share a group.
- *
- * @param {object|null|undefined} spec
- * @returns {string}
  */
-export function specSignature(spec) {
+export function specSignature(spec: FilterSpecLike | null | undefined): string {
     if (spec === null || spec === undefined) return UNFILTERED_SIGNATURE
     if (CUTOFF_TYPES.includes(spec.type)) {
         return `${spec.type}:${spec.order}:${spec.cutoffHz}`

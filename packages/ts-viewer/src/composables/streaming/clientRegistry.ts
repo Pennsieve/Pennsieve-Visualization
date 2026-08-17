@@ -1,5 +1,6 @@
-import { createStoreForUrl, splitSignedUrl } from './createStore'
-import { buildCatalogIndex } from './channelDetails'
+import type { FilterSpec, StreamingClient } from '@pennsieve/timeseries-zarr-reader'
+import { createStoreForUrl, splitSignedUrl, type CreateStoreOptions } from './createStore'
+import { buildCatalogIndex, type CatalogIndex } from './channelDetails'
 import { loadReader } from './loadReader'
 
 /**
@@ -12,26 +13,35 @@ import { loadReader } from './loadReader'
  *
  * The entry is shared: TSPlotCanvas's shim reads data through it and TSScrubber reads
  * availability spans through it, so a bundle's catalog is fetched once per viewer instance.
- *
- * @type {Map<string, StreamingClientEntry>}
  */
-const registry = new Map()
+const registry = new Map<string, StreamingClientEntry>()
 
 let nextGeneration = 1
 
-/**
- * @typedef {object} StreamingClientEntry
- * @property {string} storeId Viewer store id that owns this entry.
- * @property {string} url Bundle URL base this client was built for.
- * @property {?Function} onUrlExpired The renewal callback baked into this client's store.
- * @property {import('@pennsieve/timeseries-zarr-reader').StreamingClient} client
- * @property {number} generation Bumped whenever a client is replaced; late async work
- *   compares against it to detect that it is stale.
- * @property {Map<string, object>} filterRegistry Active FilterSpec per client channel id.
- * @property {Set<AbortController>} inflight One controller per in-flight page request.
- * @property {?Promise<{catalogIndex: object}>} catalogPromise Memoized catalog load.
- * @property {?object} catalogIndex Resolved catalog index, once loaded.
- */
+export interface StreamingClientEntry {
+    /** Viewer store id that owns this entry. */
+    storeId: string
+    /** Bundle URL base this client was built for. */
+    url: string
+    /** The renewal callback baked into this client's store. */
+    onUrlExpired: CreateStoreOptions['onUrlExpired'] | null
+    client: StreamingClient
+    /**
+     * Bumped whenever a client is replaced; late async work compares against it to detect
+     * that it is stale.
+     */
+    generation: number
+    /** Active FilterSpec per client channel id. */
+    filterRegistry: Map<string, FilterSpec>
+    /** One controller per in-flight page request. */
+    inflight: Set<AbortController>
+    /** Memoized catalog load. */
+    catalogPromise: Promise<CatalogIndex> | null
+    /** Resolved catalog index, once loaded. */
+    catalogIndex: CatalogIndex | null
+}
+
+export type AcquireClientOptions = CreateStoreOptions
 
 /**
  * Returns the entry for `storeId`, creating it when absent and replacing it when the bundle
@@ -44,12 +54,14 @@ let nextGeneration = 1
  * changes on every renewal, and rebuilding the client for that would throw away the loaded
  * catalog on a signature refresh.
  *
- * @param {string} storeId
- * @param {string} url Bundle root, signed or not.
- * @param {object} [options] Forwarded to store construction; notably `onUrlExpired`.
- * @returns {Promise<StreamingClientEntry>}
+ * @param url Bundle root, signed or not.
+ * @param options Forwarded to store construction; notably `onUrlExpired`.
  */
-export async function acquireClient(storeId, url, options = {}) {
+export async function acquireClient(
+    storeId: string,
+    url: string,
+    options: AcquireClientOptions = {}
+): Promise<StreamingClientEntry> {
     const { base } = splitSignedUrl(url)
     const existing = registry.get(storeId)
     if (existing && existing.url === base) {
@@ -76,7 +88,7 @@ export async function acquireClient(storeId, url, options = {}) {
         return raced
     }
 
-    const entry = {
+    const entry: StreamingClientEntry = {
         storeId,
         url: base,
         onUrlExpired: options.onUrlExpired ?? null,
@@ -91,11 +103,7 @@ export async function acquireClient(storeId, url, options = {}) {
     return entry
 }
 
-/**
- * @param {string} storeId
- * @returns {StreamingClientEntry|undefined}
- */
-export function getClient(storeId) {
+export function getClient(storeId: string): StreamingClientEntry | undefined {
     return registry.get(storeId)
 }
 
@@ -106,10 +114,9 @@ export function getClient(storeId) {
  * channel list is indexed once, no matter how many callers ask. A failed load clears the
  * memo so a later call retries instead of replaying the error forever.
  *
- * @param {StreamingClientEntry} entry
- * @returns {Promise<object>} The CatalogIndex.
+ * @returns The CatalogIndex.
  */
-export function ensureCatalog(entry) {
+export function ensureCatalog(entry: StreamingClientEntry): Promise<CatalogIndex> {
     if (entry.catalogPromise === null) {
         entry.catalogPromise = entry.client
             .channelInfo()
@@ -128,10 +135,9 @@ export function ensureCatalog(entry) {
 /**
  * Aborts every in-flight request on an entry and empties the set.
  *
- * @param {StreamingClientEntry|undefined} entry
- * @returns {number} How many controllers were aborted.
+ * @returns How many controllers were aborted.
  */
-export function abortInflight(entry) {
+export function abortInflight(entry: StreamingClientEntry | undefined): number {
     if (!entry) {
         return 0
     }
@@ -147,10 +153,9 @@ export function abortInflight(entry) {
  * Tears down an entry: aborts in-flight reads and drops the client, which releases the
  * reader's cached catalog, its cache of store responses, and its per-channel filter state.
  *
- * @param {string} storeId
- * @returns {boolean} Whether an entry was removed.
+ * @returns Whether an entry was removed.
  */
-export function disposeClient(storeId) {
+export function disposeClient(storeId: string): boolean {
     const entry = registry.get(storeId)
     if (!entry) {
         return false
@@ -164,13 +169,13 @@ export function disposeClient(storeId) {
 }
 
 /** Removes every entry. Intended for tests and full teardown. */
-export function disposeAllClients() {
+export function disposeAllClients(): void {
     for (const storeId of [...registry.keys()]) {
         disposeClient(storeId)
     }
 }
 
-/** @returns {number} Live entry count. Intended for leak assertions in tests. */
-export function activeClientCount() {
+/** @returns Live entry count. Intended for leak assertions in tests. */
+export function activeClientCount(): number {
     return registry.size
 }

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { toChannelDetails, buildCatalogIndex, synthesizeMontageDetails } from './channelDetails.js'
+import { toChannelDetails, buildCatalogIndex, synthesizeMontageDetails } from './channelDetails'
+import type { ChannelInfo } from '@pennsieve/timeseries-zarr-reader'
 
-const info = (over = {}) => ({
+const info = (over: Partial<ChannelInfo> = {}): ChannelInfo => ({
     id: 'ch-1',
     name: 'EEG 1',
     unit: 'uV',
@@ -12,7 +13,7 @@ const info = (over = {}) => ({
     ...over
 })
 
-const unitInfo = (over = {}) => info({
+const unitInfo = (over: Partial<ChannelInfo> = {}): ChannelInfo => info({
     id: 'ch-u',
     name: 'unitA',
     kind: 'unit',
@@ -199,7 +200,7 @@ describe('synthesizeMontageDetails', () => {
 })
 
 describe('regression pins found by adversarial review', () => {
-    const info = (over) => ({
+    const info = (over: Pick<ChannelInfo, 'id' | 'name'> & Partial<ChannelInfo>): ChannelInfo => ({
         unit: 'uV', rateHz: 1000, startUs: 0, endUs: 1000, kind: 'continuous', ...over
     })
 

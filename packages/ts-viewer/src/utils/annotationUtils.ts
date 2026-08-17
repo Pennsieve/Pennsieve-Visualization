@@ -1,16 +1,29 @@
-// utils/annotationUtils.js
+// utils/annotationUtils.ts
+
+export interface Annotation {
+    id?: number | string
+    start: number
+    duration: number
+    label?: string
+    name?: string
+    layer_id?: number | string
+}
+
+export interface AnnotationLayer {
+    id: number | string
+}
 
 /**
  * Convert hex color to RGBA with specified opacity
  */
-export const hexToRgbA = (hex, opacity) => {
-    let c
+export const hexToRgbA = (hex: string, opacity: number): string => {
+    let c: string[] | number
     if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
         c = hex.substring(1).split('')
         if (c.length === 3) {
             c = [c[0], c[0], c[1], c[1], c[2], c[2]]
         }
-        c = '0x' + c.join('')
+        c = ('0x' + c.join('')) as unknown as number
         return 'rgba(' + [(c >> 16) & 255, (c >> 8) & 255, c & 255].join(',') + ',' + opacity + ')'
     }
     throw new Error('Bad Hex')
@@ -19,7 +32,7 @@ export const hexToRgbA = (hex, opacity) => {
 /**
  * Sort annotations by start time
  */
-export const sortAnnotations = (annotationArray) => {
+export const sortAnnotations = (annotationArray: Annotation[]): void => {
     annotationArray.sort((a, b) => {
         if (a.start < b.start) return -1
         if (a.start > b.start) return 1
@@ -30,7 +43,7 @@ export const sortAnnotations = (annotationArray) => {
 /**
  * Get the layer for a given annotation
  */
-export const getLayer = (annotation, viewerAnnotations) => {
+export const getLayer = (annotation: Annotation | null | undefined, viewerAnnotations: AnnotationLayer[]) => {
     const layerId = annotation?.layer_id || 0
     return viewerAnnotations.find(l => l.id === layerId) ?? {}
 }
@@ -38,7 +51,7 @@ export const getLayer = (annotation, viewerAnnotations) => {
 /**
  * Binary search to find annotation index by time value
  */
-export const annIndexOf = (annArray, val, first, startAtIndex = 0, checkEnd = false) => {
+export const annIndexOf = (annArray: Annotation[], val: number, first: boolean, startAtIndex = 0, checkEnd = false): number => {
     let index
     if (checkEnd) {
         index = indexOfEnd(annArray, val, startAtIndex, annArray.length - 1, first)
@@ -57,7 +70,7 @@ export const annIndexOf = (annArray, val, first, startAtIndex = 0, checkEnd = fa
 /**
  * Binary search helper for annotation start times
  */
-const indexOfStart = (annArray, val, min, max, firstIndex) => {
+const indexOfStart = (annArray: Annotation[], val: number, min: number, max: number, firstIndex: boolean): number => {
     if (max < min) {
         let pred = max >= 0 ? max : -max - 2
         if (pred === -1) return pred
@@ -69,7 +82,7 @@ const indexOfStart = (annArray, val, min, max, firstIndex) => {
         return -pred - 2
     }
 
-    const mid = parseInt((min + max) / 2)
+    const mid = parseInt(((min + max) / 2) as unknown as string)
 
     if (annArray[mid].start > val) {
         return indexOfStart(annArray, val, min, mid - 1, firstIndex)
@@ -95,7 +108,7 @@ const indexOfStart = (annArray, val, min, max, firstIndex) => {
 /**
  * Binary search helper for annotation end times
  */
-const indexOfEnd = (annArray, val, min, max, firstIndex) => {
+const indexOfEnd = (annArray: Annotation[], val: number, min: number, max: number, firstIndex: boolean): number => {
     if (max < min) {
         let pred = max >= 0 ? max : -max - 2
         if (pred === -1) return pred
@@ -107,7 +120,7 @@ const indexOfEnd = (annArray, val, min, max, firstIndex) => {
         return -pred - 2
     }
 
-    const mid = parseInt((min + max) / 2)
+    const mid = parseInt(((min + max) / 2) as unknown as string)
     const midEnd = annArray[mid].start + annArray[mid].duration
 
     if (midEnd > val) {
@@ -134,22 +147,22 @@ const indexOfEnd = (annArray, val, min, max, firstIndex) => {
 /**
  * Validate annotation data structure
  */
-export const validateAnnotation = (annotation) => {
+export const validateAnnotation = (annotation: object): boolean => {
     const required = ['id', 'start', 'duration', 'label', 'layer_id']
-    return required.every(field => annotation.hasOwnProperty(field))
+    return required.every(field => Object.prototype.hasOwnProperty.call(annotation, field))
 }
 
 /**
  * Calculate annotation end time
  */
-export const getAnnotationEnd = (annotation) => {
+export const getAnnotationEnd = (annotation: Annotation): number => {
     return annotation.start + annotation.duration
 }
 
 /**
  * Check if annotation is within a time range
  */
-export const isAnnotationInRange = (annotation, startTime, endTime) => {
+export const isAnnotationInRange = (annotation: Annotation, startTime: number, endTime: number): boolean => {
     const annEnd = getAnnotationEnd(annotation)
     return !(annotation.start > endTime || annEnd < startTime)
 }
@@ -157,20 +170,20 @@ export const isAnnotationInRange = (annotation, startTime, endTime) => {
 /**
  * Get visible annotations within a time range
  */
-export const getVisibleAnnotations = (annotations, startTime, endTime) => {
+export const getVisibleAnnotations = (annotations: Annotation[], startTime: number, endTime: number): Annotation[] => {
     return annotations.filter(ann => isAnnotationInRange(ann, startTime, endTime))
 }
 
 /**
  * Canvas scaling utility
  */
-export const canvasScaler = (size, pixelRatio, offset = 0) => {
+export const canvasScaler = (size: number, pixelRatio: number, offset = 0): number => {
     return pixelRatio * (size + offset)
 }
 
 /**
  * Get annotation display name
  */
-export const getAnnotationDisplayName = (annotation) => {
+export const getAnnotationDisplayName = (annotation: Annotation): string => {
     return annotation.label || annotation.name || `Annotation ${annotation.id}`
 }

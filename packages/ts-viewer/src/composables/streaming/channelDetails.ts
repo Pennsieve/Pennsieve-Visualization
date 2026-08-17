@@ -1,4 +1,20 @@
-// @/composables/streaming/channelDetails.js
+// @/composables/streaming/channelDetails.ts
+
+import type { ChannelInfo } from '@pennsieve/timeseries-zarr-reader'
+
+/** One flat channel object, as `toChannelDetails` emits it. */
+export interface ChannelDetail {
+    id: string
+    name: string
+    channelType: 'CONTINUOUS' | 'UNIT'
+    rate: number
+    unit: string
+    start: number
+    end: number
+    properties: unknown[]
+    /** Never present: `createVirtualChannel` builds the `{content}` envelope from the flat fields. */
+    content?: undefined
+}
 
 /**
  * Maps reader channel metadata onto the flat channel objects the viewer's
@@ -20,11 +36,8 @@
  * Invariant inherited from the reader: a unit channel reports `endUs === startUs`,
  * so its `end === start` here. A bundle containing only unit channels therefore
  * yields a degenerate viewport (ts_start === ts_end) in `initTimeRange`.
- *
- * @param {Array<{id: string, name: string, unit: string, rateHz: number, startUs: number, endUs: number, kind: 'continuous'|'unit'}>} infos
- * @returns {Array<{id: string, name: string, channelType: 'CONTINUOUS'|'UNIT', rate: number, unit: string, start: number, end: number, properties: Array}>}
  */
-export function toChannelDetails(infos) {
+export function toChannelDetails(infos: readonly ChannelInfo[]): ChannelDetail[] {
     return infos.map((info) => ({
         id: info.id,
         name: info.name,
@@ -37,6 +50,12 @@ export function toChannelDetails(infos) {
     }))
 }
 
+export interface CatalogIndex {
+    byId: Map<string, ChannelInfo>
+    byName: Map<string, ChannelInfo>
+    details: ChannelDetail[]
+}
+
 /**
  * Builds the lookup index the shim keeps for the life of a connection.
  *
@@ -46,13 +65,12 @@ export function toChannelDetails(infos) {
  * once per duplicated name, since a silently ambiguous name would resolve
  * montage pairs to an arbitrary channel.
  *
- * @param {Array<Object>} infos ChannelInfo[] from `client.channelInfo()`
- * @returns {{byId: Map<string, Object>, byName: Map<string, Object>, details: Array<Object>}}
+ * @param infos ChannelInfo[] from `client.channelInfo()`
  */
-export function buildCatalogIndex(infos) {
-    const byId = new Map()
-    const byName = new Map()
-    const warned = new Set()
+export function buildCatalogIndex(infos: readonly ChannelInfo[]): CatalogIndex {
+    const byId = new Map<string, ChannelInfo>()
+    const byName = new Map<string, ChannelInfo>()
+    const warned = new Set<string>()
 
     for (const info of infos) {
         byId.set(info.id, info)
@@ -62,7 +80,7 @@ export function buildCatalogIndex(infos) {
                 warned.add(info.name)
                 console.warn(
                     `Duplicate channel name "${info.name}" in bundle catalog; ` +
-                    `keeping channel ${byName.get(info.name).id} and ignoring ${info.id} for name lookups`
+                    `keeping channel ${byName.get(info.name)!.id} and ignoring ${info.id} for name lookups`
                 )
             }
             continue
@@ -72,6 +90,12 @@ export function buildCatalogIndex(infos) {
     }
 
     return { byId, byName, details: toChannelDetails(infos) }
+}
+
+export interface DroppedMontagePair {
+    pair: unknown
+    reason: 'malformed-pair' | 'unknown-channel' | 'unit-channel' | 'rate-mismatch'
+    message: string
 }
 
 /**
@@ -90,13 +114,14 @@ export function buildCatalogIndex(infos) {
  * the catalog, either channel is a unit channel, or the two native rates differ:
  * the reader throws on all three rather than returning a segment.
  *
- * @param {Array<[string, string]>} montageMap name pairs from the montage payload
- * @param {{byName: Map<string, Object>}} catalogIndex
- * @returns {{details: Array<{id: string, name: string}>, dropped: Array<{pair: Array, reason: 'malformed-pair'|'unknown-channel'|'unit-channel'|'rate-mismatch', message: string}>}}
+ * @param montageMap name pairs from the montage payload
  */
-export function synthesizeMontageDetails(montageMap, catalogIndex) {
-    const details = []
-    const dropped = []
+export function synthesizeMontageDetails(
+    montageMap: readonly unknown[] | null | undefined,
+    catalogIndex: Pick<CatalogIndex, 'byName'>
+): { details: Array<{ id: string; name: string }>; dropped: DroppedMontagePair[] } {
+    const details: Array<{ id: string; name: string }> = []
+    const dropped: DroppedMontagePair[] = []
 
     if (!Array.isArray(montageMap)) {
         return { details, dropped }
