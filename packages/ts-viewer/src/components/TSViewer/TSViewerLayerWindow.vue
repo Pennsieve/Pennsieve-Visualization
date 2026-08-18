@@ -1,4 +1,5 @@
 <template>
+    <!-- @vue-expect-error the handler writes to the `visible` prop, a Vue 2 .sync leftover -->
     <el-dialog
         @update:modelValue="visible = $event"
         :model-value="visible"
@@ -61,11 +62,12 @@
 
 </template>
 
-<script>
+<script lang="ts">
 
+    import { defineComponent } from 'vue'
     import BfLibraryButton from "../Shared/bf-library-button/BFLibraryButton.vue";
 
-    export default {
+    export default defineComponent({
         name: 'AnnotationLayerWindow',
 
         components:{
@@ -218,7 +220,7 @@
             },
 
         }
-    }
+    })
 
 </script>
 

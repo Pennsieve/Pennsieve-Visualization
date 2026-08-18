@@ -62,12 +62,14 @@
 
 </template>
 
-<script>
+<script lang="ts">
 
+import { defineComponent } from 'vue'
 import IconSelection from "../icons/IconSelection.vue"
 import BfLibraryButton from "../Shared/bf-library-button/BFLibraryButton.vue";
+import type { ViewerChannel } from '@/stores/tsviewer'
 
-export default {
+export default defineComponent({
   name: 'TimeseriesFilterModal',
 
   components: {
@@ -120,7 +122,7 @@ export default {
           return false
       }
     },
-    computePlaceholder1: function (option) {
+    computePlaceholder1: function () {
       switch (this.selectedFilter) {
         case 'lowpass':
           return 'Low Pass Cutoff Frequency (Hz)'
@@ -132,7 +134,7 @@ export default {
           return ''
       }
     },
-    computePlaceholder2: function (option) {
+    computePlaceholder2: function () {
       switch (this.selectedFilter) {
         case 'bandpass':
           return 'High Pass Cutoff Frequency (Hz)'
@@ -150,7 +152,7 @@ export default {
   },
   data: function () {
     return {
-      selectedFilter: null,
+      selectedFilter: null as string | null,
       filterOptions: [
         {
           label: 'No Filter',
@@ -173,7 +175,7 @@ export default {
           value: 'bandstop'
         }
       ],
-      selectedNotch: null,
+      selectedNotch: null as number | null,
       notchOptions: [
         {
           label: '50Hz',
@@ -184,9 +186,9 @@ export default {
           value: 60
         }
       ],
-      input0: null,
-      input1: null,
-      onChannels: []
+      input0: null as number | null,
+      input1: null as number | null,
+      onChannels: [] as ViewerChannel[]
 
     }
 
@@ -200,7 +202,7 @@ export default {
     },
     onButtonClick: function () {
     },
-    submitForm: function (e) {
+    submitForm: function (e: MouseEvent) {
       this.$emit('setFilters', {
         selChannels: this.onChannels,
         filterType: this.selectedFilter,
@@ -211,7 +213,7 @@ export default {
       this.$emit('closeWindow')
     },
   }
-    }
+    })
 
 </script>
 

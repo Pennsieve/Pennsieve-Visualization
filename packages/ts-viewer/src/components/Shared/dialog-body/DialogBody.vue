@@ -56,12 +56,14 @@
   }
 </style>
 
-<script>
-  export default {
+<script lang="ts">
+  import { defineComponent } from 'vue'
+
+  export default defineComponent({
     name: 'DialogBody',
 
     setup(props, { slots }) {
-      const hasSlot = name => !!slots[name]
+      const hasSlot = (name: string) => !!slots[name]
       return { hasSlot }
     },
     props: {
@@ -79,5 +81,5 @@
         return `dialog-body ${hasIcon} ${fixedHeight}`
       }
     }
-  }
+  })
 </script>
