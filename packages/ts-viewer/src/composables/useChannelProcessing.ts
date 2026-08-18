@@ -1,7 +1,71 @@
-// @/composables/useChannelProcessing.js
+// @/composables/useChannelProcessing.ts
 import { computed, reactive, ref, watch, readonly } from 'vue'
+import type { Ref } from 'vue'
+import type { ChannelDetail } from './streaming/channelDetails'
 
-export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspaceMontages, activeViewer) => {    // Processing state
+export interface MontageChannelPair {
+    name?: string
+    channels: string[]
+}
+
+// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+export interface WorkspaceMontage {
+    name: string
+    channelPairs: MontageChannelPair[]
+}
+
+/** Envelope `createVirtualChannel` builds around a base channel. */
+export interface VirtualChannelContent {
+    id: string
+    serverId: string
+    name: string
+    channelType: string
+    label: string
+    displayName: string
+    unit: string
+    rate: number
+    start: number
+    end: number
+    montageScheme: string
+    isMontaged: boolean
+    baseChannelId: string
+}
+
+export interface VirtualChannel {
+    content: VirtualChannelContent
+    properties: unknown[]
+}
+
+/** Store channel entry `createChannelConfig` returns. */
+export interface ChannelConfig {
+    id: string
+    serverId: string
+    type: string
+    label: string
+    displayName: string
+    labelParts: string[]
+    labelPrefix: string
+    labelValue: string | number
+    dataSegments: number[]
+    rank: number
+    visible: boolean
+    plotAgainst: unknown
+    rowBaseline: number | null
+    rowScale: number
+    rowAdjust: number
+    selected: boolean
+    hover: boolean
+    unit: string
+    sf: number
+    filter: Record<string, unknown>
+    hideFilter: boolean
+    isEditing: boolean
+    montageScheme: string
+    isMontaged: boolean
+    baseChannelId: string
+}
+
+export const useChannelProcessing = (baseChannels: Ref<ChannelDetail[] | undefined>, viewerMontageScheme: Ref<string>, workspaceMontages: Ref<WorkspaceMontage[]>, activeViewer: Ref<{ content: { id: string } } | null | undefined>) => {    // Processing state
     const processingStats = reactive({
         totalChannels: 0,
         processedChannels: 0,
@@ -11,8 +75,8 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     })
 
     // Channel cache for performance
-    const channelCache = ref(new Map())
-    const montageCache = ref(new Map())
+    const channelCache = ref(new Map<string, ChannelDetail>())
+    const montageCache = ref(new Map<string, string>())
 
     // Computed properties
     const isViewingMontage = computed(() =>
@@ -40,13 +104,13 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
      * Extract channel ID from channel object
      * Handles montage channel IDs by removing montage suffixes
      */
-    const getChannelId = (channel) => {
+    const getChannelId = (channel: { id?: string } | null | undefined) => {
         if (!channel) return ''
         // Use the id field (which is unique for client-side)
         return channel?.id ?? ''
     }
 
-    const getServerChannelId = (channel) => {
+    const getServerChannelId = (channel: { id?: string; serverId?: string } | null | undefined) => {
         if (!channel) return ''
         return (channel?.serverId ?? '') || (channel?.id ?? '')
     }
@@ -54,14 +118,14 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Get clean channel identifier without montage modifications
      */
-    const getRawChannelId = (channel) => {
+    const getRawChannelId = (channel: { id?: string } | null | undefined) => {
         return channel?.id ?? ''
     }
     /**
      * Get base channel identifier (strips montage suffix)
      * Use this for grouping/display purposes only
      */
-    const getBaseChannelId = (channel) => {
+    const getBaseChannelId = (channel: { id?: string } | null | undefined) => {
         if (!channel) return ''
 
         let id = channel?.id ?? ''
@@ -79,13 +143,13 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
      * Generate display name for montaged channels
      * Falls back to simple concatenation if montage definition not found
      */
-    const getDisplayName = (channel1, channel2, montageName = null) => {
+    const getDisplayName = (channel1: string, channel2: string, montageName: string | null = null) => {
         const montageToUse = montageName || viewerMontageScheme.value
 
         // Check cache first
         const cacheKey = `${channel1}_${channel2}_${montageToUse}`
         if (montageCache.value.has(cacheKey)) {
-            return montageCache.value.get(cacheKey)
+            return montageCache.value.get(cacheKey)!
         }
 
         let displayName = `${channel1}-${channel2}` // Default fallback
@@ -96,7 +160,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
             if (montage?.channelPairs) {
                 // Search through channel pairs for matching channels
                 for (const pairKey of Object.keys(montage.channelPairs)) {
-                    const pair = montage.channelPairs[pairKey]
+                    const pair = montage.channelPairs[pairKey as unknown as number]
 
                     if (pair.channels?.length === 2 &&
                         pair.channels[0] === channel1 &&
@@ -116,7 +180,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Process channel details from WebSocket into virtual channel objects
      */
-    const processChannelData = (channelDetails) => {
+    const processChannelData = (channelDetails: Pick<ChannelDetail, 'id' | 'name'>[] | null | undefined) => {
         if (!Array.isArray(channelDetails)) {
             console.warn('Invalid channel details provided:', channelDetails)
             return []
@@ -161,7 +225,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Find base channel by ID from the provided base channels
      */
-    const findBaseChannel = (channelId) => {
+    const findBaseChannel = (channelId: string) => {
         // Check cache first
         if (channelCache.value.has(channelId)) {
             return channelCache.value.get(channelId)
@@ -179,7 +243,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Create virtual channel object from base channel and montage info
      */
-    const createVirtualChannel = (id, name, baseChannel) => {
+    const createVirtualChannel = (id: string, name: string, baseChannel: ChannelDetail): VirtualChannel => {
         let displayName = name
 
         // serverId is what server provided (the 'id' parameter)
@@ -224,7 +288,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Create montage payload for WebSocket messages
      */
-    const createMontagePayload = (montageSchemeName) => {
+    const createMontagePayload = (montageSchemeName: string) => {
         // Handle the default "NOT_MONTAGED" case
         if (montageSchemeName === "NOT_MONTAGED") {
             return {
@@ -255,7 +319,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Validate channel configuration
      */
-    const validateChannelConfig = (channelConfig) => {
+    const validateChannelConfig = (channelConfig: { id?: unknown; label?: unknown; type?: string; unit?: unknown; rate?: number; start?: number; end?: number } | null | undefined) => {
         const errors = []
 
         if (!channelConfig) {
@@ -264,7 +328,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
         }
 
         // Required fields
-        const requiredFields = ['id', 'label', 'type', 'unit', 'rate']
+        const requiredFields = ['id', 'label', 'type', 'unit', 'rate'] as const
         for (const field of requiredFields) {
             if (!channelConfig[field]) {
                 errors.push(`Missing required field: ${field}`)
@@ -295,7 +359,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Process and sort channel configurations
      */
-    const sortChannelConfigurations = (channelConfigs) => {
+    const sortChannelConfigurations = (channelConfigs: ChannelConfig[]) => {
         return channelConfigs.sort((a, b) => {
             const aLabel = a.label || ''
             const bLabel = b.label || ''
@@ -333,7 +397,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Create channel configuration object
      */
-    const createChannelConfig = (virtualChannel, rank = 0) => {
+    const createChannelConfig = (virtualChannel: VirtualChannel, rank = 0): ChannelConfig => {
         const content = virtualChannel.content
         const labelParts = content.label.split('<->', 3)
         const labelPrefix = labelParts[0] || ''
@@ -373,7 +437,7 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Filter channels based on criteria
      */
-    const filterChannels = (channels, criteria = {}) => {
+    const filterChannels = (channels: ChannelConfig[], criteria: { channelType?: string | null; visible?: boolean | null; montageScheme?: string | null; labelPattern?: string | null; sampleRate?: number | null } = {}) => {
         const {
             channelType = null,
             visible = null,
@@ -418,8 +482,8 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Group channels by various criteria
      */
-    const groupChannels = (channels, groupBy = 'type') => {
-        const groups = {}
+    const groupChannels = (channels: ChannelConfig[], groupBy = 'type') => {
+        const groups: Record<string, ChannelConfig[]> = {}
 
         channels.forEach(channel => {
             let groupKey
@@ -485,15 +549,15 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     /**
      * Batch process multiple channel operations
      */
-    const batchProcessChannels = async (operations) => {
-        const results = []
+    const batchProcessChannels = async (operations: Array<() => unknown>) => {
+        const results: { success: boolean; result?: unknown; error?: string }[] = []
 
         for (const operation of operations) {
             try {
                 const result = await operation()
                 results.push({ success: true, result })
             } catch (error) {
-                results.push({ success: false, error: error.message })
+                results.push({ success: false, error: (error as Error).message })
                 processingStats.errors++
             }
         }

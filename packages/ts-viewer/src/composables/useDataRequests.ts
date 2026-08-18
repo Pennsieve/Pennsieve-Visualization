@@ -1,23 +1,58 @@
-// @/composables/useDataRequests.js
+// @/composables/useDataRequests.ts
 import { ref, onUnmounted, readonly } from 'vue'
+import type { Ref } from 'vue'
 import { BASE_PAGE_SIZE } from '@/composables/streaming/paging'
+import type { SegmentBlock } from './streaming/segments'
+import type { ChannelData, ViewData, ViewDataChannel } from './useTimeSeriesData'
+
+/** Minimal socket surface shared by the legacy websocket and the Zarr shim. */
+export interface WireSocket {
+    readyState: number
+    send(data: string): void
+}
+
+/** One page request planned for the transport. */
+export interface PlannedRequest {
+    channels: ChannelData[]
+    start: number
+    duration: number
+    isInViewport: boolean
+    pixelWidth: number
+}
+
+/** Bookkeeping for a sent page, keyed by page start in `requestedPages`. */
+export interface RequestedPageInfo {
+    count: number
+    counter: Map<string, number>
+    subPageCount: number
+    ts: number
+    inViewport: boolean
+}
+
+interface RequestConstants {
+    PREFETCHPAGES: number
+}
+
+type GetChannelIdFn = (channel: ChannelData | ViewDataChannel) => string
+
+type SegmIndexOfFn = (segmArray: SegmentBlock[], val: number, first: boolean, startAtIndex?: number) => number
 
 export const useDataRequests = () => {
     // State from original
-    const aSyncRequests = ref([])
-    const aSyncPreRequests = ref([])
-    const prefetchTimer = ref(null)
+    const aSyncRequests = ref<PlannedRequest[]>([])
+    const aSyncPreRequests = ref<PlannedRequest[]>([])
+    const prefetchTimer = ref<ReturnType<typeof setInterval> | null>(null)
     const isPrefetching = ref(false)
-    const lastViewPageRequest = ref(null)
+    const lastViewPageRequest = ref<PlannedRequest | null>(null)
 
     // Persistent state for viewport tracking (from original)
     const prevStart = ref(0)
     const prevDuration = ref(0)
 
     // Prefetch function from original
-    let preFetchRequestFnc = null
+    let preFetchRequestFnc: (() => void) | null = null
 
-    const initializePrefetch = (requestDataFromServer, requestedPagesRef) => {
+    const initializePrefetch = (requestDataFromServer: (requests: PlannedRequest[]) => boolean, requestedPagesRef: Ref<Map<number, RequestedPageInfo>>) => {
         preFetchRequestFnc = function() {
             const nrPending = aSyncPreRequests.value.length
             if (nrPending > 0) {
@@ -31,19 +66,19 @@ export const useDataRequests = () => {
                     } else {
                         console.warn('Prefetch request failed')
                         // Stop prefetching if requests are failing
-                        clearInterval(prefetchTimer.value)
+                        clearInterval(prefetchTimer.value!)
                         isPrefetching.value = false
                     }
                 }
             } else {
-                clearInterval(prefetchTimer.value)
+                clearInterval(prefetchTimer.value!)
                 isPrefetching.value = false
             }
         }
     }
 
     // Generate points (from original requestData logic)
-    const generatePoints = (showChannels, start, duration, viewData, requestedPages, constants, rsPeriod, ts_end, segmIndexOf, getChannelIdFn, pageSize = BASE_PAGE_SIZE) => {
+    const generatePoints = (showChannels: ChannelData[], start: number, duration: number, viewData: ViewData, requestedPages: Map<number, RequestedPageInfo>, constants: RequestConstants, rsPeriod: number, ts_end: number, segmIndexOf: SegmIndexOfFn, getChannelIdFn?: GetChannelIdFn, pageSize = BASE_PAGE_SIZE) => {
         viewData.start = start
         viewData.duration = duration
 
@@ -74,7 +109,7 @@ export const useDataRequests = () => {
     }
 
     // Request data (from original)
-    const requestData = (showChannels, start, duration, viewData, requestedPages, constants, rsPeriod, ts_end, segmIndexOf, getChannelIdFn, pageSize = BASE_PAGE_SIZE) => {
+    const requestData = (showChannels: ChannelData[], start: number, duration: number, viewData: ViewData, requestedPages: Map<number, RequestedPageInfo>, constants: RequestConstants, rsPeriod: number, ts_end: number, segmIndexOf: SegmIndexOfFn, getChannelIdFn?: GetChannelIdFn, pageSize = BASE_PAGE_SIZE) => {
         // Init async requests for viewport pages
         aSyncRequests.value = []
 
@@ -136,7 +171,7 @@ export const useDataRequests = () => {
                 endRequestTime = ts_end
             }
 
-            let curSegm
+            let curSegm: SegmentBlock | undefined
             if (chDataSegments.length > 0) {
                 curSegm = chDataSegments[firstSegment]
             }
@@ -152,7 +187,7 @@ export const useDataRequests = () => {
 
                 if (inRange) {
                     // Process ALL segments with the same pageStart
-                    const currentPageStart = curSegm.pageStart
+                    const currentPageStart = curSegm!.pageStart
                     let processedAnySegment = false
                     
                     // Process all segments in this page
@@ -208,15 +243,15 @@ export const useDataRequests = () => {
                     if (isViewPage) {
                         // Remove from pre-request
                         for (let iA in aSyncPreRequests.value) {
-                            if (aSyncPreRequests.value[iA].start === curTime) {
-                                aSyncPreRequests.value.splice(iA, 1)
+                            if (aSyncPreRequests.value[iA as unknown as number].start === curTime) {
+                                aSyncPreRequests.value.splice(iA as unknown as number, 1)
                                 break
                             }
                         }
 
                         for (let iA in aSyncRequests.value) {
-                            if (aSyncRequests.value[iA].start === curTime) {
-                                aSyncRequests.value[iA].channels.push(curChan)
+                            if (aSyncRequests.value[iA as unknown as number].start === curTime) {
+                                aSyncRequests.value[iA as unknown as number].channels.push(curChan)
                                 isAdded = true
                             }
                         }
@@ -232,8 +267,8 @@ export const useDataRequests = () => {
                     } else {
                         if (updatePrefetchPages) {
                             for (let iA in aSyncPreRequests.value) {
-                                if (aSyncPreRequests.value[iA].start === curTime) {
-                                    aSyncPreRequests.value[iA].channels.push(curChan)
+                                if (aSyncPreRequests.value[iA as unknown as number].start === curTime) {
+                                    aSyncPreRequests.value[iA as unknown as number].channels.push(curChan)
                                     isAdded = true
                                 }
                             }
@@ -273,14 +308,14 @@ export const useDataRequests = () => {
     }
 
     // View segment comparator from original
-    const viewSegmComparator = (a, b) => {
+    const viewSegmComparator = (a: SegmentBlock, b: SegmentBlock) => {
         if (a.startTs < b.startTs) return -1
         if (a.startTs > b.startTs) return 1
         return 0
     }
 
     // Request data from server (from original) - now accepts ts_end as parameter
-    const requestDataFromServer = (requests, firstRequest = 0, websocket, userToken, activeViewer, rsPeriod, requestedPages, ts_end) => {
+    const requestDataFromServer = (requests: PlannedRequest[], firstRequest = 0, websocket: WireSocket | null | undefined, userToken: string | null, activeViewer: { content: { id: string } }, rsPeriod: number, requestedPages: Map<number, RequestedPageInfo>, ts_end: number) => {
         if (requests.length === 0) {
             return false
         }
@@ -378,7 +413,7 @@ export const useDataRequests = () => {
     const startPrefetching = () => {
         if (aSyncPreRequests.value.length > 0) {
             if (!isPrefetching.value) {
-                prefetchTimer.value = setInterval(preFetchRequestFnc, 150)
+                prefetchTimer.value = setInterval(preFetchRequestFnc!, 150)
                 isPrefetching.value = true
             }
         }
@@ -410,13 +445,13 @@ export const useDataRequests = () => {
     }
 
     // Re-request pages (from original)
-    const reRequestPages = (requestedPages, pageSize, rsPeriod) => {
-        const requestPages = []
+    const reRequestPages = (requestedPages: Map<number, RequestedPageInfo>, pageSize: number, rsPeriod: number) => {
+        const requestPages: { channels: string[]; start: number; duration: number; isInViewport: boolean; pixelWidth: number }[] = []
         requestedPages.forEach(function(value, key) {
             // Only rerequest pages where we already have partial return
             if (!isNaN(value.subPageCount)) {
                 // Only include channels with partial return
-                const channels = []
+                const channels: string[] = []
                 value.counter.forEach(function(count, chId) {
                     if (!isNaN(count) && count > 0) {
                         channels.push(chId)

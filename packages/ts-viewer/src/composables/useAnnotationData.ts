@@ -1,25 +1,76 @@
-// composables/useAnnotationData.js
+// composables/useAnnotationData.ts
 import { ref, inject } from 'vue'
+import type { Ref } from 'vue'
 import { createViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
+import type { StoreGeneric } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError } from "@/mixins/request/request_composable"
 import { annIndexOf } from '@/utils/annotationUtils'
+import type { Annotation, AnnotationLayer, LinkedPackageDTO } from '@/utils/annotationUtils'
+
+interface ViewerChannel {
+    id?: string
+}
+
+// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+interface ViewerStore {
+    config: { apiUrl: string }
+    getViewerActiveLayer(): AnnotationLayer | null
+    updateLayer(layer: AnnotationLayer): void
+}
+
+interface ActiveViewer {
+    content: { id: string }
+}
+
+interface TimeRange {
+    start: number
+    end: number
+}
+
+interface AnnotationResult {
+    id: number | string
+    label: string
+    description?: string
+    start: number
+    end: number
+    channelIds: string[]
+    layerId: number | string
+    userId?: number | string
+    linkedPackage?: string
+}
+
+interface AnnotationsResponse {
+    annotations?: { results?: AnnotationResult[] }
+    linkedPackages?: Record<string, LinkedPackageDTO>
+}
+
+interface DataProps {
+    tsEnd: number
+    constants: { LIMITANNFETCH: number }
+}
+
+type DataEmit = (event: 'annotationsReceived') => void
 
 /**
  * Composable for annotation data management.
- * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ * @param storeInstance - Optional store instance. If not provided, will inject from parent or use default.
  */
-export function useAnnotationData(storeInstance = null) {
+export function useAnnotationData(storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
-    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
-    const { viewerChannels, viewerAnnotations, viewerMontageScheme } = storeToRefs(viewerStore)
+    const viewerStore = (storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')) as unknown as ViewerStore
+    const { viewerChannels, viewerAnnotations, viewerMontageScheme } = storeToRefs(viewerStore as unknown as StoreGeneric) as unknown as {
+        viewerChannels: Ref<ViewerChannel[]>
+        viewerAnnotations: Ref<AnnotationLayer[]>
+        viewerMontageScheme: Ref<string>
+    }
 
     // Reactive state
-    const cachedAnnRange = ref([])
-    const annLayerInfo = ref([])
+    const cachedAnnRange = ref<TimeRange[]>([])
+    const annLayerInfo = ref<unknown[]>([])
 
-    const getChannelId = (channel) => {
+    const getChannelId = (channel: ViewerChannel) => {
         const isViewingMontage = viewerMontageScheme.value !== 'NOT_MONTAGED'
         let id = channel?.id ?? ''
         if (isViewingMontage) {
@@ -29,8 +80,8 @@ export function useAnnotationData(storeInstance = null) {
         return id
     }
 
-    const checkAnnotationRange = async (RStart, REnd, props, activeViewer, emit) => {
-        const reqRange = []
+    const checkAnnotationRange = async (RStart: number, REnd: number, props: DataProps, activeViewer: ActiveViewer, emit: DataEmit) => {
+        const reqRange: TimeRange[] = []
         reqRange.push({ start: RStart, end: props.tsEnd })
 
         // Check if viewport is cached
@@ -99,7 +150,7 @@ export function useAnnotationData(storeInstance = null) {
                         const token = await useToken()
                         const apiUrl = viewerStore.config.apiUrl
                         const baseUrl = `${apiUrl}/timeseries/${activeViewer.content.id}/layers/${curLayer.id}/annotations?api_key=${token}`
-                        const urlParams = Object.keys(params).map(k => `&${k}=${params[k]}`).join('')
+                        const urlParams = (Object.keys(params) as (keyof typeof params)[]).map(k => `&${k}=${params[k]}`).join('')
                         const url = `${baseUrl}${urlParams}`
 
                         const response = await fetch(url, {
@@ -108,10 +159,10 @@ export function useAnnotationData(storeInstance = null) {
                         })
 
                         if (response.status >= 400) {
-                            throw new Error(response.status)
+                            throw new Error(response.status as unknown as string)
                         }
 
-                        const data = await response.json()
+                        const data = await response.json() as AnnotationsResponse
                         await processAnnotationResponse(data, emit)
                     } catch (err) {
                         useHandleXhrError(err)
@@ -132,7 +183,7 @@ export function useAnnotationData(storeInstance = null) {
         }
     }
 
-    const processAnnotationResponse = async (response, emit) => {
+    const processAnnotationResponse = async (response: AnnotationsResponse, emit: DataEmit) => {
         const linkedPackages = response?.linkedPackages ?? {}
         let resp = response?.annotations?.results ?? []
 
@@ -157,7 +208,7 @@ export function useAnnotationData(storeInstance = null) {
 
         if (resp.length > 0) {
             const annotations = resp.map(curAnn => {
-                const newAnn = {
+                const newAnn: Annotation = {
                     name: '',
                     id: curAnn.id,
                     label: curAnn.label,
@@ -181,9 +232,9 @@ export function useAnnotationData(storeInstance = null) {
                 }
 
                 // Check if all channels are selected
-                if (!isViewingMontage && newAnn.channelIds.length === viewerChannels.value.length) {
+                if (!isViewingMontage && newAnn.channelIds!.length === viewerChannels.value.length) {
                     newAnn.allChannels = true
-                } else if (isViewingMontage && newAnn.channelIds.length > viewerChannels.value.length) {
+                } else if (isViewingMontage && newAnn.channelIds!.length > viewerChannels.value.length) {
                     newAnn.allChannels = true
                 }
 
@@ -202,7 +253,7 @@ export function useAnnotationData(storeInstance = null) {
         emit('annotationsReceived')
     }
 
-    const findNextAnnotation = (curTime) => {
+    const findNextAnnotation = (curTime: number) => {
         const annLayer = viewerStore.getViewerActiveLayer()
         if (!annLayer?.annotations?.length) return null
         const index = annIndexOf(annLayer.annotations, curTime, false)
@@ -216,7 +267,7 @@ export function useAnnotationData(storeInstance = null) {
         return annLayer.annotations[index]
     }
 
-    const findPreviousAnnotation = (curTime) => {
+    const findPreviousAnnotation = (curTime: number) => {
         const annLayer = viewerStore.getViewerActiveLayer()
         if (!annLayer?.annotations?.length) return null
         const index = annIndexOf(annLayer.annotations, curTime, true)

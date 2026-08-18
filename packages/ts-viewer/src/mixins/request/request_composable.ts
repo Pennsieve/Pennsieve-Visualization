@@ -1,10 +1,10 @@
-// request_composable.js
+// request_composable.ts
 
 import EventBus from '@/utils/event-bus';
 
-const _isString = (x) => Object.prototype.toString.call(x) === '[object String]'
+const _isString = (x: unknown): x is string => Object.prototype.toString.call(x) === '[object String]'
 
-const _trimValues = (obj) => {
+const _trimValues = (obj: Record<string, unknown>) => {
     Object.keys(obj).forEach(key => {
         if (_isString(obj[key])) {
             obj[key] = obj[key].trim()
@@ -12,15 +12,13 @@ const _trimValues = (obj) => {
     })
 }
 
-/**
- * Send Xhr request
- * @param {string} url
- * @param {{method: string; header: {Authorization: string}; body: []}} opts  Error status
- * @param {string} opts.method
- * @param {Object} opts.header
- * @param {Object} opts.body
- */
-export function useSendXhr(url, opts) {
+interface XhrOptions {
+    method?: string
+    header?: Record<string, string>
+    body?: unknown
+}
+
+export function useSendXhr(url: string, opts?: XhrOptions): Promise<unknown> {
 
     if (!url) {
         return Promise.reject({status: 400, message: 'Url is missing!'})
@@ -32,11 +30,11 @@ export function useSendXhr(url, opts) {
     const headers = Object.assign({}, { 'Content-type': 'application/json' }, optsHeader)
 
     const optsBody = opts?.body
-    let requestOpts = { headers, method: method }
+    let requestOpts: RequestInit = { headers, method: method }
 
     if (optsBody) {
         if (typeof optsBody === 'object') {
-            _trimValues(optsBody)
+            _trimValues(optsBody as Record<string, unknown>)
         }
         const body = JSON.stringify(optsBody)
         requestOpts = Object.assign({}, requestOpts, { body: body })
@@ -58,25 +56,24 @@ export function useSendXhr(url, opts) {
         })
 }
 
-/**
- * Handles ajax errors
- * @param {Object} err
- * @param {number} err.status  Error status
- * @param {ReadableStream} err.body Error body.
- */
-export function useHandleXhrError(err) {
-    const status = err?.status
+export function useHandleXhrError(err: unknown) {
+    const error = err as {
+        status?: number
+        body?: ReadableStream<Uint8Array>
+        json(): Promise<{ message?: string } | null>
+    }
+    const status = error?.status
     if (status === undefined) {
         console.error(err)
         return
     }
 
-    if (status === 400 && err.body) {
-        err.body.getReader().read().then(({ value }) => {
-            const strData = value instanceof Uint8Array ? String.fromCharCode.apply(null, value) : value
+    if (status === 400 && error.body) {
+        error.body.getReader().read().then(({ value }) => {
+            const strData = value instanceof Uint8Array ? String.fromCharCode.apply(null, value as unknown as number[]) : value
             let errorMsg = strData
             try {
-                errorMsg = JSON.parse(strData)?.message ?? strData
+                errorMsg = JSON.parse(strData!)?.message ?? strData
             } catch {
                 // Not JSON; show the raw body
             }
@@ -98,7 +95,7 @@ export function useHandleXhrError(err) {
         })
     }
     else {
-        err.json().then(errorJson => {
+        error.json().then(errorJson => {
           if (errorJson) {
             const msg = errorJson.message
             EventBus.$emit('ajaxError', {

@@ -1,11 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { useCanvasRenderer } from './useCanvasRenderer'
-import { buildContinuousSegm } from './streaming/segments.js'
+import { buildContinuousSegm } from './streaming/segments'
+import type { ContinuousSegmentBlock, PageRequest } from './streaming/segments'
+import type { Segment } from '@pennsieve/timeseries-zarr-reader'
+
+type RecordedOp = { op: string; args: number[] }
+type RecordedPath = { ops: RecordedOp[]; end: string | null }
 
 // Records every 2D context call so path construction can be asserted.
 const recordingContext = () => {
-    const ops = []
-    const record = (op) => (...args) => { ops.push({ op, args }) }
+    const ops: RecordedOp[] = []
+    const record = (op: string) => (...args: number[]) => { ops.push({ op, args }) }
     return {
         ops,
         setTransform: record('setTransform'),
@@ -25,9 +30,9 @@ const recordingContext = () => {
 }
 
 // Splits recorded ops into paths: one entry per beginPath, ended by fill or stroke.
-const paths = (ops) => {
-    const out = []
-    let cur = null
+const paths = (ops: RecordedOp[]) => {
+    const out: RecordedPath[] = []
+    let cur: RecordedPath | null = null
     for (const o of ops) {
         if (o.op === 'beginPath') {
             cur = { ops: [], end: null }
@@ -43,15 +48,15 @@ const paths = (ops) => {
 
 // Where each sub-path of a path begins. A page boundary inside a sub-path is drawn
 // without a break; one that starts a sub-path is drawn as a separate shape.
-const subPathStarts = (path) => path.ops.filter((o) => o.op === 'moveTo').map((o) => o.args)
+const subPathStarts = (path: RecordedPath) => path.ops.filter((o) => o.op === 'moveTo').map((o) => o.args)
 
 const identity = { chId: 'srv-1', label: 'Ch 1', clientId: 'ch1', unit: 'uV' }
 
 // One min/max page of zero-valued bins: startUs on the shared bin grid.
-const minMaxPage = (startUs, binCount, periodUs) => buildContinuousSegm(
-    { startUs, samplePeriodUs: periodUs, isMinMax: true, data: new Float64Array(binCount * 2) },
+const minMaxPage = (startUs: number, binCount: number, periodUs: number) => buildContinuousSegm(
+    { startUs, samplePeriodUs: periodUs, isMinMax: true, data: new Float64Array(binCount * 2) } as Segment,
     identity,
-    { startTime: startUs, endTime: startUs + binCount * periodUs }
+    { startTime: startUs, endTime: startUs + binCount * periodUs } as PageRequest
 )
 
 // Geometry: 4000 us bins at 4000 us/px put bins 1px apart, page A at x 0..99
@@ -60,12 +65,12 @@ const minMaxPage = (startUs, binCount, periodUs) => buildContinuousSegm(
 const PERIOD = 4000
 const BINS = 100
 
-const renderBlocks = (blocks, { sampleRateHz = 1000 } = {}) => {
+const renderBlocks = (blocks: ContinuousSegmentBlock[], { sampleRateHz = 1000 }: { sampleRateHz?: number } = {}) => {
     const { plotCanvasRef, blurCanvasRef, renderData } = useCanvasRenderer()
     const ctx = recordingContext()
     const ctxb = recordingContext()
-    plotCanvasRef.value = { getContext: () => ctx }
-    blurCanvasRef.value = { getContext: () => ctxb }
+    plotCanvasRef.value = { getContext: () => ctx } as unknown as HTMLCanvasElement
+    blurCanvasRef.value = { getContext: () => ctxb } as unknown as HTMLCanvasElement
 
     const viewerChannels = [{
         id: 'ch1',
@@ -114,8 +119,8 @@ describe('renderData min/max blocks', () => {
             minMaxPage(0, BINS, PERIOD),
             minMaxPage(400000, BINS, PERIOD)
         ])
-        const fill = drawn.find((p) => p.end === 'fill')
-        const stroke = drawn.find((p) => p.end === 'stroke')
+        const fill = drawn.find((p) => p.end === 'fill')!
+        const stroke = drawn.find((p) => p.end === 'stroke')!
 
         // The second block's polygon starts at the first block's last point, not its own.
         expect(subPathStarts(fill)).toEqual([[0, 50], [99, 50]])
@@ -130,7 +135,7 @@ describe('renderData min/max blocks', () => {
 
     it('includes the last bin in the fill bottom edge', () => {
         const drawn = renderBlocks([minMaxPage(0, BINS, PERIOD)])
-        const fill = drawn.find((p) => p.end === 'fill')
+        const fill = drawn.find((p) => p.end === 'fill')!
         expect(fill.ops[BINS]).toEqual({ op: 'lineTo', args: [99, 50] })
         expect(fill.ops[BINS + 1]).toEqual({ op: 'lineTo', args: [99, 51] })
     })
@@ -140,8 +145,8 @@ describe('renderData min/max blocks', () => {
             minMaxPage(0, BINS, PERIOD),
             minMaxPage(412000, BINS, PERIOD)
         ])
-        const fill = drawn.find((p) => p.end === 'fill')
-        const stroke = drawn.find((p) => p.end === 'stroke')
+        const fill = drawn.find((p) => p.end === 'fill')!
+        const stroke = drawn.find((p) => p.end === 'stroke')!
 
         expect(subPathStarts(fill)).toEqual([[0, 50], [103, 50]])
         expect(subPathStarts(stroke)).toEqual([[0, 50], [103, 50]])

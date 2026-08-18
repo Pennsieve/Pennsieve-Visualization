@@ -1,25 +1,59 @@
-// composables/useAnnotationRendering.js
+// composables/useAnnotationRendering.ts
 import { ref, computed, inject } from 'vue'
+import type { Ref } from 'vue'
 import { createViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
+import type { StoreGeneric } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { sortAnnotations, annIndexOf, getLayer } from '@/utils/annotationUtils'
+import type { Annotation, AnnotationLayer, LinkedPackageDTO, LinkedPackageContent } from '@/utils/annotationUtils'
+
+interface ViewerChannel {
+    id?: string
+    visible?: boolean
+    rowBaseline: number
+}
+
+// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+interface ViewerStore {
+    config: { apiUrl: string }
+}
+
+interface RenderConstants {
+    ANNOTATIONLABELHEIGHT?: number
+    XOFFSET?: number
+}
+
+interface RenderProps {
+    start: number
+    duration?: number
+    rsPeriod: number
+    pixelRatio: number
+    cWidth: number
+    cHeight: number
+    pointerMode: string
+    viewerActiveTool: string
+    constants?: RenderConstants
+}
 
 /**
  * Composable for annotation rendering.
- * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ * @param storeInstance - Optional store instance. If not provided, will inject from parent or use default.
  */
-export function useAnnotationRendering(storeInstance = null) {
+export function useAnnotationRendering(storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
-    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
-    const { viewerAnnotations, viewerChannels } = storeToRefs(viewerStore)
+    const viewerStore = (storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')) as unknown as ViewerStore
+    const { viewerAnnotations, viewerChannels } = storeToRefs(viewerStore as unknown as StoreGeneric) as unknown as {
+        viewerAnnotations: Ref<AnnotationLayer[]>
+        viewerChannels: Ref<ViewerChannel[]>
+    }
 
-    const renderAnn = ref([])
-    const hoverOffsets = ref([])
-    const focusedAnn = ref(null)
+    const renderAnn = ref<Annotation[]>([])
+    const hoverOffsets = ref<number[]>([])
+    const focusedAnn = ref<Annotation | null>(null)
     const a11yList = ref(['#FFFF4E'])
 
-    const computeRenderOptions = (anns, props) => {
+    const computeRenderOptions = (anns: Annotation[], props: RenderProps) => {
         const annotationHeight = props.constants?.ANNOTATIONLABELHEIGHT || 20
         const halfAnnotationHeight = (annotationHeight / 2) | 0
         const xOffset = props.constants?.XOFFSET || 0
@@ -49,7 +83,7 @@ export function useAnnotationRendering(storeInstance = null) {
                 curAnn.maxOffset = 0
 
                 const channelConfig = viewerChannels.value
-                for (const channelId of curAnn.channelIds) {
+                for (const channelId of curAnn.channelIds!) {
                     let channelOffset = null
                     for (const curChannelView of channelConfig) {
                         if (curChannelView.id === channelId && curChannelView.visible) {
@@ -74,7 +108,7 @@ export function useAnnotationRendering(storeInstance = null) {
         }
     }
 
-    const renderAnnotationAreas = (ctx, anns, props, pHeight) => {
+    const renderAnnotationAreas = (ctx: CanvasRenderingContext2D, anns: Annotation[], props: RenderProps, pHeight: number) => {
         const annotationHeight = props.constants?.ANNOTATIONLABELHEIGHT || 20
         const halfAnnotationHeight = (annotationHeight / 2) | 0
 
@@ -90,13 +124,13 @@ export function useAnnotationRendering(storeInstance = null) {
 
             if (curAnn.selected) {
                 ctx.save()
-                ctx.strokeStyle = curAnnLayer.selColor
-                ctx.fillStyle = curAnnLayer.bkColor
+                ctx.strokeStyle = curAnnLayer.selColor!
+                ctx.fillStyle = curAnnLayer.bkColor!
                 ctx.lineWidth = 1
             }
 
-            const curAnnStartRounded = Math.round(curAnn.cStart) + 0.5
-            const curAnnEndRounded = Math.round(curAnn.cEnd) + 0.5
+            const curAnnStartRounded = Math.round(curAnn.cStart!) + 0.5
+            const curAnnEndRounded = Math.round(curAnn.cEnd!) + 0.5
 
             if (curAnn.allChannels) {
                 if (curAnn.duration === 0) {
@@ -119,25 +153,25 @@ export function useAnnotationRendering(storeInstance = null) {
                 // Single channel
                 if (curAnn.duration === 0) {
                     ctx.beginPath()
-                    ctx.moveTo(curAnnStartRounded, curAnn.minOffset + halfAnnotationHeight)
-                    ctx.lineTo(curAnnStartRounded, curAnn.minOffset + halfAnnotationHeight + 8)
+                    ctx.moveTo(curAnnStartRounded, curAnn.minOffset! + halfAnnotationHeight)
+                    ctx.lineTo(curAnnStartRounded, curAnn.minOffset! + halfAnnotationHeight + 8)
                     ctx.stroke()
                 }
             } else {
                 // Multiple channels
                 if (curAnn.duration === 0) {
                     ctx.beginPath()
-                    ctx.moveTo(curAnnStartRounded, curAnn.minOffset + halfAnnotationHeight)
-                    ctx.lineTo(curAnnStartRounded, curAnn.maxOffset - halfAnnotationHeight)
+                    ctx.moveTo(curAnnStartRounded, curAnn.minOffset! + halfAnnotationHeight)
+                    ctx.lineTo(curAnnStartRounded, curAnn.maxOffset! - halfAnnotationHeight)
                     ctx.stroke()
                 } else {
-                    ctx.fillRect(curAnnStartRounded - 1, curAnn.minOffset + halfAnnotationHeight,
-                        curAnnEndRounded - curAnnStartRounded + 1, curAnn.maxOffset - curAnn.minOffset - annotationHeight)
+                    ctx.fillRect(curAnnStartRounded - 1, curAnn.minOffset! + halfAnnotationHeight,
+                        curAnnEndRounded - curAnnStartRounded + 1, curAnn.maxOffset! - curAnn.minOffset! - annotationHeight)
                     ctx.beginPath()
-                    ctx.moveTo(curAnnStartRounded, curAnn.minOffset + halfAnnotationHeight)
-                    ctx.lineTo(curAnnStartRounded, curAnn.maxOffset - halfAnnotationHeight)
-                    ctx.moveTo(curAnnEndRounded, curAnn.minOffset + halfAnnotationHeight)
-                    ctx.lineTo(curAnnEndRounded, curAnn.maxOffset - halfAnnotationHeight)
+                    ctx.moveTo(curAnnStartRounded, curAnn.minOffset! + halfAnnotationHeight)
+                    ctx.lineTo(curAnnStartRounded, curAnn.maxOffset! - halfAnnotationHeight)
+                    ctx.moveTo(curAnnEndRounded, curAnn.minOffset! + halfAnnotationHeight)
+                    ctx.lineTo(curAnnEndRounded, curAnn.maxOffset! - halfAnnotationHeight)
                     ctx.stroke()
                 }
             }
@@ -149,7 +183,7 @@ export function useAnnotationRendering(storeInstance = null) {
         ctx.restore()
     }
 
-    const renderAnnotationLabels = async (ctx, anns, props, hideFocusedAnn, pointerMode, viewerActiveTool) => {
+    const renderAnnotationLabels = async (ctx: CanvasRenderingContext2D, anns: Annotation[], props: RenderProps, hideFocusedAnn: boolean, pointerMode: string, viewerActiveTool: string) => {
         const annotationHeight = props.constants?.ANNOTATIONLABELHEIGHT || 20
         const halfAnnotationHeight = (annotationHeight / 2) | 0
 
@@ -175,21 +209,21 @@ export function useAnnotationRendering(storeInstance = null) {
                 ctx.strokeStyle = curAnn === focusedAnn.value ? 'white' : 'rgba(255,255,255,0.8)'
             }
 
-            const curAnnStartRounded = Math.round(curAnn.cStart) + 1
-            const curAnnEndRounded = Math.round(curAnn.cEnd)
+            const curAnnStartRounded = Math.round(curAnn.cStart!) + 1
+            const curAnnEndRounded = Math.round(curAnn.cEnd!)
 
             // Render label backgrounds
             let minOffsetIdx = 0
-            for (let i = 0; i < curAnn.allOffsets.length; i++) {
-                ctx.fillRect(curAnnStartRounded - 1, curAnn.allOffsets[i] - halfAnnotationHeight,
+            for (let i = 0; i < curAnn.allOffsets!.length; i++) {
+                ctx.fillRect(curAnnStartRounded - 1, curAnn.allOffsets![i] - halfAnnotationHeight,
                     curAnnEndRounded - curAnnStartRounded + 2, annotationHeight)
-                if (curAnn.allOffsets[i] === curAnn.minOffset) {
+                if (curAnn.allOffsets![i] === curAnn.minOffset) {
                     minOffsetIdx = i
                 }
             }
 
             // Render resize handles
-            const firstOffset = curAnn.allOffsets[minOffsetIdx]
+            const firstOffset = curAnn.allOffsets![minOffsetIdx]
             if (['annSelect', 'annResize-left', 'annResize-right'].includes(pointerMode) && viewerActiveTool === "annotate") {
                 ctx.beginPath()
                 if (curAnn.duration !== 0) {
@@ -202,13 +236,13 @@ export function useAnnotationRendering(storeInstance = null) {
             }
 
             // Render text
-            if ((curAnnEndRounded - curAnnStartRounded) > ((curAnn.label.length * 8) + 10)) {
-                ctx.fillStyle = a11yList.value.indexOf(curAnnLayer.hexColor) >= 0 ? 'black' : 'white'
+            if ((curAnnEndRounded - curAnnStartRounded) > ((curAnn.label!.length * 8) + 10)) {
+                ctx.fillStyle = a11yList.value.indexOf(curAnnLayer.hexColor!) >= 0 ? 'black' : 'white'
                 const textX = curAnn.linkedPackage ? curAnnStartRounded + 30 : curAnnStartRounded + 10
                 const textY = curAnn.linkedPackage ?
                     firstOffset + halfAnnotationHeight - (halfAnnotationHeight / 2) :
                     firstOffset + halfAnnotationHeight - 6
-                ctx.fillText(curAnn.label, textX, textY)
+                ctx.fillText(curAnn.label!, textX, textY)
             }
 
             // Render linked package icon
@@ -221,8 +255,8 @@ export function useAnnotationRendering(storeInstance = null) {
         ctx.restore()
     }
 
-    const renderLinkedPackageIcon = async (ctx, linkedPackageDTO, startX, offsetY, halfHeight, height) => {
-        const preview = linkedPackageDTO?.objects?.view?.[1]?.content ?? {}
+    const renderLinkedPackageIcon = async (ctx: CanvasRenderingContext2D, linkedPackageDTO: LinkedPackageDTO, startX: number, offsetY: number, halfHeight: number, height: number) => {
+        const preview: LinkedPackageContent = linkedPackageDTO?.objects?.view?.[1]?.content ?? {}
         const fileType = preview?.fileType ?? ''
         const img = new Image()
 
@@ -248,19 +282,19 @@ export function useAnnotationRendering(storeInstance = null) {
         }
     }
 
-    const computeIcon = (linkedPackageDTO) => {
+    const computeIcon = (linkedPackageDTO: LinkedPackageDTO) => {
         // Return appropriate icon based on package type
         return '/path/to/default/icon.png'
     }
 
-    const render = (props, annotationsCanvas, annLabelArea, pHeight) => {
+    const render = (props: RenderProps, annotationsCanvas: HTMLCanvasElement | null | undefined, annLabelArea: HTMLCanvasElement, pHeight: number) => {
         if (!annotationsCanvas) {
             console.warn('TSAnnotationCanvas: annotationsCanvas prop is undefined or null')
             return
         }
 
-        const ctxBk = annotationsCanvas.getContext('2d')
-        const ctxLb = annLabelArea.getContext('2d')
+        const ctxBk = annotationsCanvas.getContext('2d')!
+        const ctxLb = annLabelArea.getContext('2d')!
         ctxBk.setTransform(props.pixelRatio, 0, 0, props.pixelRatio, 0, 0)
         ctxLb.setTransform(props.pixelRatio, 0, 0, props.pixelRatio, 0, 0)
 
@@ -282,7 +316,6 @@ export function useAnnotationRendering(storeInstance = null) {
         // Populate render array from visible layers
         for (const curLayer of viewerAnnotations.value) {
             if (curLayer.visible && curLayer.annotations?.length > 0) {
-                // Use a more robust approach to find annotations in viewport
                 // Instead of relying on annIndexOf which might be buggy, use simple filtering
                 const annotationsInViewport = curLayer.annotations.filter(ann => {
 

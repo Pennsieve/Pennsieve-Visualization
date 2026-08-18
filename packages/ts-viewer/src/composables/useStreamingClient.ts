@@ -5,6 +5,50 @@ import { synthesizeMontageDetails } from '@/composables/streaming/channelDetails
 import { legacyFilterToSpec, validateSpecForRate } from '@/composables/streaming/filters'
 import { parseRequest, partitionRequest, filterKey } from '@/composables/streaming/translate'
 import { buildContinuousSegm, buildGapSegm, buildNeuralSegm } from '@/composables/streaming/segments'
+import type { StreamingClientEntry } from '@/composables/streaming/clientRegistry'
+import type { CatalogIndex, ChannelDetail } from '@/composables/streaming/channelDetails'
+import type { LegacyFilterMessage, SpecValidation } from '@/composables/streaming/filters'
+import type { ParsedRequest, QueryGroup, TraceIdentity } from '@/composables/streaming/translate'
+import type { NeuralSegmentBlock, SegmentBlock, SegmentEnvelope } from '@/composables/streaming/segments'
+import type { CreateStoreOptions } from '@/composables/streaming/createStore'
+import type { FilterSpec, MontagePair } from '@pennsieve/timeseries-zarr-reader'
+
+import type { WireSocket } from './useDataRequests'
+
+// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+interface ViewerChannelRecord {
+    id: string
+    serverId?: string
+    label?: string
+    name?: string
+    sf?: number
+    rate?: number
+}
+
+interface ActiveViewerContent {
+    url?: string
+    onUrlExpired?: CreateStoreOptions['onUrlExpired']
+}
+
+interface ViewerStoreLike {
+    $id: string
+    viewerChannels: ViewerChannelRecord[]
+    activeViewer: { content?: ActiveViewerContent } | null
+}
+
+type ErrorPayload = { error: string; requestedBytes?: number; maxBytes?: number }
+
+type ChannelDetailsPayload = ChannelDetail[] | Array<{ id: string; name: string }> | null
+
+/** JSON message shapes the dispatcher routes on. */
+interface DispatchMessage {
+    requestType?: unknown
+    virtualChannels?: unknown
+    filter?: unknown
+    channelFiltersToClear?: unknown
+    montage?: unknown
+    montageMap?: readonly unknown[]
+}
 
 /**
  * Reads timeseries data from a Zarr bundle behind the exact surface of `useWebSocket()`.
@@ -25,28 +69,28 @@ import { buildContinuousSegm, buildGapSegm, buildNeuralSegm } from '@/composable
  *   makes `nrResponses` the constant 1 and lets a page complete without waiting for the
  *   viewer's stuck-request sweeper.
  *
- * @returns {object} The same 15 members `useWebSocket()` returns.
+ * @returns The same 15 members `useWebSocket()` returns.
  */
 export function useStreamingClient() {
-    const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
+    const viewerStore = inject<ViewerStoreLike>('viewerStore', () => createViewerStore('default') as ViewerStoreLike, true)
 
-    const websocket = ref(null)
-    const connectionStatus = ref('disconnected')
+    const websocket = ref<WireSocket | null>(null)
+    const connectionStatus = ref<'connected' | 'disconnected'>('disconnected')
 
-    let onSegmentHandler = null
-    let onEventHandler = null
-    let onChannelDetailsHandler = null
-    let onErrorHandler = null
+    let onSegmentHandler: ((envelope: SegmentEnvelope) => void) | null = null
+    let onEventHandler: ((envelope: SegmentEnvelope) => void) | null = null
+    let onChannelDetailsHandler: ((details: ChannelDetailsPayload) => void) | null = null
+    let onErrorHandler: ((payload: ErrorPayload) => void) | null = null
 
-    let clearChannelsCallback = null
-    let activeId = null
-    let activePackageId = null
+    let clearChannelsCallback: (() => void) | null = null
+    let activeId: string | null = null
+    let activePackageId: string | null = null
     let useMedian = false
 
-    let entry = null
-    let catalogIndex = null
-    let baseDetails = null
-    let connectionPromise = null
+    let entry: StreamingClientEntry | null = null
+    let catalogIndex: CatalogIndex | null = null
+    let baseDetails: ChannelDetail[] | null = null
+    let connectionPromise: Promise<void> | null = null
 
     /**
      * Bumped by every open and every disconnect. Async work captures the value current when
@@ -56,34 +100,35 @@ export function useStreamingClient() {
     let generation = 0
 
     /** Serializes filtered queries per filter spec, so the reader's stateful filter advances in send order. */
-    const filterChains = new Map()
+    const filterChains = new Map<string, Promise<void>>()
 
-    const isAbort = (error) => error?.name === 'AbortError'
+    const isAbort = (error: unknown) => (error as { name?: string } | null)?.name === 'AbortError'
 
-    const reportError = (payload) => {
+    const reportError = (payload: ErrorPayload) => {
         onErrorHandler?.(payload)
     }
 
-    const describeError = (error) => {
+    const describeError = (error: unknown): ErrorPayload => {
         // Matched by name rather than `instanceof`: the reader is code-split and loaded
         // dynamically, so this module never holds a reference to its error classes.
-        if (error?.name === 'RawReadTooLargeError') {
+        const raw = error as { name?: string; message?: string; requestedBytes?: number; maxBytes?: number } | null
+        if (raw?.name === 'RawReadTooLargeError') {
             return {
                 error:
-                    `Cannot render this view: it needs ${error.requestedBytes} bytes of raw signal, ` +
-                    `over the ${error.maxBytes}-byte limit. Zoom in, or clear the filter or montage.`,
-                requestedBytes: error.requestedBytes,
-                maxBytes: error.maxBytes
+                    `Cannot render this view: it needs ${raw.requestedBytes} bytes of raw signal, ` +
+                    `over the ${raw.maxBytes}-byte limit. Zoom in, or clear the filter or montage.`,
+                requestedBytes: raw.requestedBytes,
+                maxBytes: raw.maxBytes
             }
         }
-        return { error: error?.message ?? String(error) }
+        return { error: raw?.message ?? String(error) }
     }
 
     /**
      * Emits one segment block. `type` mirrors the legacy envelope: the block's own type when
      * it carries points, `gap` when it does not.
      */
-    const emitSegment = (block, req) => {
+    const emitSegment = (block: SegmentBlock, req: ParsedRequest) => {
         onSegmentHandler?.({
             pageStart: req.startTime,
             data: block,
@@ -92,7 +137,7 @@ export function useStreamingClient() {
         })
     }
 
-    const emitEvent = (block, req) => {
+    const emitEvent = (block: NeuralSegmentBlock, req: ParsedRequest) => {
         onEventHandler?.({
             pageStart: req.startTime,
             data: block,
@@ -108,10 +153,19 @@ export function useStreamingClient() {
      * trace in request order, and the compound key it puts on a montaged segment is not what
      * the viewer matches on, so identity comes from the request-side table.
      */
-    const runContinuousGroup = async (group, req, signal, gen, activeEntry) => {
-        const delivered = new Set()
+    const runContinuousGroup = async (group: QueryGroup, req: ParsedRequest, signal: AbortSignal, gen: number, activeEntry: StreamingClientEntry) => {
+        const delivered = new Set<TraceIdentity>()
         try {
-            const options = {
+            const options: {
+                startUs: number
+                endUs: number
+                pixelWidthUs: number
+                raw: boolean
+                signal: AbortSignal
+                montage?: MontagePair[]
+                channels?: string[]
+                filter?: FilterSpec
+            } = {
                 startUs: req.startTime,
                 endUs: req.endTime,
                 pixelWidthUs: req.pixelWidth,
@@ -155,8 +209,8 @@ export function useStreamingClient() {
         }
     }
 
-    const runUnitGroup = async (traces, req, signal, gen, activeEntry) => {
-        const delivered = new Set()
+    const runUnitGroup = async (traces: TraceIdentity[], req: ParsedRequest, signal: AbortSignal, gen: number, activeEntry: StreamingClientEntry) => {
+        const delivered = new Set<TraceIdentity>()
         try {
             const options = {
                 channels: traces.map((trace) => trace.chId),
@@ -193,7 +247,7 @@ export function useStreamingClient() {
         }
     }
 
-    const handleDataRequest = async (message) => {
+    const handleDataRequest = async (message: unknown) => {
         const gen = generation
         const req = parseRequest(message)
 
@@ -229,7 +283,7 @@ export function useStreamingClient() {
         activeEntry.inflight.add(controller)
         const signal = controller.signal
 
-        const pending = []
+        const pending: Promise<void>[] = []
         for (const group of groups) {
             const run = () => runContinuousGroup(group, req, signal, gen, activeEntry)
             if (group.filterSpec) {
@@ -257,7 +311,7 @@ export function useStreamingClient() {
      * Without this reply the viewer's `isSwitchingMontage` latch never clears and it discards
      * every subsequent segment as stale.
      */
-    const handleMontageMessage = async (message) => {
+    const handleMontageMessage = async (message: DispatchMessage) => {
         const gen = generation
         await Promise.resolve()
         if (gen !== generation || !catalogIndex) {
@@ -281,7 +335,7 @@ export function useStreamingClient() {
         onChannelDetailsHandler?.(details)
     }
 
-    const handleFilterMessage = (message) => {
+    const handleFilterMessage = (message: unknown) => {
         if (!entry) {
             return
         }
@@ -306,7 +360,7 @@ export function useStreamingClient() {
             }
 
             const rateHz = channel.sf ?? channel.rate ?? rateForServerChannel(channel.serverId ?? channel.id)
-            const check = rateHz ? validateSpecForRate(parsed.spec, rateHz) : { ok: true }
+            const check: SpecValidation = rateHz ? validateSpecForRate(parsed.spec, rateHz) : { ok: true }
             if (!check.ok) {
                 reportError({ error: `Filter not applied to ${channel.label ?? clientId}: ${check.reason}` })
                 continue
@@ -316,21 +370,21 @@ export function useStreamingClient() {
     }
 
     /** The viewer's own record for a client channel id, which carries serverId and label. */
-    const viewerChannelFor = (clientId) =>
+    const viewerChannelFor = (clientId: string) =>
         (viewerStore.viewerChannels || []).find((channel) => channel.id === clientId) ?? null
 
     /** Native sample rate straight from the bundle catalog, or null when unknown. */
-    const rateForServerChannel = (serverId) => catalogIndex?.byId.get(serverId)?.rateHz ?? null
+    const rateForServerChannel = (serverId: string) => catalogIndex?.byId.get(serverId)?.rateHz ?? null
 
     const handleDumpBuffer = () => {
-        abortInflight(entry)
+        abortInflight(entry ?? undefined)
     }
 
     /** The single entry point for every legacy message, standing in for the socket's wire. */
-    const dispatch = (payload) => {
-        let message
+    const dispatch = (payload: unknown) => {
+        let message: DispatchMessage | null
         try {
-            message = typeof payload === 'string' ? JSON.parse(payload) : payload
+            message = typeof payload === 'string' ? JSON.parse(payload) : (payload as DispatchMessage | null)
         } catch {
             reportError({ error: 'JSON Parse Error' })
             return
@@ -359,7 +413,7 @@ export function useStreamingClient() {
     }
 
     const disconnect = async () => {
-        abortInflight(entry)
+        abortInflight(entry ?? undefined)
         if (entry) {
             entry.filterRegistry.clear()
         }
@@ -377,7 +431,7 @@ export function useStreamingClient() {
      * Opens a bundle. Every discovery-WebSocket argument is accepted and ignored: the bundle
      * URL comes from the viewer config, so the call site in `initPlotCanvas` needs no change.
      */
-    const openWebsocket = async (timeseriesDiscoverApi, id, userToken, paramName = 'viewerAsset', packageId = null) => {
+    const openWebsocket = async (timeseriesDiscoverApi: string, id: string, userToken: string | null, paramName = 'viewerAsset', packageId: string | null = null) => {
         if (connectionPromise) {
             await connectionPromise
         }
@@ -393,7 +447,7 @@ export function useStreamingClient() {
         connectionPromise = (async () => {
             // The bundle url rides on the active viewer, not on config, because it describes
             // this package; see fetchAndSetActiveViewer.
-            const content = viewerStore.activeViewer?.content ?? {}
+            const content: ActiveViewerContent = viewerStore.activeViewer?.content ?? {}
             const url = content.url
             if (!url) {
                 throw new Error('useStreamingClient: the active viewer carries no bundle url')
@@ -422,12 +476,12 @@ export function useStreamingClient() {
         } catch (error) {
             connectionStatus.value = 'disconnected'
             connectionPromise = null
-            reportError({ error: `Failed to open timeseries bundle: ${error?.message ?? error}` })
+            reportError({ error: `Failed to open timeseries bundle: ${(error as { message?: string } | null)?.message ?? error}` })
             throw error
         }
     }
 
-    const send = (message) => {
+    const send = (message: unknown) => {
         if (websocket.value && websocket.value.readyState === 1) {
             websocket.value.send(JSON.stringify(message))
             return true
@@ -435,7 +489,7 @@ export function useStreamingClient() {
         return false
     }
 
-    const sendMontageMessage = (montageScheme) => {
+    const sendMontageMessage = (montageScheme: unknown) => {
         let payload
         switch (montageScheme) {
             case 'NOT_MONTAGED':
@@ -447,7 +501,7 @@ export function useStreamingClient() {
         send(payload)
     }
 
-    const sendFilterMessage = (msg) => {
+    const sendFilterMessage = (msg: LegacyFilterMessage) => {
         if (websocket.value && websocket.value.readyState === 1) {
             websocket.value.send(JSON.stringify(msg))
         } else {
@@ -464,18 +518,18 @@ export function useStreamingClient() {
         return false
     }
 
-    const onSegment = (handler) => { onSegmentHandler = handler }
-    const onEvent = (handler) => { onEventHandler = handler }
-    const onChannelDetails = (handler) => { onChannelDetailsHandler = handler }
-    const onError = (handler) => { onErrorHandler = handler }
+    const onSegment = (handler: (envelope: SegmentEnvelope) => void) => { onSegmentHandler = handler }
+    const onEvent = (handler: (envelope: SegmentEnvelope) => void) => { onEventHandler = handler }
+    const onChannelDetails = (handler: (details: ChannelDetailsPayload) => void) => { onChannelDetailsHandler = handler }
+    const onError = (handler: (payload: ErrorPayload) => void) => { onErrorHandler = handler }
 
     onUnmounted(async () => {
         await disconnect()
     })
 
-    const setClearChannelsCallback = (callback) => { clearChannelsCallback = callback }
-    const setActiveId = (id) => { activeId = id }
-    const setUseMedian = (value) => { useMedian = value }
+    const setClearChannelsCallback = (callback: () => void) => { clearChannelsCallback = callback }
+    const setActiveId = (id: string) => { activeId = id }
+    const setUseMedian = (value: boolean) => { useMedian = value }
 
     return {
         websocket: readonly(websocket),

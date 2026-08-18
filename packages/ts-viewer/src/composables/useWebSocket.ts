@@ -1,11 +1,67 @@
-// @/composables/useWebSocket.js
+// @/composables/useWebSocket.ts
 import { ref, onUnmounted, readonly } from 'vue'
 import protobuf from 'protobufjs'
 import { useToken } from "@/composables/useToken"
+import type { TimeSeriesMessage } from '@/composables/wire'
+import type { LegacyFilterMessage } from '@/composables/streaming/filters'
+
+/** Continuous block built from one decoded wire segment; `type` echoes the wire's `segmentType`. */
+export interface WebSocketSegmentBlock {
+    chId: string
+    lastUsed: number
+    unit: string
+    samplePeriod: number
+    requestedSamplePeriod: number
+    pageStart: number
+    pageEnd: number
+    startTs: number
+    isMinMax: boolean
+    unitM: number
+    type: string
+    nrPoints: number
+    cData: Float32Array[]
+    parsedData: Float64Array[]
+    median: number
+    sumElem: number
+    nrValidPoints: number
+    name: string
+    label: string
+}
+
+/** Neural block built from one decoded wire event; rows of `parsedData` hold event start and end times. */
+export interface WebSocketNeuralBlock {
+    chId: string
+    lastUsed: number
+    unit: string
+    samplePeriod: number
+    pageStart: number
+    pageEnd: number
+    startTs: number
+    isMinMax: boolean
+    unitM: number
+    type: 'Neural'
+    nrPoints: number
+    parsedData: number[][]
+    cData: Float32Array[]
+}
+
+export interface WebSocketSegmentEnvelope {
+    pageStart: number
+    data: WebSocketSegmentBlock
+    type: string
+    nrResponses: number
+}
+
+export interface WebSocketEventEnvelope {
+    pageStart: number
+    data: WebSocketNeuralBlock
+    type: 'Neural'
+    nrResponses: number
+}
 
 export const useWebSocket = () => {
-    const websocket = ref(null)
-    const connectionStatus = ref('disconnected')
+    const websocket = ref<WebSocket | null>(null)
+    const connectionStatus = ref<'connected' | 'disconnected'>('disconnected')
     const initWebsocket = ref(true)
 
     // Protocol buffer definition from original
@@ -71,29 +127,29 @@ export const useWebSocket = () => {
 
     // Initialize protobuf
     const protobufInstance = protobuf.Root.fromJSON(proto)
-    const timeSeriesMessage = protobufInstance.TimeSeriesMessage
+    const timeSeriesMessage = (protobufInstance as protobuf.Root & { TimeSeriesMessage: protobuf.Type }).TimeSeriesMessage
 
     // Message handlers
-    let onSegmentHandler = null
-    let onEventHandler = null
-    let onChannelDetailsHandler = null
-    let onErrorHandler = null
+    let onSegmentHandler: ((envelope: WebSocketSegmentEnvelope) => void) | null = null
+    let onEventHandler: ((envelope: WebSocketEventEnvelope) => void) | null = null
+    let onChannelDetailsHandler: ((details: unknown) => void) | null = null
+    let onErrorHandler: ((payload: Record<string, unknown>) => void) | null = null
 
-    let clearChannelsCallback = null
+    let clearChannelsCallback: (() => void) | null = null
     // `activeId` holds whichever ID type the caller provided: a viewer-asset
     // UUID or a package node ID. `idParamName` tracks which it is so the
     // WebSocket URL uses the matching query param.
-    let activeId = null
-    let activePackageId = null
+    let activeId: string | null = null
+    let activePackageId: string | null = null
     let idParamName = 'viewerAsset'
 
     // Configuration - can be set from outside
     let useMedian = false
 
-    let connectionPromise = null
+    let connectionPromise: Promise<WebSocket | null> | null = null
 
-    const waitForWebSocketToClose = (ws, timeout = 2000) => {
-        return new Promise((resolve) => {
+    const waitForWebSocketToClose = (ws: WebSocket, timeout = 2000) => {
+        return new Promise<void>((resolve) => {
             if (!ws || ws.readyState === WebSocket.CLOSED) {
                 resolve()
                 return
@@ -129,7 +185,7 @@ export const useWebSocket = () => {
         connectionPromise = null
     }
 
-    const openWebsocket = async (timeseriesDiscoverApi, id, userToken, paramName = 'viewerAsset', packageId = null) => {
+    const openWebsocket = async (timeseriesDiscoverApi: string, id: string, userToken: string | null, paramName = 'viewerAsset', packageId: string | null = null) => {
         // If there's already a connection in progress, wait for it
         if (connectionPromise) {
             await connectionPromise
@@ -157,7 +213,8 @@ export const useWebSocket = () => {
         initWebsocket.value = true
 
         // A shared promise so concurrent open calls wait on one connection
-        connectionPromise = new Promise(async (resolve, reject) => {
+        connectionPromise = new Promise((resolve, reject) => {
+            void (async () => {
             try {
                 const token = userToken || await useToken()
                 let url = timeseriesDiscoverApi + '?session=' + token + '&' + idParamName + '=' + activeId
@@ -197,6 +254,7 @@ export const useWebSocket = () => {
                 console.error('Failed to create WebSocket:', error)
                 reject(error)
             }
+            })()
         })
 
         try {
@@ -219,7 +277,7 @@ export const useWebSocket = () => {
             // Clear montage
             if (activeId) {
                 const payload = { montage: 'NOT_MONTAGED', packageId: activePackageId || activeId }
-                websocket.value.send(JSON.stringify(payload))
+                websocket.value!.send(JSON.stringify(payload))
             }
             initWebsocket.value = false
         }
@@ -230,10 +288,10 @@ export const useWebSocket = () => {
         // Don't auto-reconnect here - let the component handle it
     }
 
-    const onWebsocketMessage = (msg) => {
+    const onWebsocketMessage = (msg: MessageEvent) => {
         // Process JSON messages
         if (typeof msg.data === 'string') {
-            let data = {}
+            let data: Record<string, unknown> = {}
             try {
                 data = JSON.parse(msg.data)
             } catch (e) {
@@ -252,16 +310,16 @@ export const useWebSocket = () => {
         // Process protobuf messages
         const myReader = new FileReader()
         myReader.addEventListener('loadend', function(e) {
-            const buffer = e.target.result
+            const buffer = (e.target as FileReader).result as ArrayBuffer
             const barray = new Uint8Array(buffer)
 
-            const timeSeriesMsg = timeSeriesMessage.decode(barray)
+            const timeSeriesMsg = timeSeriesMessage.decode(barray) as unknown as TimeSeriesMessage
             const segment = timeSeriesMsg.segment
 
             // Handle Neural Data
             if (timeSeriesMsg.event && timeSeriesMsg.event.length > 0 && timeSeriesMsg.event[0].pageStart) {
                 const tsEvent = timeSeriesMsg.event[0]
-                const dataPoints = [[], []]
+                const dataPoints: number[][] = [[], []]
                 const nrVal = tsEvent.times.length / 2
 
                 let curI = 0
@@ -271,14 +329,14 @@ export const useWebSocket = () => {
                     curI += 2
                 }
 
-                let cData = new Array(3)
+                let cData: Float32Array[] = new Array(3)
                 let k = 0
                 while (k < 3) {
                     cData[k] = new Float32Array(dataPoints[0].length)
                     k++
                 }
 
-                const segm = {
+                const segm: WebSocketNeuralBlock = {
                     chId: tsEvent.source,
                     lastUsed: 0,
                     unit: 'uV',
@@ -304,14 +362,14 @@ export const useWebSocket = () => {
 
             // Handle Regular Timeseries data
             if (segment !== null) {
-                let nrVal = null
+                let nrVal: number | null = null
                 if (segment.isMinMax) {
                     nrVal = segment.data.length / 2
                 } else {
                     nrVal = segment.data.length
                 }
 
-                const parsedData = new Array(3)
+                const parsedData: Float64Array[] = new Array(3)
                 const startTs = segment.startTs
 
                 let sumElem = 0
@@ -354,14 +412,14 @@ export const useWebSocket = () => {
                     elemMedian = sortedYvals[Math.round(sortedYvals.length / 2)]
                 }
 
-                let cData = new Array(3)
+                let cData: Float32Array[] = new Array(3)
                 let k = 0
                 while (k < 3) {
                     cData[k] = new Float32Array(parsedData[0].length)
                     k++
                 }
 
-                const segm = {
+                const segm: WebSocketSegmentBlock = {
                     chId: segment.source,
                     lastUsed: segment.lastUsed,
                     unit: segment.unit,
@@ -406,7 +464,7 @@ export const useWebSocket = () => {
         myReader.readAsArrayBuffer(msg.data)
     }
 
-    const send = (message) => {
+    const send = (message: unknown) => {
         if (websocket.value && websocket.value.readyState === 1) {
             websocket.value.send(JSON.stringify(message))
             return true
@@ -414,7 +472,7 @@ export const useWebSocket = () => {
         return false
     }
 
-    const sendMontageMessage = (montageScheme) => {
+    const sendMontageMessage = (montageScheme: unknown) => {
         let payload
         switch (montageScheme) {
             case "NOT_MONTAGED":
@@ -426,7 +484,7 @@ export const useWebSocket = () => {
         send(payload)
     }
 
-    const sendFilterMessage = (msg) => {
+    const sendFilterMessage = (msg: LegacyFilterMessage) => {
         if (websocket.value && websocket.value.readyState === 1) {
             websocket.value.send(JSON.stringify(msg))
         } else {
@@ -447,19 +505,19 @@ export const useWebSocket = () => {
     }
 
     // Event handler setters
-    const onSegment = (handler) => { onSegmentHandler = handler }
-    const onEvent = (handler) => { onEventHandler = handler }
-    const onChannelDetails = (handler) => { onChannelDetailsHandler = handler }
-    const onError = (handler) => { onErrorHandler = handler }
+    const onSegment = (handler: (envelope: WebSocketSegmentEnvelope) => void) => { onSegmentHandler = handler }
+    const onEvent = (handler: (envelope: WebSocketEventEnvelope) => void) => { onEventHandler = handler }
+    const onChannelDetails = (handler: (details: unknown) => void) => { onChannelDetailsHandler = handler }
+    const onError = (handler: (payload: Record<string, unknown>) => void) => { onErrorHandler = handler }
 
     onUnmounted(async () => {
         await disconnect()
     })
 
     // Configuration setters
-    const setClearChannelsCallback = (callback) => { clearChannelsCallback = callback }
-    const setActiveId = (id) => { activeId = id }
-    const setUseMedian = (value) => { useMedian = value }
+    const setClearChannelsCallback = (callback: () => void) => { clearChannelsCallback = callback }
+    const setActiveId = (id: string) => { activeId = id }
+    const setUseMedian = (value: boolean) => { useMedian = value }
 
     return {
         websocket: readonly(websocket),

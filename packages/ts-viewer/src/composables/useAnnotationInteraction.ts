@@ -1,20 +1,37 @@
-// composables/useAnnotationInteraction.js
+// composables/useAnnotationInteraction.ts
 import { ref, inject } from 'vue'
+import type { Ref } from 'vue'
 import { createViewerStore } from '../stores/tsviewer'
+import type { Annotation } from '@/utils/annotationUtils'
+
+// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+interface ViewerStore {
+    setActiveAnnotation(annotation: Annotation): void
+}
+
+interface InteractionConstants {
+    ANNOTATIONLABELHEIGHT?: number
+}
+
+interface InteractionProps {
+    rsPeriod: number
+    viewerActiveTool: string
+    constants?: InteractionConstants
+}
 
 /**
  * Composable for annotation interaction handling.
- * @param {Ref} focusedAnn - Reference to the focused annotation
- * @param {Ref} renderAnn - Reference to the render annotation array
- * @param {Ref} hoverOffsets - Reference to hover offsets
- * @param {Object} storeInstance - Optional store instance. If not provided, will inject from parent or use default.
+ * @param focusedAnn - Reference to the focused annotation
+ * @param renderAnn - Reference to the render annotation array
+ * @param hoverOffsets - Reference to hover offsets
+ * @param storeInstance - Optional store instance. If not provided, will inject from parent or use default.
  */
-export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, storeInstance = null) {
+export function useAnnotationInteraction(focusedAnn: Ref<Annotation | null>, renderAnn: Ref<Annotation[]>, hoverOffsets: Ref<number[]>, storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
-    const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
+    const viewerStore = (storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')) as unknown as ViewerStore
     const mouseDownPosition = ref([0, 0])
 
-    const shouldCheckAnnotationHover = (mY, constants) => {
+    const shouldCheckAnnotationHover = (mY: number, constants?: InteractionConstants) => {
         const annHeight = constants?.ANNOTATIONLABELHEIGHT || 20
         const halfAnnHeight = annHeight / 2
 
@@ -26,7 +43,7 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
         return false
     }
 
-    const findAnnotationAtPosition = (mX, mY, constants) => {
+    const findAnnotationAtPosition = (mX: number, mY: number, constants?: InteractionConstants) => {
         const annHeight = constants?.ANNOTATIONLABELHEIGHT || 20
         const halfAnnHeight = annHeight / 2
 
@@ -34,12 +51,12 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
             const ann = renderAnn.value[i]
 
             // Check horizontal position
-            if (ann.cStart < mX && ann.cEnd > mX) {
+            if (ann.cStart! < mX && ann.cEnd! > mX) {
                 // Check vertical position
-                if (mY > (ann.cY - halfAnnHeight) && mY < (ann.cY + halfAnnHeight)) {
+                if (mY > (ann.cY! - halfAnnHeight) && mY < (ann.cY! + halfAnnHeight)) {
                     return i
                 }
-            } else if (ann.cStart > mX) {
+            } else if (ann.cStart! > mX) {
                 // Break on first annotation where start > mX (they're sorted)
                 break
             }
@@ -47,14 +64,14 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
         return null
     }
 
-    const determinePointerMode = (mX, viewerActiveTool, annotation) => {
+    const determinePointerMode = (mX: number, viewerActiveTool: string, annotation: Annotation | null) => {
         if (!annotation) return viewerActiveTool
 
         switch (viewerActiveTool) {
             case 'annotate':
-                if (mX <= (annotation.cStart + 10)) {
+                if (mX <= (annotation.cStart! + 10)) {
                     return 'annResize-left'
-                } else if (mX >= (annotation.cEnd - 10) && annotation.duration > 0) {
+                } else if (mX >= (annotation.cEnd! - 10) && annotation.duration > 0) {
                     return 'annResize-right'
                 } else {
                     return 'annSelect'
@@ -69,7 +86,7 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
     const resetFocusedAnnotation = () => {
         if (focusedAnn.value?.oldStart !== undefined) {
             focusedAnn.value.start = focusedAnn.value.oldStart
-            focusedAnn.value.duration = focusedAnn.value.oldDuration
+            focusedAnn.value.duration = focusedAnn.value.oldDuration!
             focusedAnn.value.end = focusedAnn.value.start + focusedAnn.value.duration
         }
     }
@@ -82,7 +99,7 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
         return false
     }
 
-    const onMouseDown = (mX, mY, pointerMode) => {
+    const onMouseDown = (mX: number, mY: number, pointerMode: string) => {
         if (focusedAnn.value && ['annResize-left', 'annResize-right'].includes(pointerMode)) {
             focusedAnn.value.oldStart = focusedAnn.value.start
             focusedAnn.value.oldDuration = focusedAnn.value.duration
@@ -90,7 +107,7 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
         }
     }
 
-    const onMouseMove = (mX, mY, pointerMode, mouseDown, props) => {
+    const onMouseMove = (mX: number, mY: number, pointerMode: string, mouseDown: boolean, props: InteractionProps) => {
         let newPointerMode = pointerMode
 
         if (mouseDown && mouseDownPosition.value) {
@@ -99,17 +116,17 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
 
             switch (pointerMode) {
                 case 'annResize-left':
-                    if (focusedAnn.value.oldDuration > 0) {
-                        focusedAnn.value.start = focusedAnn.value.oldStart + timeDiff
-                        focusedAnn.value.duration = focusedAnn.value.oldDuration - timeDiff
-                        focusedAnn.value.end = focusedAnn.value.start + focusedAnn.value.duration
+                    if (focusedAnn.value!.oldDuration! > 0) {
+                        focusedAnn.value!.start = focusedAnn.value!.oldStart! + timeDiff
+                        focusedAnn.value!.duration = focusedAnn.value!.oldDuration! - timeDiff
+                        focusedAnn.value!.end = focusedAnn.value!.start + focusedAnn.value!.duration
                     } else {
-                        focusedAnn.value.start = focusedAnn.value.oldStart + timeDiff
+                        focusedAnn.value!.start = focusedAnn.value!.oldStart! + timeDiff
                     }
                     break
                 case 'annResize-right':
-                    focusedAnn.value.duration = focusedAnn.value.oldDuration + timeDiff
-                    focusedAnn.value.end = focusedAnn.value.start + focusedAnn.value.duration
+                    focusedAnn.value!.duration = focusedAnn.value!.oldDuration! + timeDiff
+                    focusedAnn.value!.end = focusedAnn.value!.start + focusedAnn.value!.duration
                     break
             }
         } else {
@@ -125,7 +142,7 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
                     const hoveredAnn = renderAnn.value[annIndex]
 
                     // Update focus if needed
-                    if (!oldFocus || (mX < focusedAnn.value.cStart || mX > focusedAnn.value.cEnd)) {
+                    if (!oldFocus || (mX < focusedAnn.value!.cStart! || mX > focusedAnn.value!.cEnd!)) {
                         focusedAnn.value = hoveredAnn
                     }
 
@@ -143,7 +160,7 @@ export function useAnnotationInteraction(focusedAnn, renderAnn, hoverOffsets, st
         return newPointerMode
     }
 
-    const onMouseUp = (pointerMode, emit) => {
+    const onMouseUp = (pointerMode: string, emit: (event: 'updateAnnotation', annotation: Annotation) => void) => {
         if (focusedAnn.value && ['annResize-left', 'annResize-right'].includes(pointerMode)) {
             // Correct negative durations
             if (focusedAnn.value.duration < 0) {

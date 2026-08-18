@@ -1,7 +1,7 @@
 // Dynamic import so @aws-amplify/auth remains truly optional at runtime.
 // Follows the same pattern as packages/core/src/composables/useGetToken.ts.
 
-async function getAuthModule() {
+async function getAuthModule(): Promise<typeof import('@aws-amplify/auth') | null> {
   try {
     return import.meta?.env?.DEV
       ? await import('@aws-amplify/auth')
@@ -12,7 +12,7 @@ async function getAuthModule() {
   }
 }
 
-export async function useToken() {
+export async function useToken(): Promise<string | null> {
   const mod = await getAuthModule();
   if (!mod) return null;
 
@@ -28,7 +28,7 @@ export async function useToken() {
   }
 }
 
-export async function useLogout() {
+export async function useLogout(): Promise<void> {
   const mod = await getAuthModule();
   if (!mod) return;
 
