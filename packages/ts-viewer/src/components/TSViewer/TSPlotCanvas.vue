@@ -22,37 +22,54 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, watch, onMounted, onUnmounted, reactive, ref, inject } from 'vue'
+import type { Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore } from '../../stores/tsviewer'
+import type { ActiveViewer } from '../../stores/tsviewer'
 import { useTimeseriesTransport } from '@/composables/useTimeseriesTransport'
 import { isZarrAssetType } from '@/composables/streaming/assetTypes'
 import { adaptivePageSize, BASE_PAGE_SIZE } from '@/composables/streaming/paging'
 import { useCanvasRenderer } from '@/composables/useCanvasRenderer'
+import type { RendererConstants, RendererChannelView } from '@/composables/useCanvasRenderer'
 import { useTimeSeriesData } from '@/composables/useTimeSeriesData'
+import type { SegmentMessage } from '@/composables/useTimeSeriesData'
 import { useDataRequests } from '@/composables/useDataRequests'
+import type { PlannedRequest } from '@/composables/useDataRequests'
 import { useChannelProcessing } from '@/composables/useChannelProcessing'
+import type { VirtualChannel } from '@/composables/useChannelProcessing'
+import type { ChannelDetail } from '@/composables/streaming/channelDetails'
 import { createThrottle } from '@/utils/throttle'
 import {useToken} from "@/composables/useToken";
 
-const props = defineProps({
-  cHeight: { type: Number, required: true },
-  cWidth: { type: Number, required: true },
-  start: { type: Number, required: true },
-  duration: { type: Number, required: true },
-  constants: { type: Object, required: true },
-  rsPeriod: { type: Number, required: true },
-  ts_start: { type: Number, required: true },
-  ts_end: { type: Number, required: true },
-  globalZoomMult: { type: Number, required: true },
-  activeViewer: { type: Object, required: true },
-})
+/** Keys of the viewer constants object this component reads or forwards. */
+interface PlotCanvasConstants extends RendererConstants {
+  PREFETCHPAGES: number
+}
 
-const emit = defineEmits(['channelsInitialized', 'setGlobalZoom'])
+interface Props {
+  cHeight: number
+  cWidth: number
+  start: number
+  duration: number
+  constants: PlotCanvasConstants
+  rsPeriod: number
+  ts_start: number | null
+  ts_end: number | null
+  globalZoomMult: number
+  activeViewer: ActiveViewer
+}
 
-const activeViewer = computed( () => props.activeViewer || {})
-const baseChannels = computed(() => activeViewer.value?.channels || [])
+const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  (e: 'channelsInitialized'): void
+  (e: 'setGlobalZoom', value: number): void
+}>()
+
+const activeViewer = computed<ActiveViewer>( () => props.activeViewer || {})
+const baseChannels = computed<ChannelDetail[] | undefined>(() => activeViewer.value?.channels || [])
 
 // Store - inject from parent TSViewer component
 // Falls back to default store for backwards compatibility
@@ -142,7 +159,8 @@ const {
   getChannelId,
   processChannelData,
   createMontagePayload
-} = useChannelProcessing(baseChannels, viewerMontageScheme, workspaceMontages, activeViewer)
+} = useChannelProcessing(baseChannels, viewerMontageScheme, workspaceMontages,
+  activeViewer as unknown as Ref<{ content: { id: string } } | null | undefined>)
 
 const prefetchStats = ref({
   totalRequests: 0,
@@ -154,9 +172,9 @@ const prefetchStats = ref({
   averageResponseTime: 0
 })
 
-const lastRequestedSamplePeriod = ref(null)
-const lastRequestStart = ref(null)
-const lastRequestDuration = ref(null)
+const lastRequestedSamplePeriod = ref<number | null>(null)
+const lastRequestStart = ref<number | null>(null)
+const lastRequestDuration = ref<number | null>(null)
 const staleDataCounter = ref(0)
 
 // Computed properties (from original) - moved after composable initialization
@@ -224,7 +242,7 @@ const renderDataInternal = () => {
 
     renderData(
       viewData,
-      viewerChannels.value || [],
+      (viewerChannels.value || []) as unknown as RendererChannelView[],
       props.constants,
       viewport,
       props.globalZoomMult,
@@ -236,7 +254,7 @@ const renderDataInternal = () => {
   }
 }
 
-const PrefetchInterval = ref()
+const PrefetchInterval = ref<ReturnType<typeof setInterval>>()
 // Sweeps page requests whose responses never arrived, so a lost response
 // cannot leave a page permanently pending.
 const monitorPrefetchActivity = () => {
@@ -289,7 +307,7 @@ const generateAndProcessRequests = async () => {
     requestedPages.value,
     props.constants,
     currentRsPeriod,
-    props.ts_end,
+    props.ts_end!,
     segmIndexOf,
     getChannelId,
     pageSize
@@ -377,10 +395,10 @@ const generateAndProcessRequests = async () => {
       0,
       websocket.value,
       userToken,
-      activeViewer.value,
+      activeViewer.value as { content: { id: string } },
       currentRsPeriod,
       requestedPages.value,
-      props.ts_end
+      props.ts_end!
     )
   }
 
@@ -504,7 +522,7 @@ onSegment((segmentData) => {
   }
   staleDataCounter.value = 0
 
-  dataCallback(segmentData)
+  dataCallback(segmentData as SegmentMessage)
 
   // Check if returned page falls in viewport
   if (segmentData.pageStart < (props.start + props.duration)) {
@@ -513,13 +531,13 @@ onSegment((segmentData) => {
 })
 
 onEvent((eventData) => {
-  if (!isDataCurrentForViewport(eventData.data)) {
+  if (!isDataCurrentForViewport(eventData.data as { requestedSamplePeriod?: number })) {
     staleDataCounter.value++
     return
   }
 
   staleDataCounter.value = 0
-  dataCallback(eventData)
+  dataCallback(eventData as unknown as SegmentMessage)
 
   if (eventData.pageStart < (props.start + props.duration)) {
     throttledGetRenderData()
@@ -531,14 +549,14 @@ onChannelDetails((channelDetails) => {
   isSwitchingMontage.value = false
 
   try {
-    const virtualChannels = processChannelData(channelDetails)
+    const virtualChannels = processChannelData(channelDetails as Pick<ChannelDetail, 'id' | 'name'>[])
 
     if (!virtualChannels || virtualChannels.length === 0) {
       console.warn('No valid channels after processing channel details')
       return
     }
 
-    initChannels(virtualChannels, viewerStore, getChannelId)
+    initChannels(virtualChannels as VirtualChannel[], viewerStore, getChannelId)
       .then(() => {
         invalidate()
         renderAll()
@@ -575,17 +593,17 @@ const initPlotCanvas = async () => {
 
   // Initialize prefetch function - create a wrapper that captures current values
   initializePrefetch(
-    (requests) => {
+    (requests: PlannedRequest[]) => {
       const currentRsPeriod = computedRsPeriod.value
       return requestDataFromServer(
         requests,
         0,
         websocket.value,
         userToken,
-        activeViewer.value,
+        activeViewer.value as { content: { id: string } },
         currentRsPeriod,
         requestedPages.value,
-        props.ts_end
+        props.ts_end!
       )
     },
     requestedPages
@@ -599,7 +617,7 @@ const initPlotCanvas = async () => {
       // Pass packageId separately so discover streaming gets both params
       const wsPackageId = activeViewer.value.content.viewerAssetId ? activeViewer.value.content.id : null
       await openWebsocket(
-        viewerStore.config.timeseriesDiscoverApi,
+        viewerStore.config.timeseriesDiscoverApi as string,
         wsId,
         userToken,
         wsIdType,

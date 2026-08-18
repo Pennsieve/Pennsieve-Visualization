@@ -130,7 +130,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {
   ref,
   computed,
@@ -143,6 +143,7 @@ import {
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
+import type { ViewerChannel } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
 import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
 import { getClient } from '@/composables/streaming/clientRegistry'
@@ -152,6 +153,7 @@ import {
   uvPerMmToZoomMult,
   zoomMultForAmplitudes
 } from '@/composables/streaming/autoscale'
+import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
 
 // Component imports (required for <script setup>)
 const TimeseriesScrubber = defineAsyncComponent(() => import('@/components/TSViewer/TSScrubber.vue'))
@@ -183,29 +185,24 @@ const constants = {
   INITDURATION: 15000000      // Initial duration window  (15sec)
 }
 
-// Define props
-const props = defineProps({
-  pkg: {
-    type: Object,
-    default: () => {},
-  },
-  isPreview: {
-    type: Boolean,
-    default: false
-  },
-  sidePanelOpen: {
-    type: Boolean,
-    default: false
-  },
+interface Props {
+  pkg?: Record<string, unknown>
+  isPreview?: boolean
+  sidePanelOpen?: boolean
   /**
    * Unique identifier for this viewer instance.
    * Required when running multiple TSViewer components on the same page.
    * Each instance should have a unique ID to ensure isolated state.
    */
-  instanceId: {
-    type: String,
-    default: 'default'
-  }
+  instanceId?: string
+}
+
+// Define props
+const props = withDefaults(defineProps<Props>(), {
+  pkg: () => ({}),
+  isPreview: false,
+  sidePanelOpen: false,
+  instanceId: 'default'
 })
 
 // Store setup - create instance-specific store
@@ -227,18 +224,52 @@ const {
   getChannelId: getChannelIdFromAnnotation,
 } = useTsAnnotation(viewerStore)
 
+/** Payload of the filter modal's setFilters event; matches TSViewerCanvas.setFilters. */
+interface FilterPayload {
+  filterType: string
+  selChannels: string[]
+  input0?: number | string
+  input1?: number | string
+  notchFreq?: number
+}
+
+/** The TSScrubber methods this component calls through its template ref. */
+interface ScrubberHandle {
+  resetComponentState: () => void
+  initSegmentSpans: () => void
+  getAnnotations: () => Promise<void>
+}
+
+/** The TSViewerCanvas members this component calls through its template ref. */
+interface ViewerCanvasHandle {
+  rsPeriod: number
+  resetFocusedAnnotation: () => void
+  createAnnotationLayer: (layer: { name: string; color: string; description?: string }) => void
+  getNextAnnotation: () => number
+  getPreviousAnnotation: () => number
+  setFilters: (payload: FilterPayload) => void
+  setActiveTool: (tool: string) => void
+  renderAll: (delay?: number, requestLeadingEdge?: boolean) => void
+  renderAnnotationCanvas: () => void
+  initViewerCanvas: () => void
+  /** Never exposed by TSViewerCanvas; the guarded call in onPageForward is a no-op. */
+  invalidate?: () => void
+}
+
 // Template refs
-const ts_viewer = ref(null)
-const scrubber = ref(null)
-const channelLabels = ref(null)
-const viewerCanvas = ref(null)
-const filterWindow = ref(null)
-const annotationModal = ref(null)
+const ts_viewer = ref<HTMLDivElement | null>(null)
+const scrubber = ref<ScrubberHandle | null>(null)
+const channelLabels = ref<HTMLDivElement | null>(null)
+const viewerCanvas = ref<ViewerCanvasHandle | null>(null)
+// TODO(ts-phase4): TSViewer writes into the filter modal's instance state directly.
+const filterWindow = ref<any>(null)
+// TODO(ts-phase4): declared for the template ref only; no member is read.
+const annotationModal = ref<any>(null)
 
 
 // Reactive
-const ts_start = ref(null)
-const ts_end = ref(null)
+const ts_start = ref<number | null>(null)
+const ts_end = ref<number | null>(null)
 const window_height = ref(0)
 const window_width = ref(0)
 const start = ref(0)                // Start Timestamp of viewer in microseconds
@@ -263,7 +294,8 @@ const globalZoomMult = ref(
 const cursorLoc = ref(1/10)
 const annotationWindowOpen = ref(false)
 const annotationLayerWindowOpen = ref(false)
-const annotationDelete = ref(null)
+// TODO(ts-phase4): TsAnnotationDeleteDialog types delete-annotation as a plain object, which rejects Annotation | null.
+const annotationDelete = ref<any>(null)
 const isTsAnnotationDeleteDialogVisible = ref(false)
 const filterWindowOpen = ref(false)
 
@@ -274,7 +306,7 @@ const reactiveViewerChannels = computed(() => {
   return viewerChannels.value.map(channel => ({
     ...channel,
     selected: Boolean(channel.selected)
-  }))
+  }) as ViewerChannel & { displayName: string })
 })
 
 const visibleChannels = computed(() => {
@@ -388,7 +420,7 @@ const measureVerticalScale = async () => {
       globalZoomMult.value = zoom
       viewerCanvas.value?.renderAll?.()
     }
-  } catch (error) {
+  } catch (error: any) { // TODO(ts-phase4)
     // A bundle that cannot be surveyed still renders at the default scale.
     verticalScaleMeasured = false
     console.warn(`TSViewer: vertical autoscale skipped: ${error?.message ?? error}`)
@@ -439,9 +471,9 @@ watch(nrVisChannels, (newCount, oldCount) => {
   }
 })
 
-const openEditAnnotationDialog = (annotation) => {
+const openEditAnnotationDialog = (annotation: Annotation) => {
   viewerStore.setActiveAnnotation(annotation)
-  viewerCanvas.value.renderAnnotationCanvas()
+  viewerCanvas.value!.renderAnnotationCanvas()
   annotationWindowOpen.value = true
 }
 
@@ -465,15 +497,15 @@ watch(needsRerender, (renderData) => {
       }
     })
 
-    viewerStore.resetRerenderTrigger(null)
+    viewerStore.resetRerenderTrigger()
   }
 }, { deep: true })
 
-const onUpdateAnnotation = (annotation) => {
+const onUpdateAnnotation = (annotation: Annotation) => {
   openEditAnnotationDialog(annotation)
 }
 
-const onCreateUpdateAnnotation = async (annotation) => {
+const onCreateUpdateAnnotation = async (annotation: Partial<Annotation>) => {
   if (!annotation || Object.keys(annotation).length === 0) {
     console.error('TSViewer: Received empty annotation!')
     return
@@ -504,15 +536,15 @@ const onCreateUpdateAnnotation = async (annotation) => {
 }
 
 const onAnnotationUpdated = () => {
-  viewerCanvas.value.renderAnnotationCanvas()
+  viewerCanvas.value!.renderAnnotationCanvas()
 }
 
-const confirmDeleteAnnotation = (annotation) => {
+const confirmDeleteAnnotation = (annotation: Annotation) => {
   annotationDelete.value = annotation
   isTsAnnotationDeleteDialogVisible.value = true
 }
 
-const deleteAnnotation = async (annotation) => {
+const deleteAnnotation = async (annotation: Annotation) => {
   isTsAnnotationDeleteDialogVisible.value = false
   try {
     await removeAnnotation(annotation)
@@ -523,10 +555,10 @@ const deleteAnnotation = async (annotation) => {
 }
 
 const onAnnotationDeleted = () => {
-  viewerCanvas.value.renderAnnotationCanvas()
+  viewerCanvas.value!.renderAnnotationCanvas()
 }
 
-const onAddAnnotation = (startTime, duration, allChannels, label, description, layer) => {
+const onAddAnnotation = (startTime: number, duration: number, allChannels: boolean, label: string, description: string, layer: AnnotationLayer) => {
   // Validate inputs
   if (!layer || !layer.id) {
     console.error('Invalid layer provided to onAddAnnotation:', layer)
@@ -553,18 +585,18 @@ const onAddAnnotation = (startTime, duration, allChannels, label, description, l
   }
 
   // Set the annotation in the store
-  viewerStore.setActiveAnnotation(annotation)
+  viewerStore.setActiveAnnotation(annotation as unknown as Annotation)
 
   // Open the modal
   annotationWindowOpen.value = true
 }
 
 const onAnnotationCreated = () => {
-  viewerCanvas.value.renderAnnotationCanvas()
+  viewerCanvas.value!.renderAnnotationCanvas()
 }
 
-const onCreateAnnotationLayer = (newLayer) => {
-  viewerCanvas.value.createAnnotationLayer(newLayer)
+const onCreateAnnotationLayer = (newLayer: { name: string; color: string; description?: string }) => {
+  viewerCanvas.value!.createAnnotationLayer(newLayer)
 }
 
 const onCloseAnnotationLayerWindow = () => {
@@ -572,8 +604,8 @@ const onCloseAnnotationLayerWindow = () => {
 }
 
 const onCloseAnnotationWindow = () => {
-  viewerCanvas.value.resetFocusedAnnotation()
-  viewerCanvas.value.renderAnnotationCanvas()
+  viewerCanvas.value!.resetFocusedAnnotation()
+  viewerCanvas.value!.renderAnnotationCanvas()
   annotationWindowOpen.value = false
 }
 
@@ -581,24 +613,25 @@ const onCloseFilterWindow = () => {
   filterWindowOpen.value = false
 }
 
-const onLabelTap = (e) => {
+// TODO(ts-phase4): tap is a custom gesture event with a nonstandard detail payload.
+const onLabelTap = (e: any) => {
   e.stopPropagation()
   e.preventDefault()
 
   const append = e.detail.sourceEvent.metaKey
   selectChannel({ channelId: e.currentTarget.dataset.id, append: append })
-  viewerCanvas.value.renderAll()
+  viewerCanvas.value!.renderAll()
 }
 
 const onNextAnnotation = () => {
-  start.value = viewerCanvas.value.getNextAnnotation()
+  start.value = viewerCanvas.value!.getNextAnnotation()
 }
 
 const onPreviousAnnotation = () => {
-  start.value = viewerCanvas.value.getPreviousAnnotation()
+  start.value = viewerCanvas.value!.getPreviousAnnotation()
 }
 
-const onUpdateDuration = (value) => {
+const onUpdateDuration = (value: number) => {
   setDuration(value * 1e6)
 }
 
@@ -611,7 +644,7 @@ const onDecrementZoom = () => {
 }
 
 const onAnnLayersInitialized = () => {
-  scrubber.value.getAnnotations()
+  scrubber.value!.getAnnotations()
 }
 
 const onChannelsInitialized = () => {
@@ -621,7 +654,7 @@ const onPageBack = () => {
   // Calculate new start position (go back by current duration)
   const newStart = Math.max(
     start.value - (3/4) * duration.value,
-    ts_start.value
+    ts_start.value!
   )
 
   updateStart(newStart)
@@ -636,7 +669,7 @@ const onPageForward = () => {
   // Calculate new start position
   const newStart = Math.min(
     start.value + (3/4) * duration.value,
-    ts_end.value - duration.value
+    ts_end.value! - duration.value
   )
 
   // Update start position
@@ -653,8 +686,8 @@ const onPageForward = () => {
   })
 }
 
-const selectAnnotation = (payload) => {
-  let rsPeriod = viewerCanvas.value.rsPeriod
+const selectAnnotation = (payload: { annotation: Annotation }) => {
+  let rsPeriod = viewerCanvas.value!.rsPeriod
   updateStart(payload.annotation.start - ((cursorLoc.value * cWidth.value - constants.CURSOROFFSET) * rsPeriod))
 
   // Trigger re-render
@@ -663,7 +696,7 @@ const selectAnnotation = (payload) => {
   })
 }
 
-const selectChannel = (payload) => {
+const selectChannel = (payload: { channelId: string; append: boolean }) => {
   const _channels = viewerChannels.value.map(channel => {
     const selected = channel.selected
 
@@ -681,7 +714,7 @@ const selectChannel = (payload) => {
   viewerStore.setChannels(_channels)
 }
 
-const selectChannels = (ids, append) => {
+const selectChannels = (ids: string[], append: boolean) => {
   const channels = viewerChannels.value.map(channel => {
     if (append === false) {
       channel.selected = false
@@ -695,20 +728,20 @@ const selectChannels = (ids, append) => {
   viewerStore.setChannels(channels)
 }
 
-const updateStart = (value) => {
+const updateStart = (value: number) => {
   start.value = value
 }
 
-const setCursor = (value) => {
+const setCursor = (value: number) => {
   // set the cursor location as a fraction of the width of the canvas
   cursorLoc.value = value
 }
 
-const setGlobalZoom = (value) => {
+const setGlobalZoom = (value: number) => {
   globalZoomMult.value = value
 }
 
-const setDuration = (value) => {
+const setDuration = (value: number) => {
   if (value > maxDuration.value) {
     duration.value = maxDuration.value
   } else {
@@ -716,13 +749,13 @@ const setDuration = (value) => {
   }
 }
 
-const getChannelId = (channel) => {
+const getChannelId = (channel: { id?: string; selected?: boolean; visible?: boolean }) => {
   // Use the method from the TsAnnotation composable
   return getChannelIdFromAnnotation(channel)
 }
 
-const _computeLabelInfo = (item, globalZoomMult, rowscale) => {
-  const n = (((constants.DEFAULTDPI * window.devicePixelRatio) / (globalZoomMult * rowscale)) / 25.4).toFixed(1)
+const _computeLabelInfo = (item: ViewerChannel, globalZoomMult: number, rowscale: number | undefined) => {
+  const n = (((constants.DEFAULTDPI * window.devicePixelRatio) / (globalZoomMult * rowscale!)) / 25.4).toFixed(1)
   return n + ' ' + item.unit + '/mm'
 }
 
@@ -754,11 +787,11 @@ const initChannels = () => {
   initTimeRange()
 }
 
-const openLayerWindow = (payload) => {
+const openLayerWindow = (payload?: unknown) => {
   annotationLayerWindowOpen.value = true
 }
 
-const openFilterWindow = (payload) => {
+const openFilterWindow = (payload?: { channels?: unknown[]; filter?: { input0?: number | string; input1?: number | string } | null }) => {
   const channels = payload?.channels ?? []
   const filter = payload?.filter ?? null
   const filterWindowRef = filterWindow.value
@@ -778,8 +811,8 @@ const openFilterWindow = (payload) => {
   filterWindowOpen.value = true
 }
 
-const setTimeseriesFilters = (payload) => {
-  viewerCanvas.value.setFilters(payload)
+const setTimeseriesFilters = (payload: FilterPayload) => {
+  viewerCanvas.value!.setFilters(payload)
 }
 
 const initCanvasRenderer = () => {

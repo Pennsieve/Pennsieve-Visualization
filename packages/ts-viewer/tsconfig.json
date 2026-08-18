@@ -7,11 +7,9 @@
     "declaration": true,
     "declarationMap": true,
     "noEmit": false,
-    "allowJs": true,
-    "checkJs": false,
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.vue"]
 }

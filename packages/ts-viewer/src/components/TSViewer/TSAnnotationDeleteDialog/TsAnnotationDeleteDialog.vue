@@ -1,4 +1,5 @@
 <template>
+  <!-- @vue-expect-error the handler writes to the `visible` prop, a Vue 2 .sync leftover -->
   <el-dialog
     class="simple"
     :modelValue="visible"
@@ -34,13 +35,14 @@
   </el-dialog>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import BfDialogHeader from '@/components/Shared/bf-dialog-header/BfDialogHeader.vue'
 import DialogBody from '@/components/Shared/dialog-body/DialogBody.vue'
 import BfLibraryButton from '@/components/Shared/bf-library-button/BFLibraryButton.vue'
 import IconWarningCircle from '@/components/icons/IconWarningCircle.vue'
 
-export default {
+export default defineComponent({
   name: 'TsAnnotationDeleteDialog',
 
   components: {
@@ -86,24 +88,23 @@ export default {
       this.isProcessing = false
       this.$emit('update:delete-annotation', {})
     },
-    getUTCDateString: function(d) {
+    getUTCDateString: function(d: number) {
       if(d > 0) {
-        d = new Date(d/1000);
-        return ( d.toDateString() );
+        const date = new Date(d/1000);
+        return ( date.toDateString() );
       } else {
         return 'unknown';
       }
     },
-    getUTCTimeString: function(d) {
+    getUTCTimeString: function(d: number) {
       if(d > 0) {
-        d = d / 1000;
-        d = new Date(d);
-        return ( ('0' + d.getUTCHours()).slice(-2) + ':' +
-          ('0' + d.getUTCMinutes()).slice(-2) + ':' + ('0' + d.getUTCSeconds()).slice(-2) );
+        const date = new Date(d / 1000);
+        return ( ('0' + date.getUTCHours()).slice(-2) + ':' +
+          ('0' + date.getUTCMinutes()).slice(-2) + ':' + ('0' + date.getUTCSeconds()).slice(-2) );
       }
     }
   }
-}
+})
 </script>
 
 <style lang="scss" scoped>
