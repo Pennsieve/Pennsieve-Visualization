@@ -1,0 +1,437 @@
+// DOM-mounted characterization tests for the TSViewer component tree. The transport is
+// the only mocked seam: the real store, canvases, and request pipeline run against a
+// recorder, and each test pins one piece of transport-facing behavior ahead of the
+// architecture refactor.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+
+// Records every call the mounted tree makes against the transport surface, and holds the
+// handlers the tree registers so tests can push canned envelopes back through them.
+const harness = vi.hoisted(() => ({
+    /** JSON-parsed page requests sent through `websocket.value.send`. */
+    wireSent: [] as Array<Record<string, unknown>>,
+    /** Messages sent through the surface's `send`, the montage path included. */
+    sent: [] as Array<Record<string, unknown>>,
+    filterMessages: [] as unknown[],
+    montageMessages: [] as unknown[],
+    dumpBufferRequests: 0,
+    openCalls: [] as unknown[][],
+    segmentHandlers: [] as Array<(envelope: unknown) => void>,
+    eventHandlers: [] as Array<(envelope: unknown) => void>,
+    channelDetailsHandlers: [] as Array<(details: unknown) => void>,
+    errorHandlers: [] as Array<(payload: Record<string, unknown>) => void>,
+    reset() {
+        this.wireSent.length = 0
+        this.sent.length = 0
+        this.filterMessages.length = 0
+        this.montageMessages.length = 0
+        this.dumpBufferRequests = 0
+        this.openCalls.length = 0
+        this.segmentHandlers.length = 0
+        this.eventHandlers.length = 0
+        this.channelDetailsHandlers.length = 0
+        this.errorHandlers.length = 0
+    }
+}))
+
+// The legacy path resolves the session token through Amplify, which is not configured
+// under test. A fixed token keeps the page-request snapshot stable.
+vi.mock('@/composables/useToken', () => ({
+    useToken: vi.fn(async () => 'test-token'),
+    useLogout: vi.fn(async () => {})
+}))
+
+vi.mock('@/composables/useTimeseriesTransport', async () => {
+    const { ref } = await import('vue')
+    const websocket = ref({
+        readyState: 1,
+        send(data: string) {
+            harness.wireSent.push(JSON.parse(data))
+        }
+    })
+    const connectionStatus = ref<'connected' | 'disconnected'>('connected')
+    const surface = {
+        websocket,
+        connectionStatus,
+        openWebsocket: async (...args: unknown[]) => {
+            harness.openCalls.push(args)
+        },
+        send(message: unknown) {
+            harness.sent.push(message as Record<string, unknown>)
+            return true
+        },
+        sendMontageMessage(montageScheme: unknown) {
+            harness.montageMessages.push(montageScheme)
+        },
+        sendFilterMessage(msg: unknown) {
+            harness.filterMessages.push(msg)
+        },
+        sendDumpBufferRequest() {
+            harness.dumpBufferRequests += 1
+            return true
+        },
+        disconnect: async () => {},
+        setClearChannelsCallback(_callback: () => void) {},
+        setActiveId(_id: string) {},
+        setUseMedian(_value: boolean) {},
+        onSegment(handler: (envelope: unknown) => void) {
+            harness.segmentHandlers.push(handler)
+        },
+        onEvent(handler: (envelope: unknown) => void) {
+            harness.eventHandlers.push(handler)
+        },
+        onChannelDetails(handler: (details: unknown) => void) {
+            harness.channelDetailsHandlers.push(handler)
+        },
+        onError(handler: (payload: Record<string, unknown>) => void) {
+            harness.errorHandlers.push(handler)
+        }
+    }
+    return { useTimeseriesTransport: () => surface }
+})
+
+import TSViewer from '@/components/TSViewer/TSViewer.vue'
+import { createViewerStore } from '@/stores/tsviewer'
+import type { ViewerStore } from '@/stores/tsviewer'
+import type { ChannelDetail } from '@/composables/streaming/channelDetails'
+import { buildContinuousSegm } from '@/composables/streaming/segments'
+import type { SegmentEnvelope } from '@/composables/streaming/segments'
+import { contextFor } from '@/test/setup-canvas'
+
+// TS_START sits on a BASE_PAGE_SIZE boundary so the first viewport page starts exactly
+// at the recording start and the page-request snapshot carries round numbers.
+const TS_START = 15_000_000
+const TS_END = 60_000_000
+
+const CHANNEL_DETAILS: ChannelDetail[] = [
+    { id: 'ch-1', name: 'CH1', channelType: 'CONTINUOUS', rate: 250, unit: 'uV', start: TS_START, end: TS_END, properties: [] },
+    { id: 'ch-2', name: 'CH2', channelType: 'CONTINUOUS', rate: 250, unit: 'uV', start: TS_START, end: TS_END, properties: [] }
+]
+
+// assetType 'timeseries' selects the legacy streaming path, which the mocked transport
+// absorbs entirely; the zarr client registry is never touched.
+const CONTENT = {
+    id: 'pkg-1',
+    viewerAssetId: null,
+    idType: 'package' as const,
+    assetType: 'timeseries',
+    url: null,
+    onUrlExpired: null
+}
+
+interface FilterPayload {
+    filterType: string
+    selChannels: string[]
+    input0?: number | string
+    input1?: number | string
+    notchFreq?: number
+}
+
+interface PageRequestWindow {
+    startTime: number
+    endTime: number
+    pixelWidth: number
+}
+
+type ReaderSegment = Parameters<typeof buildContinuousSegm>[0]
+
+/**
+ * Builds the envelope `onSegment` handlers expect, answering `req` with a minMax
+ * segment of 100 ms bins.
+ */
+function makeSegmentEnvelope(chId: string, label: string, req: PageRequestWindow): SegmentEnvelope {
+    const samplePeriodUs = 100_000
+    const binCount = Math.floor((req.endTime - req.startTime) / samplePeriodUs)
+    const data = new Float32Array(binCount * 2)
+    for (let i = 0; i < binCount; i++) {
+        data[2 * i] = -10
+        data[2 * i + 1] = 10
+    }
+    const segment = { startUs: req.startTime, samplePeriodUs, isMinMax: true, data } as unknown as ReaderSegment
+    const block = buildContinuousSegm(segment, { chId, label, clientId: chId, unit: 'uV' }, req)
+    return { pageStart: req.startTime, data: block, type: 'Continuous', nrResponses: 1 }
+}
+
+/**
+ * The plot canvas element. TSPlotCanvas renders the blur canvas first and the plot
+ * canvas last; neither carries an id, while the slotted axis and annotation canvases do.
+ */
+function plotCanvasElement(): HTMLCanvasElement {
+    const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>('.timeseries-plot-canvas canvas'))
+    const unnamed = canvases.filter((canvas) => !canvas.id)
+    expect(unnamed.length).toBeGreaterThanOrEqual(2)
+    return unnamed[unnamed.length - 1]
+}
+
+function drawCallCount(canvas: HTMLCanvasElement): number {
+    const ctx = contextFor(canvas)
+    const spies = ['beginPath', 'moveTo', 'lineTo', 'stroke', 'fill'] as const
+    return spies.reduce((total, name) => total + (ctx[name] as ReturnType<typeof vi.fn>).mock.calls.length, 0)
+}
+
+function pageRequestsFor(startTime: number): Array<Record<string, unknown>> {
+    return harness.wireSent.filter((message) => message.startTime === startTime)
+}
+
+describe('TSViewer mounted against a recorded transport', () => {
+    let wrapper: VueWrapper | null = null
+
+    beforeEach(() => {
+        harness.reset()
+        // TSAnnotationCanvas loads annotation layers over HTTP on mount. One canned layer
+        // satisfies it without a server; every other HTTP path is guarded off by leaving
+        // apiUrl and timeSeriesApi out of the config.
+        vi.stubGlobal('fetch', vi.fn(async () => ({
+            status: 200,
+            json: async () => ({ results: [{ id: 1, name: 'Default', color: '#18BA62', description: 'Default' }] })
+        })))
+    })
+
+    afterEach(async () => {
+        wrapper?.unmount()
+        wrapper = null
+        await flushPromises()
+        vi.unstubAllGlobals()
+        document.body.innerHTML = ''
+    })
+
+    /**
+     * Mounts the full tree, seeds the store directly (no discovery socket), and waits for
+     * the plot canvas to open the mocked transport.
+     */
+    async function mountViewer(instanceId: string): Promise<{ store: ViewerStore }> {
+        const pinia = createPinia()
+        setActivePinia(pinia)
+        const store = createViewerStore(instanceId)
+        store.setViewerConfig({ timeseriesDiscoverApi: 'wss://discover.example' })
+
+        wrapper = mount(TSViewer, {
+            props: { instanceId },
+            global: { plugins: [pinia] },
+            attachTo: document.body
+        })
+        await flushPromises()
+
+        store.setActiveViewer({
+            channels: CHANNEL_DETAILS.map((channel) => ({ ...channel })),
+            content: { ...CONTENT }
+        })
+        await flushPromises()
+        await vi.waitFor(() => {
+            expect(harness.openCalls.length).toBeGreaterThan(0)
+        }, { timeout: 3000 })
+        await flushPromises()
+        return { store }
+    }
+
+    /**
+     * Pushes the channel-details reply the legacy server sends after connect, then waits
+     * for the request pipeline to settle.
+     *
+     * Two page requests for the first viewport page are expected, not one: channel
+     * initialization issues the first, and the channel-count watcher then resizes the
+     * canvas 20 ms later, which changes rsPeriod, invalidates the cache, clears the
+     * pending-page map, and re-requests the same page.
+     * pins current behavior; revisit in the refactor
+     */
+    async function initializeChannels(): Promise<void> {
+        const details = CHANNEL_DETAILS.map(({ id, name }) => ({ id, name }))
+        harness.channelDetailsHandlers.forEach((handler) => handler(details))
+        await vi.waitFor(() => {
+            expect(pageRequestsFor(TS_START).length).toBeGreaterThanOrEqual(2)
+        }, { timeout: 3000 })
+    }
+
+    it('renders a label for each seeded channel', async () => {
+        await mountViewer('dom-test-labels')
+        await initializeChannels()
+
+        await vi.waitFor(() => {
+            const labels = wrapper!.findAll('#channelLabels .labelDiv').map((label) => label.text())
+            expect(labels).toEqual(['CH1', 'CH2'])
+        }, { timeout: 3000 })
+    })
+
+    it('requests the viewport page over the wire with both channels in one message', async () => {
+        await mountViewer('dom-test-requests')
+        await initializeChannels()
+
+        const pageRequest = pageRequestsFor(TS_START)[0]
+        expect(pageRequest).toBeDefined()
+        // Every field derives from seeded constants and the mocked token; nothing here is
+        // wall-clock dependent. pixelWidth is 1 because the unlaid-out canvas reports a
+        // non-positive width and rsPeriod falls back to 1.
+        // pins current behavior; revisit in the refactor
+        expect(pageRequest).toMatchInlineSnapshot(`
+          {
+            "endTime": 30000000,
+            "minMax": true,
+            "packageId": "pkg-1",
+            "pixelWidth": 1,
+            "session": "test-token",
+            "startTime": 15000000,
+            "virtualChannels": [
+              {
+                "id": "ch-1",
+                "name": "CH1",
+              },
+              {
+                "id": "ch-2",
+                "name": "CH2",
+              },
+            ],
+          }
+        `)
+    })
+
+    it('draws on the plot canvas when a segment envelope answers a page request', async () => {
+        await mountViewer('dom-test-segments')
+        await initializeChannels()
+
+        const wireRequest = pageRequestsFor(TS_START)[0]
+        const req: PageRequestWindow = {
+            startTime: wireRequest.startTime as number,
+            endTime: wireRequest.endTime as number,
+            pixelWidth: wireRequest.pixelWidth as number
+        }
+
+        const canvas = plotCanvasElement()
+        const baseline = drawCallCount(canvas)
+
+        harness.segmentHandlers.forEach((handler) => {
+            handler(makeSegmentEnvelope('ch-1', 'CH1', req))
+            handler(makeSegmentEnvelope('ch-2', 'CH2', req))
+        })
+
+        await vi.waitFor(() => {
+            expect(drawCallCount(canvas)).toBeGreaterThan(baseline)
+        }, { timeout: 3000 })
+    })
+
+    it('sends the legacy filter wire message for lowpass, highpass, bandpass, bandstop, and clear', async () => {
+        await mountViewer('dom-test-filters')
+
+        const viewer = wrapper!.vm as unknown as { setTimeseriesFilters: (payload: FilterPayload) => void }
+        const selChannels = ['ch-1', 'ch-2']
+
+        // Every filter message hardcodes order 4 as the first parameter.
+        // pins current behavior; revisit in the refactor
+        viewer.setTimeseriesFilters({ filterType: 'lowpass', selChannels, input0: 30 })
+        expect(harness.filterMessages[0]).toMatchInlineSnapshot(`
+          {
+            "channels": [
+              "ch-1",
+              "ch-2",
+            ],
+            "filter": "lowpass",
+            "filterParameters": [
+              4,
+              30,
+            ],
+          }
+        `)
+
+        viewer.setTimeseriesFilters({ filterType: 'highpass', selChannels, input0: 0.5 })
+        expect(harness.filterMessages[1]).toMatchInlineSnapshot(`
+          {
+            "channels": [
+              "ch-1",
+              "ch-2",
+            ],
+            "filter": "highpass",
+            "filterParameters": [
+              4,
+              0.5,
+            ],
+          }
+        `)
+
+        // Bandpass sends [order, center, halfWidth]: center is (low + high) / 2 and
+        // halfWidth is |high - low| / 2, so 1..70 Hz becomes 35.5 and 34.5.
+        viewer.setTimeseriesFilters({ filterType: 'bandpass', selChannels, input0: 1, input1: 70 })
+        expect(harness.filterMessages[2]).toMatchInlineSnapshot(`
+          {
+            "channels": [
+              "ch-1",
+              "ch-2",
+            ],
+            "filter": "bandpass",
+            "filterParameters": [
+              4,
+              35.5,
+              34.5,
+            ],
+          }
+        `)
+
+        // Bandstop ignores input0/input1 and always sends width 10 around notchFreq.
+        // pins current behavior; revisit in the refactor
+        viewer.setTimeseriesFilters({ filterType: 'bandstop', selChannels, notchFreq: 60 })
+        expect(harness.filterMessages[3]).toMatchInlineSnapshot(`
+          {
+            "channels": [
+              "ch-1",
+              "ch-2",
+            ],
+            "filter": "bandstop",
+            "filterParameters": [
+              4,
+              60,
+              10,
+            ],
+          }
+        `)
+
+        viewer.setTimeseriesFilters({ filterType: 'clear', selChannels })
+        expect(harness.filterMessages[4]).toMatchInlineSnapshot(`
+          {
+            "channelFiltersToClear": [
+              "ch-1",
+              "ch-2",
+            ],
+          }
+        `)
+    })
+
+    it('sends the montage payload through transport send when the montage scheme changes', async () => {
+        const { store } = await mountViewer('dom-test-montage')
+
+        store.setWorkspaceMontages([
+            { name: 'TEST_MONTAGE', channelPairs: [{ name: 'CH1-CH2', channels: ['CH1', 'CH2'] }] }
+        ])
+        store.setViewerMontageScheme('TEST_MONTAGE')
+        await vi.waitFor(() => {
+            expect(harness.sent.length).toBe(1)
+        }, { timeout: 3000 })
+        expect(harness.sent[0]).toMatchInlineSnapshot(`
+          {
+            "montage": "CUSTOM_MONTAGE",
+            "montageMap": [
+              [
+                "CH1",
+                "CH2",
+              ],
+            ],
+            "packageId": "pkg-1",
+          }
+        `)
+
+        store.setViewerMontageScheme('NOT_MONTAGED')
+        await vi.waitFor(() => {
+            expect(harness.sent.length).toBe(2)
+        }, { timeout: 3000 })
+        expect(harness.sent[1]).toMatchInlineSnapshot(`
+          {
+            "montage": "NOT_MONTAGED",
+            "montageMap": [],
+            "packageId": "pkg-1",
+          }
+        `)
+
+        // The montage payload travels through the surface's send; sendMontageMessage has
+        // no caller on this path. pins current behavior; revisit in the refactor
+        expect(harness.montageMessages).toEqual([])
+    })
+})
