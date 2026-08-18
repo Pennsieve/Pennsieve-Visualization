@@ -1,11 +1,75 @@
-// @/composables/useTimeSeriesData.js
+// @/composables/useTimeSeriesData.ts
 import {reactive, ref} from 'vue'
+import type { SegmentBlock, SegmentBlockBase } from './streaming/segments'
+import type { RequestedPageInfo } from './useDataRequests'
+import type { VirtualChannel, VirtualChannelContent } from './useChannelProcessing'
+
+/** Per-channel cache entry held in `chData`. `segments` stays sorted by `startTs`. */
+export interface ChannelData {
+    id: string
+    serverId: string
+    label: string
+    name?: string
+    displayName?: string
+    type?: string
+    selected?: boolean
+    visible?: boolean
+    segments: SegmentBlock[]
+    start?: number
+    end?: number
+    sampleFreq?: number
+    unit?: string
+    gaps: number[][]
+    dataSegments: number[]
+}
+
+/** Fields the renderer writes onto a block when it lands in the viewport. */
+export type ViewBlock = SegmentBlock & {
+    renderStartIndex?: number
+    renderEndIndex?: number
+}
+
+export interface ViewDataChannel {
+    id: string
+    mean?: number | null
+    median?: number | null
+    firstRenderedIndex?: number
+    lastRenderedIndex?: number
+    blocks: ViewBlock[]
+}
+
+/** Render input: the viewport window and the cached blocks that fall inside it. */
+export interface ViewData {
+    start: number
+    duration: number
+    channels: ViewDataChannel[]
+}
+
+/** Block payload of a transport message; a legacy gap notice carries only these required fields. */
+export interface SegmentMessageData extends Partial<SegmentBlockBase> {
+    startTs: number
+    pageStart: number
+    nrPoints: number
+    source?: string
+}
+
+export interface SegmentMessage {
+    pageStart?: number
+    type: 'Continuous' | 'Neural' | 'gap' | 'realtime'
+    nrResponses?: number
+    data: SegmentMessageData
+}
+
+// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+interface ChannelStore {
+    setChannels(channels: object[]): void
+}
 
 export const useTimeSeriesData = () => {
     // Data structures from original
-    const chData = ref([])
-    const requestedPages = ref(new Map())
-    const viewData = reactive({
+    const chData = ref<ChannelData[]>([])
+    const requestedPages = ref(new Map<number, RequestedPageInfo>())
+    const viewData: ViewData = reactive({
         start: 0,
         duration: 0,
         channels: []
@@ -14,7 +78,7 @@ export const useTimeSeriesData = () => {
     // State from original
     const channelsReady = ref(false)
     const autoScale = ref(0)
-    const globalGaps = ref(null)
+    const globalGaps = ref<number[] | null>(null)
     const currentRequestedSamplePeriod = ref(1)
     const isSwitchingMontage = ref(false)
 
@@ -23,7 +87,7 @@ export const useTimeSeriesData = () => {
     const prefetchPages = 3
 
     // Binary search function from original
-    const segmIndexOf = (segmArray, val, first, startAtIndex) => {
+    const segmIndexOf = (segmArray: SegmentBlock[], val: number, first: boolean, startAtIndex?: number) => {
         if (!startAtIndex) {
             startAtIndex = 0
         }
@@ -37,7 +101,7 @@ export const useTimeSeriesData = () => {
         return index
     }
 
-    const indexOfStart = (segmArray, val, min, max, firstIndex) => {
+    const indexOfStart = (segmArray: SegmentBlock[], val: number, min: number, max: number, firstIndex: boolean): number => {
         if (max < min) {
             let pred
             if (max >= 0) {
@@ -56,7 +120,7 @@ export const useTimeSeriesData = () => {
             return -pred - 2
         }
 
-        const mid = parseInt((min + max) / 2)
+        const mid = parseInt(((min + max) / 2) as unknown as string)
 
         if (segmArray[mid].pageStart > val) {
             return indexOfStart(segmArray, val, min, mid - 1, firstIndex)
@@ -80,12 +144,12 @@ export const useTimeSeriesData = () => {
     }
 
     // Initialize channels (from original) - now accepts getChannelIdFn as parameter
-    const initChannels = (channels, store, getChannelIdFn) => {
+    const initChannels = (channels: VirtualChannel[] | null | undefined, store: ChannelStore | null | undefined, getChannelIdFn?: (channel: VirtualChannelContent) => string) => {
         if (!channels) {
             return Promise.resolve()
         }
 
-        const chObjects = []
+        const chObjects: ChannelData[] = []
         if (channels.length > 0) {
             const channelConfig = []
 
@@ -110,7 +174,7 @@ export const useTimeSeriesData = () => {
 
                 const label = curChannel.label.split("<->", 3)
                 const label_prefix = label[0]
-                let label_value = (label.length > 1) ? parseFloat(label[1]) : 0
+                let label_value: string | number = (label.length > 1) ? parseFloat(label[1]) : 0
                 label_value = (isNaN(label_value) ? label[1] : label_value)
 
                 channelConfig.push({
@@ -156,7 +220,7 @@ export const useTimeSeriesData = () => {
     }
 
     // Compute summary (from original)
-    const computeSummary = (channels) => {
+    const computeSummary = (channels: ChannelData[]) => {
         if (channels.length === 0) {
             globalGaps.value = null
             return
@@ -165,17 +229,17 @@ export const useTimeSeriesData = () => {
     }
 
     // Data callback (from original)
-    const dataCallback = (obj) => {
+    const dataCallback = (obj: SegmentMessage) => {
         // During montage transitions, silently discard stale data from previous config
         if (isSwitchingMontage.value) {
             return
         }
 
-        let curChData = null
+        let curChData: ChannelData | null | undefined = null
         const serverResponseId = obj.data.chId || obj.data.source
         const serverResponseName = obj.data.label || obj.data.name
 
-        // ROBUST MATCHING: Find exact match first (serverId + label)
+        // Find an exact match first (serverId + label)
         curChData = chData.value.find(channel =>
             channel.serverId === serverResponseId &&
             channel.label === serverResponseName
@@ -223,7 +287,7 @@ export const useTimeSeriesData = () => {
                 // Update the request counter for this channel
                 let requestedPage = requestedPages.value.get(obj.data.pageStart)
                 if (requestedPage) {
-                    let countForChannel = requestedPage.counter.get(curChData.id)
+                    let countForChannel = requestedPage.counter.get(curChData.id) as number
 
                     if (isNaN(countForChannel)) {
                         // Handle missing nrResponses field - default to 1 if not provided
@@ -255,7 +319,7 @@ export const useTimeSeriesData = () => {
 
                 // Add data to cache
                 if (addData) {
-                    curSegments.push(obj.data)
+                    curSegments.push(obj.data as SegmentBlock)
                     curSegments.sort((a, b) => {
                         if (a.startTs < b.startTs) return -1
                         if (a.startTs > b.startTs) return 1
@@ -282,7 +346,7 @@ export const useTimeSeriesData = () => {
     }
 
     // Auto scale (from original) - now accepts cHeight as parameter
-    const autoScaleViewData = (cHeight) => {
+    const autoScaleViewData = (cHeight: number) => {
         let sumMedian = 0
         let nrSeg = 0
         let allChannels = viewData.channels
@@ -310,7 +374,7 @@ export const useTimeSeriesData = () => {
     }
 
     // Helper functions from original
-    const standardDeviation = (values) => {
+    const standardDeviation = (values: Float64Array) => {
         const avg = average(values)
         const squareDiffs = values.map(function(value) {
             const diff = value - avg
@@ -322,7 +386,7 @@ export const useTimeSeriesData = () => {
         return stdDev
     }
 
-    const average = (data) => {
+    const average = (data: Float64Array) => {
         const sum = data.reduce(function(sum, value) {
             return sum + value
         }, 0)
@@ -330,7 +394,7 @@ export const useTimeSeriesData = () => {
         return avg
     }
 
-    const updateCurrentRequestedSamplePeriod = (rsPeriod) => {
+    const updateCurrentRequestedSamplePeriod = (rsPeriod: number) => {
         currentRequestedSamplePeriod.value = Math.ceil(rsPeriod)
     }
 
@@ -343,7 +407,7 @@ export const useTimeSeriesData = () => {
      * treat its page as fulfilled and never replace it. A block without a positive value
      * is accepted: the legacy streaming server does not always fill the field.
      */
-    const isDataCurrentForViewport = (segmentData) => {
+    const isDataCurrentForViewport = (segmentData: { requestedSamplePeriod?: number } | null | undefined) => {
         if (!segmentData) {
             return false
         }

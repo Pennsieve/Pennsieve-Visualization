@@ -1,13 +1,13 @@
 export const useChannelDataRequest = () => {
 
-  const openConnection = async (timeseriesDiscoverApi, id, userToken, paramName = 'viewerAsset', packageId = null) => {
+  const openConnection = async (timeseriesDiscoverApi: string, id: string, userToken: string | null, paramName = 'viewerAsset', packageId: string | null = null) => {
 
-    const myConnectionPromise = new Promise((resolve, reject) => {
+    const myConnectionPromise = new Promise<{ res: unknown; status: string }>((resolve, reject) => {
       let url = timeseriesDiscoverApi + '?session=' + userToken + '&' + paramName + '=' + id
       if (packageId && paramName !== 'package') {
         url += '&package=' + packageId
       }
-      let response = null
+      let response: { channelDetails?: unknown } | null = null
 
       const ws = new WebSocket(url)
 

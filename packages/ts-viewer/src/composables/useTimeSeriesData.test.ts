@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { useTimeSeriesData } from './useTimeSeriesData.js'
+import { useTimeSeriesData } from './useTimeSeriesData'
+import type { ContinuousSegmentBlock } from './streaming/segments'
 
-const block = (overrides = {}) => ({
+const block = (overrides: Partial<ContinuousSegmentBlock> = {}): ContinuousSegmentBlock => ({
     chId: 'ch-1',
     label: 'Ch 1',
     name: 'Ch 1',
@@ -24,7 +25,7 @@ const block = (overrides = {}) => ({
     ...overrides
 })
 
-const emptyBlock = (overrides = {}) => block({
+const emptyBlock = (overrides: Partial<ContinuousSegmentBlock> = {}) => block({
     nrPoints: 0,
     nrValidPoints: 0,
     samplePeriod: 0,

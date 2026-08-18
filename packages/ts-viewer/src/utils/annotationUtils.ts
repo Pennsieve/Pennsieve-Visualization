@@ -7,10 +7,49 @@ export interface Annotation {
     label?: string
     name?: string
     layer_id?: number | string
+    end?: number
+    description?: string
+    channelIds?: string[]
+    userId?: number | string
+    allChannels?: boolean
+    selected?: boolean
+    linkedPackage?: string
+    linkedPackageDTO?: LinkedPackageDTO
+    layer?: AnnotationLayer
+    cStart?: number | null
+    cEnd?: number | null
+    cY?: number
+    allOffsets?: number[]
+    minOffset?: number
+    maxOffset?: number
+    oldStart?: number
+    oldDuration?: number
 }
 
 export interface AnnotationLayer {
     id: number | string
+    name?: string
+    description?: string
+    visible?: boolean
+    selected?: boolean
+    annotations: Annotation[]
+    color?: string
+    hexColor?: string
+    bkColor?: string
+    selColor?: string
+}
+
+export interface LinkedPackageContent {
+    fileType?: string
+    id?: string
+    packageId?: string
+}
+
+export interface LinkedPackageDTO {
+    content?: { id?: string }
+    objects?: {
+        view?: { content?: LinkedPackageContent }[]
+    }
 }
 
 /**
@@ -43,7 +82,7 @@ export const sortAnnotations = (annotationArray: Annotation[]): void => {
 /**
  * Get the layer for a given annotation
  */
-export const getLayer = (annotation: Annotation | null | undefined, viewerAnnotations: AnnotationLayer[]) => {
+export const getLayer = (annotation: Annotation | null | undefined, viewerAnnotations: AnnotationLayer[]): Partial<AnnotationLayer> => {
     const layerId = annotation?.layer_id || 0
     return viewerAnnotations.find(l => l.id === layerId) ?? {}
 }

@@ -1,4 +1,4 @@
-// composables/useViewerControls.js
+// composables/useViewerControls.ts
 /**
  * Composable for external control of TSViewer instances.
  * Use this in wrapper components or external control panels that need
@@ -20,17 +20,68 @@
  */
 
 import { computed, readonly } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import type { StoreGeneric } from 'pinia'
 import { createViewerStore } from '../stores/tsviewer'
+
+// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+interface ViewerChannel {
+    id: string
+    selected: boolean
+    visible: boolean
+    [key: string]: unknown
+}
+
+interface LayerAnnotation {
+    id: string | number
+    [key: string]: unknown
+}
+
+interface AnnotationLayer {
+    id: string | number
+    visible: boolean
+    selected: boolean
+    annotations: LayerAnnotation[]
+    [key: string]: unknown
+}
+
+interface ViewerStoreRefs {
+    viewerChannels: Ref<ViewerChannel[]>
+    viewerAnnotations: Ref<AnnotationLayer[]>
+    viewerActiveTool: Ref<string>
+    viewerSelectedChannels: ComputedRef<ViewerChannel[]>
+    activeAnnotation: Ref<unknown>
+    activeAnnotationLayer: Ref<unknown>
+    viewerMontageScheme: Ref<string>
+    viewerErrors: Ref<unknown>
+    config: Ref<Record<string, unknown>>
+    activeViewer: Ref<Record<string, unknown>>
+}
+
+interface ViewerControlsStore {
+    getAnnotationById(id: string): LayerAnnotation | undefined
+    getViewerActiveLayer(): AnnotationLayer | null
+    setChannels(channels: ViewerChannel[]): void
+    updateChannelVisibility(channelId: string, visible: boolean): void
+    triggerRerender(cause: string): void
+    setActiveAnnotation(annotation: LayerAnnotation): void
+    setActiveAnnotationLayer(layerId: string): void
+    updateLayer(layer: AnnotationLayer): void
+    setActiveTool(tool: string): void
+    setViewerConfig(config: Record<string, unknown>): void
+    setActiveViewer(viewerData: Record<string, unknown>): void
+    resetViewer(): void
+}
 
 /**
  * Provides read and write access to a TSViewer instance's state.
  *
- * @param {string} instanceId - The unique identifier of the TSViewer instance
- * @returns {Object} Control interface for the viewer
+ * @param instanceId - The unique identifier of the TSViewer instance
+ * @returns Control interface for the viewer
  */
 export function useViewerControls(instanceId = 'default') {
-    const viewerStore = createViewerStore(instanceId)
+    const viewerStore = createViewerStore(instanceId) as ViewerControlsStore
 
     const {
         viewerChannels,
@@ -43,7 +94,7 @@ export function useViewerControls(instanceId = 'default') {
         viewerErrors,
         config,
         activeViewer
-    } = storeToRefs(viewerStore)
+    } = storeToRefs(viewerStore as unknown as StoreGeneric) as unknown as ViewerStoreRefs
 
     // ============================================
     // READ-ONLY STATE (for external consumption)
@@ -95,33 +146,27 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Get a channel by ID
-     * @param {string} channelId
-     * @returns {Object|undefined}
      */
-    const getChannel = (channelId) => {
+    const getChannel = (channelId: string) => {
         return viewerChannels.value.find(ch => ch.id === channelId)
     }
 
     /**
      * Get an annotation by ID
-     * @param {string} annotationId
-     * @returns {Object|undefined}
      */
-    const getAnnotation = (annotationId) => {
+    const getAnnotation = (annotationId: string): LayerAnnotation | undefined => {
         return viewerStore.getAnnotationById(annotationId)
     }
 
     /**
      * Get the currently active annotation layer
-     * @returns {Object|null}
      */
-    const getActiveLayer = () => {
+    const getActiveLayer = (): AnnotationLayer | null => {
         return viewerStore.getViewerActiveLayer()
     }
 
     /**
      * Get visible channels
-     * @returns {Array}
      */
     const getVisibleChannels = () => {
         return viewerChannels.value.filter(ch => ch.visible)
@@ -129,7 +174,6 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Get current viewer state snapshot
-     * @returns {Object}
      */
     const getState = () => ({
         channels: viewerChannels.value,
@@ -147,10 +191,10 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Select channels by ID
-     * @param {Array<string>} channelIds - Array of channel IDs to select
-     * @param {boolean} append - If true, add to selection; if false, replace selection
+     * @param channelIds - Array of channel IDs to select
+     * @param append - If true, add to selection; if false, replace selection
      */
-    const selectChannels = (channelIds, append = false) => {
+    const selectChannels = (channelIds: string[], append = false) => {
         const channels = viewerChannels.value.map(channel => ({
             ...channel,
             selected: append ? channel.selected : false
@@ -178,9 +222,8 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Toggle channel visibility
-     * @param {string} channelId
      */
-    const toggleChannelVisibility = (channelId) => {
+    const toggleChannelVisibility = (channelId: string) => {
         const channel = viewerChannels.value.find(ch => ch.id === channelId)
         if (channel) {
             viewerStore.updateChannelVisibility(channelId, !channel.visible)
@@ -190,10 +233,8 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Set channel visibility
-     * @param {string} channelId
-     * @param {boolean} visible
      */
-    const setChannelVisibility = (channelId, visible) => {
+    const setChannelVisibility = (channelId: string, visible: boolean) => {
         viewerStore.updateChannelVisibility(channelId, visible)
         viewerStore.triggerRerender('channel-visibility')
     }
@@ -224,9 +265,8 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Select an annotation by ID
-     * @param {string} annotationId
      */
-    const selectAnnotation = (annotationId) => {
+    const selectAnnotation = (annotationId: string) => {
         const annotation = viewerStore.getAnnotationById(annotationId)
         if (annotation) {
             viewerStore.setActiveAnnotation(annotation)
@@ -235,17 +275,15 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Set the active annotation layer
-     * @param {string} layerId
      */
-    const setActiveLayer = (layerId) => {
+    const setActiveLayer = (layerId: string) => {
         viewerStore.setActiveAnnotationLayer(layerId)
     }
 
     /**
      * Toggle annotation layer visibility
-     * @param {string} layerId
      */
-    const toggleLayerVisibility = (layerId) => {
+    const toggleLayerVisibility = (layerId: string) => {
         const layer = viewerAnnotations.value.find(l => l.id === layerId)
         if (layer) {
             layer.visible = !layer.visible
@@ -260,9 +298,8 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Set the active tool
-     * @param {'pointer' | 'pan' | 'annotate'} tool
      */
-    const setActiveTool = (tool) => {
+    const setActiveTool = (tool: 'pointer' | 'pan' | 'annotate') => {
         viewerStore.setActiveTool(tool)
     }
 
@@ -272,23 +309,21 @@ export function useViewerControls(instanceId = 'default') {
 
     /**
      * Set viewer configuration
-     * @param {Object} config
      */
-    const setConfig = (newConfig) => {
+    const setConfig = (newConfig: Record<string, unknown>) => {
         viewerStore.setViewerConfig(newConfig)
     }
 
     /**
      * Set the active viewer data
-     * @param {Object} viewerData
      */
-    const setActiveViewer = (viewerData) => {
+    const setActiveViewer = (viewerData: Record<string, unknown>) => {
         viewerStore.setActiveViewer(viewerData)
     }
 
     /**
      * Trigger a re-render
-     * @param {string} cause - Reason for the re-render
+     * @param cause - Reason for the re-render
      */
     const triggerRerender = (cause = 'external') => {
         viewerStore.triggerRerender(cause)
