@@ -8,7 +8,7 @@ export interface MontageChannelPair {
     channels: string[]
 }
 
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+/** A workspace montage definition; the store holds these in `workspaceMontages`. */
 export interface WorkspaceMontage {
     name: string
     channelPairs: MontageChannelPair[]

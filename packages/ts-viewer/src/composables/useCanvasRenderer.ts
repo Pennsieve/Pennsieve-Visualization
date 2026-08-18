@@ -9,7 +9,7 @@ export interface RendererConstants {
     USEMEDIAN: boolean
 }
 
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+/** Per-channel view state the renderer computes and draws from. */
 export interface RendererChannelView {
     id: string
     type: string

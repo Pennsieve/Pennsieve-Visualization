@@ -20,59 +20,9 @@
  */
 
 import { computed, readonly } from 'vue'
-import type { ComputedRef, Ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { StoreGeneric } from 'pinia'
 import { createViewerStore } from '../stores/tsviewer'
-
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
-interface ViewerChannel {
-    id: string
-    selected: boolean
-    visible: boolean
-    [key: string]: unknown
-}
-
-interface LayerAnnotation {
-    id: string | number
-    [key: string]: unknown
-}
-
-interface AnnotationLayer {
-    id: string | number
-    visible: boolean
-    selected: boolean
-    annotations: LayerAnnotation[]
-    [key: string]: unknown
-}
-
-interface ViewerStoreRefs {
-    viewerChannels: Ref<ViewerChannel[]>
-    viewerAnnotations: Ref<AnnotationLayer[]>
-    viewerActiveTool: Ref<string>
-    viewerSelectedChannels: ComputedRef<ViewerChannel[]>
-    activeAnnotation: Ref<unknown>
-    activeAnnotationLayer: Ref<unknown>
-    viewerMontageScheme: Ref<string>
-    viewerErrors: Ref<unknown>
-    config: Ref<Record<string, unknown>>
-    activeViewer: Ref<Record<string, unknown>>
-}
-
-interface ViewerControlsStore {
-    getAnnotationById(id: string): LayerAnnotation | undefined
-    getViewerActiveLayer(): AnnotationLayer | null
-    setChannels(channels: ViewerChannel[]): void
-    updateChannelVisibility(channelId: string, visible: boolean): void
-    triggerRerender(cause: string): void
-    setActiveAnnotation(annotation: LayerAnnotation): void
-    setActiveAnnotationLayer(layerId: string): void
-    updateLayer(layer: AnnotationLayer): void
-    setActiveTool(tool: string): void
-    setViewerConfig(config: Record<string, unknown>): void
-    setActiveViewer(viewerData: Record<string, unknown>): void
-    resetViewer(): void
-}
+import type { Annotation, AnnotationLayer } from '../utils/annotationUtils'
 
 /**
  * Provides read and write access to a TSViewer instance's state.
@@ -81,7 +31,7 @@ interface ViewerControlsStore {
  * @returns Control interface for the viewer
  */
 export function useViewerControls(instanceId = 'default') {
-    const viewerStore = createViewerStore(instanceId) as ViewerControlsStore
+    const viewerStore = createViewerStore(instanceId)
 
     const {
         viewerChannels,
@@ -94,7 +44,7 @@ export function useViewerControls(instanceId = 'default') {
         viewerErrors,
         config,
         activeViewer
-    } = storeToRefs(viewerStore as unknown as StoreGeneric) as unknown as ViewerStoreRefs
+    } = storeToRefs(viewerStore)
 
     // ============================================
     // READ-ONLY STATE (for external consumption)
@@ -154,7 +104,7 @@ export function useViewerControls(instanceId = 'default') {
     /**
      * Get an annotation by ID
      */
-    const getAnnotation = (annotationId: string): LayerAnnotation | undefined => {
+    const getAnnotation = (annotationId: string): Annotation | undefined => {
         return viewerStore.getAnnotationById(annotationId)
     }
 

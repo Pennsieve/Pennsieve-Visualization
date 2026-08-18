@@ -18,9 +18,9 @@ vi.mock('@/composables/useChannelDataRequest', () => ({
 }))
 
 vi.mock('@/composables/streaming/clientRegistry', () => ({
-    acquireClient: (...args) => acquireClient(...args),
-    ensureCatalog: (...args) => ensureCatalog(...args),
-    disposeClient: (...args) => disposeClient(...args)
+    acquireClient: (...args: unknown[]) => acquireClient(...args),
+    ensureCatalog: (...args: unknown[]) => ensureCatalog(...args),
+    disposeClient: (...args: unknown[]) => disposeClient(...args)
 }))
 
 const { createViewerStore, clearAllViewerStores } = await import('@/stores/tsviewer')
@@ -73,7 +73,7 @@ describe('fetchAndSetActiveViewer routes on viewer-asset type', () => {
 
         expect(openConnection).toHaveBeenCalledTimes(1)
         expect(acquireClient).not.toHaveBeenCalled()
-        expect(store.activeViewer.content.assetType).toBe(TIMESERIES_WEBSOCKET)
+        expect(store.activeViewer.content!.assetType).toBe(TIMESERIES_WEBSOCKET)
     })
 
     it('falls back to the socket for an absent or unrecognized asset type', async () => {
@@ -118,8 +118,8 @@ describe('fetchAndSetActiveViewer routes on viewer-asset type', () => {
         })
         expect(acquireClient.mock.calls[0][2]).toEqual({ onUrlExpired })
         // Must survive Pinia's reactive wrapping and stay callable.
-        expect(typeof store.activeViewer.content.onUrlExpired).toBe('function')
-        await expect(store.activeViewer.content.onUrlExpired()).resolves.toBe(BUNDLE)
+        expect(typeof store.activeViewer.content!.onUrlExpired).toBe('function')
+        await expect(store.activeViewer.content!.onUrlExpired!()).resolves.toBe(BUNDLE)
     })
 
     it('disposes the streaming client when the viewer store is cleared', async () => {
