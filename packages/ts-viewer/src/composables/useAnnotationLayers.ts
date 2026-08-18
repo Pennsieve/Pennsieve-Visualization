@@ -1,22 +1,11 @@
 // composables/useAnnotationLayers.ts
 import { ref, inject } from 'vue'
-import { createViewerStore } from '../stores/tsviewer'
+import { createViewerStore, type ViewerStore } from '../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import EventBus from '@/utils/event-bus'
 import { hexToRgbA } from '@/utils/annotationUtils'
 import type { AnnotationLayer } from '@/utils/annotationUtils'
-
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
-interface ViewerStore {
-    config: { apiUrl: string }
-    viewerAnnotations: AnnotationLayer[]
-    setAnnotations(layers: AnnotationLayer[]): void
-    createLayer(layer: AnnotationLayer): void
-    updateLayer(layer: AnnotationLayer): void
-    removeLayer(layerId: number | string): void
-    setActiveAnnotationLayer(layerId: number | string): void
-}
 
 interface ActiveViewer {
     content?: { id?: string }
@@ -54,7 +43,7 @@ type LayersEmit = (event: 'annLayersInitialized' | 'closeAnnotationLayerWindow')
  */
 export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
-    const viewerStore = (storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')) as unknown as ViewerStore
+    const viewerStore = storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')
 
     const annLayerInfo = ref<LayerResult[] | undefined>([])
     const defaultColors = ref([
@@ -190,8 +179,9 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
 
             await useSendXhr(url, { method: "DELETE" })
 
-            // Remove from store
-            viewerStore.removeLayer(layerId)
+            // Remove from store. The store action is deleteLayer; the previous
+            // removeLayer call named an action that has never existed.
+            viewerStore.deleteLayer({ id: layerId })
 
             EventBus.$emit('toast', {
                 detail: {

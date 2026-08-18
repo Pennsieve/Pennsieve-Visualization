@@ -1,9 +1,8 @@
 // composables/useAnnotationData.ts
 import { ref, inject } from 'vue'
 import type { Ref } from 'vue'
-import { createViewerStore } from '../stores/tsviewer'
+import { createViewerStore, type ViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
-import type { StoreGeneric } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError } from "@/mixins/request/request_composable"
 import { annIndexOf } from '@/utils/annotationUtils'
@@ -11,13 +10,6 @@ import type { Annotation, AnnotationLayer, LinkedPackageDTO } from '@/utils/anno
 
 interface ViewerChannel {
     id?: string
-}
-
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
-interface ViewerStore {
-    config: { apiUrl: string }
-    getViewerActiveLayer(): AnnotationLayer | null
-    updateLayer(layer: AnnotationLayer): void
 }
 
 interface ActiveViewer {
@@ -59,12 +51,8 @@ type DataEmit = (event: 'annotationsReceived') => void
  */
 export function useAnnotationData(storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
-    const viewerStore = (storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')) as unknown as ViewerStore
-    const { viewerChannels, viewerAnnotations, viewerMontageScheme } = storeToRefs(viewerStore as unknown as StoreGeneric) as unknown as {
-        viewerChannels: Ref<ViewerChannel[]>
-        viewerAnnotations: Ref<AnnotationLayer[]>
-        viewerMontageScheme: Ref<string>
-    }
+    const viewerStore = storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')
+    const { viewerChannels, viewerAnnotations, viewerMontageScheme } = storeToRefs(viewerStore)
 
     // Reactive state
     const cachedAnnRange = ref<TimeRange[]>([])

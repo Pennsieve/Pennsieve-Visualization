@@ -1,64 +1,119 @@
-// @/stores/tsviewer.js
+// @/stores/tsviewer.ts
 import { defineStore } from 'pinia'
 import { ref, computed, reactive } from 'vue'
 import { useToken } from '@/composables/useToken'
 import { useChannelDataRequest } from '@/composables/useChannelDataRequest';
 import { acquireClient, ensureCatalog, disposeClient } from '@/composables/streaming/clientRegistry'
 import { isZarrAssetType } from '@/composables/streaming/assetTypes'
+import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
+import type { WorkspaceMontage } from '@/composables/useChannelProcessing'
+import type { ChannelDetail } from '@/composables/streaming/channelDetails'
+import type { CreateStoreOptions } from '@/composables/streaming/createStore'
+
+/**
+ * Host-supplied endpoints and settings, merged by `setViewerConfig`. Keys are
+ * never dropped on merge; `resetViewer` clears them all.
+ */
+export interface ViewerConfig {
+    apiUrl?: string
+    timeseriesDiscoverApi?: string
+    timeSeriesApi?: string
+    [key: string]: unknown
+}
+
+/**
+ * One channel row as the viewer renders it. Extra keys survive: legacy code
+ * attaches per-channel scratch state directly to the row.
+ */
+export interface ViewerChannel {
+    id: string
+    label?: string
+    name?: string
+    serverId?: string
+    channelType?: string
+    type?: string
+    selected?: boolean
+    visible?: boolean
+    hover?: boolean
+    filter?: Record<string, unknown> | null
+    sf?: number
+    rate?: number
+    rank?: number | string
+    rowScale?: number
+    rowBaseline?: number | null
+    unit?: string
+    [key: string]: unknown
+}
+
+export interface ActiveViewerContent {
+    /** Package node id for API calls (for example /timeseries/{id}/layers). */
+    id: string | null
+    /** Viewer-asset UUID for the data-streaming WebSocket. */
+    viewerAssetId: string | null
+    idType: 'viewerAsset' | 'package'
+    /** Raw viewer-asset `asset_type`. */
+    assetType: string | null
+    /** Bundle root URL, signed or not. Zarr path only. */
+    url: string | null
+    onUrlExpired: CreateStoreOptions['onUrlExpired'] | null
+}
+
+export interface ActiveViewer {
+    channels?: ChannelDetail[] | null
+    content?: ActiveViewerContent
+}
+
+export interface ActivateViewerOptions {
+    /** Package node id. */
+    packageId?: string | null
+    /** Viewer-asset UUID; unchanged legacy meaning. */
+    viewerAssetId?: string | null
+    /** Raw viewer-asset `asset_type`. */
+    assetType?: string | null
+    /** Bundle root URL, signed or not. Zarr path only. */
+    url?: string | null
+    /** Renews a signed url. */
+    onUrlExpired?: CreateStoreOptions['onUrlExpired'] | null
+}
+
+export interface RerenderTrigger {
+    timestamp: number
+    cause: string
+}
 
 // Store instance cache - maps instanceId to store instance
-const storeInstances = new Map()
+const storeInstances = new Map<string, ViewerStoreHook>()
 
 // Track if we've already shown warnings (to avoid spam)
 let hasShownDefaultWarning = false
 let hasShownDeprecationWarning = false
 
 /**
- * Factory function to create or retrieve a viewer store instance.
- * Each instanceId gets its own isolated store, enabling multiple
- * independent TSViewer components on the same page.
- *
- * @param {string} instanceId - Unique identifier for the viewer instance
- * @returns {Object} Pinia store instance for this viewer
+ * Defines the per-instance store. Split from `createViewerStore` so the
+ * instance cache and the public store type can both name the hook type.
  */
-export function createViewerStore(instanceId = 'default') {
-    // Warn once if using default instanceId
-    if (instanceId === 'default' && !hasShownDefaultWarning) {
-        hasShownDefaultWarning = true
-        console.warn(
-            '[TSViewer] Using default store instance. ' +
-            'For multi-instance support, pass a unique instanceId prop to TSViewer. ' +
-            'Example: <TSViewer instance-id="viewer-1" />'
-        )
-    }
-
-    // Return cached instance if it exists
-    if (storeInstances.has(instanceId)) {
-        return storeInstances.get(instanceId)()
-    }
-
-    // Create a new store with a unique ID
-    const useStore = defineStore(`tsviewer-${instanceId}`, () => {
-    const config = reactive({})
-    const viewerChannels = ref([])
+function defineViewerStore(instanceId: string) {
+    return defineStore(`tsviewer-${instanceId}`, () => {
+    const config = reactive<ViewerConfig>({})
+    const viewerChannels = ref<ViewerChannel[]>([])
     const viewerMontageScheme = ref('NOT_MONTAGED')
-    const customMontageMap = ref({})
-    const workspaceMontages = ref([])
-    const viewerErrors = ref(null)
-    const needsRerender = ref(null)
-    const activeViewer = ref({})
+    const customMontageMap = ref<Record<string, unknown>>({})
+    const workspaceMontages = ref<WorkspaceMontage[]>([])
+    const viewerErrors = ref<unknown>(null)
+    const needsRerender = ref<RerenderTrigger | null>(null)
+    const activeViewer = ref<ActiveViewer>({})
 
     // Annotation-related state
-    const viewerAnnotations = ref([])
-    const activeAnnotationLayer = ref({})
-    const activeAnnotation = ref({})
+    const viewerAnnotations = ref<AnnotationLayer[]>([])
+    const activeAnnotationLayer = ref<number | string | object>({})
+    const activeAnnotation = ref<Partial<Annotation>>({})
     const viewerActiveTool = ref('pointer')
 
     const { openConnection } = useChannelDataRequest()
 
     // Getters (from original Vuex getters)
     const getMontageMessageByName = computed(() => {
-        return (name) => {
+        return (name: string) => {
             return workspaceMontages.value.find(montage => montage.name === name)
         }
     })
@@ -68,7 +123,7 @@ export function createViewerStore(instanceId = 'default') {
     })
 
     const getViewerActiveLayer = computed(() => {
-        return () => {
+        return (): AnnotationLayer | null => {
             const activeLayer = viewerAnnotations.value.find(annotation => annotation.selected)
             if (!activeLayer) {
                 console.warn('No active layer found, available layers:', viewerAnnotations.value)
@@ -102,43 +157,43 @@ export function createViewerStore(instanceId = 'default') {
     }
 
     const getAnnotationById = computed(() => {
-        return (id) => {
+        return (id: number | string) => {
             const allAnnotations = viewerAnnotations.value.flatMap(layer => layer.annotations || [])
             return allAnnotations.find(annotation => annotation.id === id)
         }
     })
 
     // Actions
-    const setActiveViewer = (viewer) => {
+    const setActiveViewer = (viewer: ActiveViewer) => {
       activeViewer.value = viewer;
     }
 
-    const setChannels = (channels) => {
+    const setChannels = (channels: ViewerChannel[]) => {
         viewerChannels.value = channels
     }
 
-    const setViewerMontageScheme = (scheme) => {
+    const setViewerMontageScheme = (scheme: string) => {
         viewerMontageScheme.value = scheme
     }
 
-    const setCustomMontageMap = (map) => {
+    const setCustomMontageMap = (map: Record<string, unknown>) => {
         customMontageMap.value = map
     }
 
-    const setWorkspaceMontages = (montages) => {
+    const setWorkspaceMontages = (montages: WorkspaceMontage[]) => {
         workspaceMontages.value = montages
     }
 
-    const setViewerErrors = (errors) => {
+    const setViewerErrors = (errors: unknown) => {
         viewerErrors.value = errors
     }
 
 
-    const setNeedsRerender = (renderData) => {
+    const setNeedsRerender = (renderData: RerenderTrigger | null) => {
         needsRerender.value = renderData
     }
 
-    const setViewerConfig = (newConfig) => {
+    const setViewerConfig = (newConfig: ViewerConfig) => {
         Object.assign(config, newConfig)
     }
 
@@ -151,15 +206,8 @@ export function createViewerStore(instanceId = 'default') {
      * goes to the streaming WebSocket. It travels here rather than through `setViewerConfig`
      * because it describes THIS package -- config is merged with Object.assign and never
      * drops keys, so a url left over from a Zarr package would misroute the next one.
-     *
-     * @param {object} data
-     * @param {string} [data.packageId] Package node id.
-     * @param {string} [data.viewerAssetId] Viewer-asset UUID; unchanged legacy meaning.
-     * @param {string} [data.assetType] Raw viewer-asset `asset_type`.
-     * @param {string} [data.url] Bundle root URL, signed or not. Zarr path only.
-     * @param {() => Promise<string|{url: string}>} [data.onUrlExpired] Renews a signed url.
      */
-    const fetchAndSetActiveViewer = async (data) => {
+    const fetchAndSetActiveViewer = async (data: ActivateViewerOptions) => {
       // Prefer viewer asset UUID; fall back to package node ID. The resulting
       // WebSocket uses `?viewerAsset=` or `?package=` accordingly.
       const viewerAssetId = data.viewerAssetId || null;
@@ -174,7 +222,7 @@ export function createViewerStore(instanceId = 'default') {
       // onUrlExpired is carried through so the plot canvas can rebuild the client after a
       // remount without the host having to re-activate the package. Vue does not proxy
       // function values, so it survives reactive state unchanged.
-      const content = {
+      const content: ActiveViewerContent = {
         id: contentId, viewerAssetId, idType, assetType, url,
         onUrlExpired: data.onUrlExpired || null
       };
@@ -188,7 +236,7 @@ export function createViewerStore(instanceId = 'default') {
           throw new Error(`A "${assetType}" viewer asset requires a bundle url`)
         }
         const entry = await acquireClient(`tsviewer-${instanceId}`, url, {
-          onUrlExpired: data.onUrlExpired
+          onUrlExpired: data.onUrlExpired ?? undefined
         })
         const catalogIndex = await ensureCatalog(entry)
         setActiveViewer({ channels: catalogIndex.details, content })
@@ -202,19 +250,21 @@ export function createViewerStore(instanceId = 'default') {
 
       const token = await useToken();
       const urlSegment = config.timeseriesDiscoverApi
-      const channelData = await openConnection(urlSegment, id, token, idType, viewerAssetId ? packageId : null)
-      setActiveViewer({ channels: channelData.res, content })
+      const channelData = await openConnection(urlSegment as string, id as string, token, idType, viewerAssetId ? packageId : null)
+      // The discovery socket answers with the same flat channel-detail rows the
+      // catalog produces; the transport just cannot express that in its types yet.
+      setActiveViewer({ channels: channelData.res as ChannelDetail[] | null, content })
     }
 
     const isTSFileProcessed = () => {
-      return (record) => {
+      return (record?: { content?: { state?: string } }) => {
         const fileState = record?.content?.state;
         return fileState === "READY";
       }
     }
 
     // Add annotation-related actions
-    const setAnnotations = (annotations) => {
+    const setAnnotations = (annotations: AnnotationLayer[]) => {
         // FIX: Validate annotation structure before setting
         const validatedAnnotations = annotations.map(annotation => {
             // Ensure each annotation has required properties
@@ -240,7 +290,7 @@ export function createViewerStore(instanceId = 'default') {
         viewerAnnotations.value = validatedAnnotations
     }
 
-    const setActiveAnnotationLayer = (layerId) => {
+    const setActiveAnnotationLayer = (layerId: number | string) => {
         if (!layerId && layerId !== 0) {
             console.error('setActiveAnnotationLayer called with invalid layerId:', layerId)
             return
@@ -260,7 +310,7 @@ export function createViewerStore(instanceId = 'default') {
         }
     }
 
-    const setActiveAnnotation = (annotation) => {
+    const setActiveAnnotation = (annotation: Annotation) => {
         // Clear all selected annotations
         viewerAnnotations.value.forEach(layer =>
             layer.annotations?.forEach(ann => ann.selected = false)
@@ -280,19 +330,20 @@ export function createViewerStore(instanceId = 'default') {
         activeAnnotation.value = annotation
     }
 
-    const setActiveTool = (tool) => {
+    const setActiveTool = (tool: string) => {
         viewerActiveTool.value = tool
     }
 
-    const createLayer = (layer) => {
+    const createLayer = (layer: AnnotationLayer) => {
         // FIX: Validate layer structure before creating
         if (!layer.id && layer.id !== 0) {
             console.error('Cannot create layer without ID:', layer)
             return
         }
 
-        // Ensure the layer has required properties
-        const validatedLayer = {
+        // Ensure the layer has required properties; layer's own keys win, as the
+        // original object spread did
+        const validatedLayer: AnnotationLayer = Object.assign({
             id: layer.id,
             name: layer.name || `Layer ${layer.id}`,
             description: layer.description || '',
@@ -304,14 +355,13 @@ export function createViewerStore(instanceId = 'default') {
             bkColor: layer.bkColor,
             selColor: layer.selColor,
             userId: layer.userId,
-            ...layer // Spread any additional properties
-        }
+        }, layer)
 
         viewerAnnotations.value.push(validatedLayer)
     }
 
 
-    const updateLayer = (layerData) => {
+    const updateLayer = (layerData: AnnotationLayer) => {
         const index = viewerAnnotations.value.findIndex(l => l.id === layerData.id)
         if (index >= 0) {
             const updatedLayer = Object.assign(viewerAnnotations.value[index], layerData)
@@ -319,14 +369,14 @@ export function createViewerStore(instanceId = 'default') {
         }
     }
 
-    const deleteLayer = (layerData) => {
+    const deleteLayer = (layerData: Pick<AnnotationLayer, 'id'>) => {
         const index = viewerAnnotations.value.findIndex(l => l.id === layerData.id)
         if (index >= 0) {
             viewerAnnotations.value.splice(index, 1)
         }
     }
 
-    const createAnnotation = (annotation) => {
+    const createAnnotation = (annotation: Annotation) => {
         const layerIndex = viewerAnnotations.value.findIndex(l => l.id === annotation.layer_id)
         if (layerIndex >= 0) {
             if (!viewerAnnotations.value[layerIndex].annotations) {
@@ -337,7 +387,7 @@ export function createViewerStore(instanceId = 'default') {
         }
     }
 
-    const updateAnnotation = (annotation) => {
+    const updateAnnotation = (annotation: Annotation) => {
         const layerIndex = viewerAnnotations.value.findIndex(l => l.id === annotation.layer_id)
         if (layerIndex >= 0) {
             const annotations = viewerAnnotations.value[layerIndex].annotations
@@ -348,7 +398,7 @@ export function createViewerStore(instanceId = 'default') {
         }
     }
 
-    const deleteAnnotation = (annotation) => {
+    const deleteAnnotation = (annotation: Annotation) => {
         const layerIndex = viewerAnnotations.value.findIndex(l => l.id === annotation.layer_id)
         if (layerIndex >= 0) {
             const annotations = viewerAnnotations.value[layerIndex].annotations
@@ -359,7 +409,7 @@ export function createViewerStore(instanceId = 'default') {
         }
     }
 
-    const updateChannelProperty = (channelId, property, value) => {
+    const updateChannelProperty = (channelId: string, property: string, value: unknown) => {
         const channel = viewerChannels.value.find(ch => ch.id === channelId)
         if (channel) {
             channel[property] = value
@@ -367,15 +417,15 @@ export function createViewerStore(instanceId = 'default') {
 
     }
 
-    const updateChannelVisibility = (channelId, visible) => {
+    const updateChannelVisibility = (channelId: string, visible: boolean) => {
         updateChannelProperty(channelId, 'visible', visible)
     }
 
-    const updateChannelSelection = (channelId, selected) => {
+    const updateChannelSelection = (channelId: string, selected: boolean) => {
         updateChannelProperty(channelId, 'selected', selected)
     }
 
-    const updateChannelFilter = (channelId, filter) => {
+    const updateChannelFilter = (channelId: string, filter: Record<string, unknown> | null) => {
         updateChannelProperty(channelId, 'filter', filter)
     }
 
@@ -396,7 +446,7 @@ export function createViewerStore(instanceId = 'default') {
         })
     }
 
-    const triggerRerender = (cause) => {
+    const triggerRerender = (cause: string) => {
         setNeedsRerender({
             timestamp: Date.now(),
             cause: cause
@@ -458,6 +508,39 @@ export function createViewerStore(instanceId = 'default') {
         setViewerConfig
     }
     })
+}
+
+type ViewerStoreHook = ReturnType<typeof defineViewerStore>
+
+/** The per-instance viewer store, as returned by `createViewerStore`. */
+export type ViewerStore = ReturnType<ViewerStoreHook>
+
+/**
+ * Factory function to create or retrieve a viewer store instance.
+ * Each instanceId gets its own isolated store, enabling multiple
+ * independent TSViewer components on the same page.
+ *
+ * @param instanceId Unique identifier for the viewer instance
+ */
+export function createViewerStore(instanceId = 'default'): ViewerStore {
+    // Warn once if using default instanceId
+    if (instanceId === 'default' && !hasShownDefaultWarning) {
+        hasShownDefaultWarning = true
+        console.warn(
+            '[TSViewer] Using default store instance. ' +
+            'For multi-instance support, pass a unique instanceId prop to TSViewer. ' +
+            'Example: <TSViewer instance-id="viewer-1" />'
+        )
+    }
+
+    // Return cached instance if it exists
+    const cached = storeInstances.get(instanceId)
+    if (cached) {
+        return cached()
+    }
+
+    // Create a new store with a unique ID
+    const useStore = defineViewerStore(instanceId)
 
     // Cache the store factory function
     storeInstances.set(instanceId, useStore)
@@ -470,11 +553,12 @@ export function createViewerStore(instanceId = 'default') {
  * Clears a specific viewer store instance from the cache.
  * Call this when unmounting a TSViewer to clean up resources.
  *
- * @param {string} instanceId - The instance ID to clear
+ * @param instanceId The instance ID to clear
  */
-export function clearViewerStore(instanceId) {
-    if (storeInstances.has(instanceId)) {
-        const store = storeInstances.get(instanceId)()
+export function clearViewerStore(instanceId: string) {
+    const cached = storeInstances.get(instanceId)
+    if (cached) {
+        const store = cached()
         store.resetViewer()
         storeInstances.delete(instanceId)
     }
@@ -501,7 +585,7 @@ export function clearAllViewerStores() {
  * This export is kept for backwards compatibility with existing code.
  * Returns the default singleton store instance.
  */
-export function useViewerStore() {
+export function useViewerStore(): ViewerStore {
     if (!hasShownDeprecationWarning) {
         hasShownDeprecationWarning = true
         console.warn(

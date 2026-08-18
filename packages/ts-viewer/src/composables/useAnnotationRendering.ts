@@ -1,9 +1,8 @@
 // composables/useAnnotationRendering.ts
 import { ref, computed, inject } from 'vue'
 import type { Ref } from 'vue'
-import { createViewerStore } from '../stores/tsviewer'
+import { createViewerStore, type ViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
-import type { StoreGeneric } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { sortAnnotations, annIndexOf, getLayer } from '@/utils/annotationUtils'
 import type { Annotation, AnnotationLayer, LinkedPackageDTO, LinkedPackageContent } from '@/utils/annotationUtils'
@@ -12,11 +11,6 @@ interface ViewerChannel {
     id?: string
     visible?: boolean
     rowBaseline: number
-}
-
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
-interface ViewerStore {
-    config: { apiUrl: string }
 }
 
 interface RenderConstants {
@@ -42,11 +36,8 @@ interface RenderProps {
  */
 export function useAnnotationRendering(storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
-    const viewerStore = (storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')) as unknown as ViewerStore
-    const { viewerAnnotations, viewerChannels } = storeToRefs(viewerStore as unknown as StoreGeneric) as unknown as {
-        viewerAnnotations: Ref<AnnotationLayer[]>
-        viewerChannels: Ref<ViewerChannel[]>
-    }
+    const viewerStore = storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')
+    const { viewerAnnotations, viewerChannels } = storeToRefs(viewerStore)
 
     const renderAnn = ref<Annotation[]>([])
     const hoverOffsets = ref<number[]>([])
@@ -87,7 +78,7 @@ export function useAnnotationRendering(storeInstance: ViewerStore | null = null)
                     let channelOffset = null
                     for (const curChannelView of channelConfig) {
                         if (curChannelView.id === channelId && curChannelView.visible) {
-                            channelOffset = curChannelView.rowBaseline | 0
+                            channelOffset = (curChannelView.rowBaseline ?? 0) | 0
                             if (channelOffset < curAnn.minOffset) curAnn.minOffset = channelOffset
                             if (channelOffset > curAnn.maxOffset) curAnn.maxOffset = channelOffset
                             curAnn.allOffsets.push(channelOffset)

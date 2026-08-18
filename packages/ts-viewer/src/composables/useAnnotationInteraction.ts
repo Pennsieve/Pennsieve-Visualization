@@ -1,13 +1,8 @@
 // composables/useAnnotationInteraction.ts
 import { ref, inject } from 'vue'
 import type { Ref } from 'vue'
-import { createViewerStore } from '../stores/tsviewer'
+import { createViewerStore, type ViewerStore } from '../stores/tsviewer'
 import type { Annotation } from '@/utils/annotationUtils'
-
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
-interface ViewerStore {
-    setActiveAnnotation(annotation: Annotation): void
-}
 
 interface InteractionConstants {
     ANNOTATIONLABELHEIGHT?: number
@@ -28,7 +23,7 @@ interface InteractionProps {
  */
 export function useAnnotationInteraction(focusedAnn: Ref<Annotation | null>, renderAnn: Ref<Annotation[]>, hoverOffsets: Ref<number[]>, storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
-    const viewerStore = (storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')) as unknown as ViewerStore
+    const viewerStore = storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')
     const mouseDownPosition = ref([0, 0])
 
     const shouldCheckAnnotationHover = (mY: number, constants?: InteractionConstants) => {

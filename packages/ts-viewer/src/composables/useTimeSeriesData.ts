@@ -3,6 +3,7 @@ import {reactive, ref} from 'vue'
 import type { SegmentBlock, SegmentBlockBase } from './streaming/segments'
 import type { RequestedPageInfo } from './useDataRequests'
 import type { VirtualChannel, VirtualChannelContent } from './useChannelProcessing'
+import type { ViewerStore } from '../stores/tsviewer'
 
 /** Per-channel cache entry held in `chData`. `segments` stays sorted by `startTs`. */
 export interface ChannelData {
@@ -60,10 +61,7 @@ export interface SegmentMessage {
     data: SegmentMessageData
 }
 
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
-interface ChannelStore {
-    setChannels(channels: object[]): void
-}
+type ChannelStore = Pick<ViewerStore, 'setChannels'>
 
 export const useTimeSeriesData = () => {
     // Data structures from original

@@ -37,6 +37,7 @@ export interface AnnotationLayer {
     hexColor?: string
     bkColor?: string
     selColor?: string
+    userId?: number | string
 }
 
 export interface LinkedPackageContent {
