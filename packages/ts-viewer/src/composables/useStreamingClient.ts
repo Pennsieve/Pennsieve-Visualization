@@ -1,5 +1,5 @@
 import { ref, readonly, markRaw, inject, onUnmounted } from 'vue'
-import { createViewerStore } from '@/stores/tsviewer'
+import { createViewerStore, type ViewerStore } from '@/stores/tsviewer'
 import { acquireClient, ensureCatalog, abortInflight } from '@/composables/streaming/clientRegistry'
 import { synthesizeMontageDetails } from '@/composables/streaming/channelDetails'
 import { legacyFilterToSpec, validateSpecForRate } from '@/composables/streaming/filters'
@@ -14,27 +14,6 @@ import type { CreateStoreOptions } from '@/composables/streaming/createStore'
 import type { FilterSpec, MontagePair } from '@pennsieve/timeseries-zarr-reader'
 
 import type { WireSocket } from './useDataRequests'
-
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
-interface ViewerChannelRecord {
-    id: string
-    serverId?: string
-    label?: string
-    name?: string
-    sf?: number
-    rate?: number
-}
-
-interface ActiveViewerContent {
-    url?: string
-    onUrlExpired?: CreateStoreOptions['onUrlExpired']
-}
-
-interface ViewerStoreLike {
-    $id: string
-    viewerChannels: ViewerChannelRecord[]
-    activeViewer: { content?: ActiveViewerContent } | null
-}
 
 type ErrorPayload = { error: string; requestedBytes?: number; maxBytes?: number }
 
@@ -72,7 +51,7 @@ interface DispatchMessage {
  * @returns The same 15 members `useWebSocket()` returns.
  */
 export function useStreamingClient() {
-    const viewerStore = inject<ViewerStoreLike>('viewerStore', () => createViewerStore('default') as ViewerStoreLike, true)
+    const viewerStore = inject<ViewerStore>('viewerStore', () => createViewerStore('default'), true)
 
     const websocket = ref<WireSocket | null>(null)
     const connectionStatus = ref<'connected' | 'disconnected'>('disconnected')
@@ -447,14 +426,14 @@ export function useStreamingClient() {
         connectionPromise = (async () => {
             // The bundle url rides on the active viewer, not on config, because it describes
             // this package; see fetchAndSetActiveViewer.
-            const content: ActiveViewerContent = viewerStore.activeViewer?.content ?? {}
-            const url = content.url
+            const content = viewerStore.activeViewer?.content
+            const url = content?.url
             if (!url) {
                 throw new Error('useStreamingClient: the active viewer carries no bundle url')
             }
 
             const opened = await acquireClient(viewerStore.$id, url, {
-                onUrlExpired: content.onUrlExpired
+                onUrlExpired: content?.onUrlExpired ?? undefined
             })
             const index = await ensureCatalog(opened)
             if (gen !== generation) {

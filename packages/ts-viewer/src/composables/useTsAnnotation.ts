@@ -3,25 +3,15 @@
 import { computed, inject } from 'vue'
 import type { Ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { StoreGeneric } from 'pinia'
 import { useHandleXhrError } from '@/mixins/request/request_composable'
 import { useToken } from '@/composables/useToken'
-import { createViewerStore } from '../stores/tsviewer'
+import { createViewerStore, type ViewerStore } from '../stores/tsviewer'
 import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
 
 interface ViewerChannel {
     id?: string
     selected?: boolean
     visible?: boolean
-}
-
-// TODO(ts-3c): replace with the store type once stores/tsviewer converts
-interface ViewerStore {
-    activeViewer: { channels: ViewerChannel[]; content: { id: string } }
-    config: { apiUrl: string }
-    createAnnotation(annotation: Annotation): void
-    updateAnnotation(annotation: Annotation): void
-    deleteAnnotation(annotation: Annotation): void
 }
 
 interface AnnotationApiResult {
@@ -41,12 +31,8 @@ interface AnnotationApiResult {
  */
 export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
-    const viewerStore = (storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')) as unknown as ViewerStore
-    const { viewerChannels, viewerAnnotations, activeAnnotation } = storeToRefs(viewerStore as unknown as StoreGeneric) as unknown as {
-        viewerChannels: Ref<ViewerChannel[]>
-        viewerAnnotations: Ref<AnnotationLayer[]>
-        activeAnnotation: Ref<Partial<Annotation>>
-    }
+    const viewerStore = storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')
+    const { viewerChannels, viewerAnnotations, activeAnnotation } = storeToRefs(viewerStore)
 
     // Helper function to get channel ID
     const getChannelId = (channel: ViewerChannel) => {
@@ -105,7 +91,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
 
         if (annotationData.allChannels) {
             // When allChannels is true, include all channels (even if they are currently not visible)
-            const allChannels = viewerStore.activeViewer.channels
+            const allChannels = viewerStore.activeViewer.channels!
             for (let ch = 0; ch < allChannels.length; ch++) {
                 const curChannel = allChannels[ch]
                 const id = getChannelId(curChannel)
@@ -136,7 +122,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
         }
 
         // Use correct property for timeseries ID
-        const timeseriesId = viewerStore.activeViewer.content.id
+        const timeseriesId = viewerStore.activeViewer.content!.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${layer_id}/annotations`
 
         try {
@@ -237,7 +223,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
             channelIds: annotationData.channelIds || []
         }
 
-        const timeseriesId = viewerStore.activeViewer.content.id
+        const timeseriesId = viewerStore.activeViewer.content!.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${annotationData.layer_id}/annotations/${annotationData.id}`
 
         try {
@@ -295,7 +281,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
             throw new TypeError("Missing layer_id for annotation deletion", annotation)
         }
 
-        const timeseriesId = viewerStore.activeViewer.content.id
+        const timeseriesId = viewerStore.activeViewer.content!.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${annLayerId}/annotations/${annotation.id}`
 
         try {
