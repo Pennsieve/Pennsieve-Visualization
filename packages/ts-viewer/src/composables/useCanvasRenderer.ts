@@ -1,12 +1,44 @@
-// @/composables/useCanvasRenderer.js
+// @/composables/useCanvasRenderer.ts
 import { ref, nextTick } from 'vue'
+import type { ContinuousSegmentBlock } from './streaming/segments'
+import type { ViewData, ViewDataChannel } from './useTimeSeriesData'
+
+/** The keys of the viewer constants object this renderer reads. */
+export interface RendererConstants {
+    XOFFSET: number
+    USEMEDIAN: boolean
+}
+
+// TODO(ts-3c): replace with the store type once stores/tsviewer converts
+export interface RendererChannelView {
+    id: string
+    type: string
+    visible: boolean
+    rank: number
+    rowScale: number
+    rowBaseline: number | null
+    sf: number
+    selected: boolean
+    hover: boolean
+    dataSegments: number[]
+}
+
+interface RendererViewport {
+    start: number
+    duration: number
+    cWidth: number
+    cHeight: number
+    pHeight: number
+    rsPeriod: number
+    nrVisibleChannels: number
+}
 
 export const useCanvasRenderer = () => {
-    const plotCanvasRef = ref(null)
-    const blurCanvasRef = ref(null)
+    const plotCanvasRef = ref<HTMLCanvasElement | null>(null)
+    const blurCanvasRef = ref<HTMLCanvasElement | null>(null)
 
     // Canvas scaler from original
-    const cpCanvasScaler = (sz, pixelRatio, offset) => {
+    const cpCanvasScaler = (sz: number, pixelRatio: number, offset: number) => {
         return pixelRatio * (sz + offset)
     }
 
@@ -18,7 +50,7 @@ export const useCanvasRenderer = () => {
     }
 
     // Render data (from original)
-    const renderData = (viewData, viewerChannels, constants, viewport, globalZoomMult, pixelRatioValue, isRedraw = false) => {
+    const renderData = (viewData: ViewData, viewerChannels: RendererChannelView[], constants: RendererConstants, viewport: RendererViewport, globalZoomMult: number, pixelRatioValue: number, isRedraw = false) => {
         const blurCanvas = blurCanvasRef.value
         if (!blurCanvas) {
             console.warn('blurArea ref is missing, skipping renderData')
@@ -63,11 +95,11 @@ export const useCanvasRenderer = () => {
         ctx.save()
 
         for (let ch in viewData.channels) {
-            if (viewData.channels.hasOwnProperty(ch)) {
-                const curChannelData = viewData.channels[ch]
+            if (Object.prototype.hasOwnProperty.call(viewData.channels, ch)) {
+                const curChannelData = viewData.channels[ch as unknown as number]
 
                 // Get channelview for current channel
-                let curChannelView = null
+                let curChannelView: RendererChannelView | null | undefined = null
                 curChannelView = viewerChannels.find((elem) => {
                     return elem.id === curChannelData.id
                 })
@@ -92,7 +124,7 @@ export const useCanvasRenderer = () => {
                     }
                     let xPos1 = Math.floor((((xOffset + (curChannelView.dataSegments[i] - startT) / (rsP)))))
                     let xPos2 = Math.floor((((xOffset + (curChannelView.dataSegments[i + 1] - startT) / (rsP)))))
-                    let yPos = Math.floor(curChannelView.rowBaseline - blurHeight / 2)
+                    let yPos = Math.floor(curChannelView.rowBaseline! - blurHeight / 2)
                     ctxb.fillRect(xPos1, yPos, xPos2 - xPos1, blurHeight)
                 }
 
@@ -142,14 +174,14 @@ export const useCanvasRenderer = () => {
                 // A block starting within `joinPx` of the previous block's end continues the
                 // same trace across a page boundary. Wider separations are data gaps and stay
                 // open.
-                const joinsPrevious = (lastEnd, x, joinPx) => {
+                const joinsPrevious = (lastEnd: { x: number; y: number; y2: number } | null, x: number, joinPx: number) => {
                     return lastEnd !== null && x < (lastEnd.x + joinPx)
                 }
 
                 // Both passes below paint one path per channel. Two paths that abut at a
                 // fractional x composite to less than full coverage, which leaves a light
                 // seam down the trace at every page boundary.
-                let lastBlockEnd = null
+                let lastBlockEnd: { x: number; y: number; y2: number } | null = null
                 let hasBand = false
 
                 ctx.beginPath()
@@ -163,18 +195,18 @@ export const useCanvasRenderer = () => {
                     const xVec = curBlock.cData[0]
                     const yVec = curBlock.cData[1]
                     const y2Vec = curBlock.cData[2]
-                    const startIndex = curBlock.renderStartIndex
-                    const endIndex = curBlock.renderEndIndex
+                    const startIndex = curBlock.renderStartIndex as number
+                    const endIndex = curBlock.renderEndIndex as number
 
-                    ctxb.clearRect(Math.floor(xVec[startIndex]), Math.floor(curChannelView.rowBaseline - blurHeight / 2), Math.ceil(xVec[endIndex] - xVec[startIndex] + 2), blurHeight + 1)
+                    ctxb.clearRect(Math.floor(xVec[startIndex]), Math.floor(curChannelView.rowBaseline! - blurHeight / 2), Math.ceil(xVec[endIndex] - xVec[startIndex] + 2), blurHeight + 1)
 
-                    const isContinuous = curBlock.type === 'Continuous' || curBlock.type === 'realtime'
+                    const isContinuous = curBlock.type === 'Continuous' || (curBlock.type as string) === 'realtime'
                     if (isContinuous && curBlock.isMinMax) {
                         if (doPolFill) {
                             const joined = joinsPrevious(lastBlockEnd, xVec[startIndex], 3)
 
                             if (joined) {
-                                ctx.moveTo(lastBlockEnd.x, lastBlockEnd.y)
+                                ctx.moveTo(lastBlockEnd!.x, lastBlockEnd!.y)
                             } else {
                                 ctx.moveTo(xVec[startIndex], yVec[startIndex])
                             }
@@ -187,7 +219,7 @@ export const useCanvasRenderer = () => {
                             }
 
                             if (joined) {
-                                ctx.lineTo(lastBlockEnd.x, lastBlockEnd.y2)
+                                ctx.lineTo(lastBlockEnd!.x, lastBlockEnd!.y2)
                             }
 
                             ctx.closePath()
@@ -229,10 +261,10 @@ export const useCanvasRenderer = () => {
                     const xVec = curBlock.cData[0]
                     const yVec = curBlock.cData[1]
                     const y2Vec = curBlock.cData[2]
-                    const startIndex = curBlock.renderStartIndex
-                    const endIndex = curBlock.renderEndIndex
+                    const startIndex = curBlock.renderStartIndex as number
+                    const endIndex = curBlock.renderEndIndex as number
 
-                    switch (curBlock.type) {
+                    switch (curBlock.type as string) {
                         case 'Continuous':
                         case 'realtime':
                             if (!joinsPrevious(lastBlockEnd, xVec[startIndex], curBlock.isMinMax ? 3 : 2)) {
@@ -268,7 +300,7 @@ export const useCanvasRenderer = () => {
     }
 
     // Compute channel views (from original)
-    const computeChannelViews = (viewerChannels, pHeight, nrVisibleChannels) => {
+    const computeChannelViews = (viewerChannels: RendererChannelView[], pHeight: number, nrVisibleChannels: number) => {
         const mapped = viewerChannels.map(function(el, i) {
             return { index: i, value: el.rank }
         })
@@ -294,7 +326,7 @@ export const useCanvasRenderer = () => {
     }
 
     // Get point coordinates (from original)
-    const getPointCoords = (channelInfo, channelData, viewport, constants, globalZoomMult, isRedraw) => {
+    const getPointCoords = (channelInfo: RendererChannelView, channelData: ViewDataChannel, viewport: RendererViewport, constants: RendererConstants, globalZoomMult: number, isRedraw: boolean) => {
         let segmLength = channelData.blocks.length
 
         // Find mean of rendered data
@@ -313,7 +345,7 @@ export const useCanvasRenderer = () => {
                         const cY2Array = curCData[2]
                         const XArray = curData[0]
 
-                        const rowBaseLine = channelInfo.rowBaseline | 0
+                        const rowBaseLine = channelInfo.rowBaseline! | 0
                         const startT = viewport.start
                         const rsP = viewport.rsPeriod
                         const spikeHeigth = (viewport.cHeight / (2 * (viewport.nrVisibleChannels + 1))) | 0
@@ -334,7 +366,7 @@ export const useCanvasRenderer = () => {
                     channelData.mean = 0
                     channelData.median = 0
                     for (let iSegm = 0; iSegm < segmLength; iSegm++) {
-                        const curBlock = channelData.blocks[iSegm]
+                        const curBlock = channelData.blocks[iSegm] as ContinuousSegmentBlock
                         if (curBlock.nrValidPoints > 0) {
                             channelData.mean = (curBlock.sumElem + (totalPointsInMean * channelData.mean)) / (totalPointsInMean + curBlock.nrValidPoints)
                             channelData.median = (curBlock.median + (totalPointsInMean * channelData.median)) / (totalPointsInMean + curBlock.nrValidPoints)
@@ -366,13 +398,13 @@ export const useCanvasRenderer = () => {
                     const YArray = curData[1]
                     const Y2Array = curData[2]
 
-                    const rowBaseLine = channelInfo.rowBaseline
+                    const rowBaseLine = channelInfo.rowBaseline!
 
                     let chDatCenterer = 0
                     if (constants.USEMEDIAN) {
-                        chDatCenterer = channelData.median
+                        chDatCenterer = channelData.median!
                     } else {
-                        chDatCenterer = channelData.mean
+                        chDatCenterer = channelData.mean!
                     }
 
                     const rsp = viewport.rsPeriod
