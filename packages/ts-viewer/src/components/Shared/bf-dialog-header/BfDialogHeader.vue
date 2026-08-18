@@ -4,7 +4,7 @@
       {{ title }}
     </span>
     <button
-      v-if="!this.$slots.tabs"
+      v-if="!$slots.tabs"
       class="icon-close"
       @click="onClose"
     >
@@ -18,8 +18,10 @@
   </div>
 </template>
 
-<script>
-  export default {
+<script lang="ts">
+  import { defineComponent } from 'vue'
+
+  export default defineComponent({
     name: 'BfDialogHeader',
 
     props: {
@@ -34,10 +36,10 @@
        * Trigger el-dialog close event
        */
       onClose: function() {
-        this.$parent.handleClose()
+        (this.$parent as unknown as { handleClose: () => void }).handleClose()
       },
     }
-  }
+  })
 </script>
 
 <style scoped lang="scss">

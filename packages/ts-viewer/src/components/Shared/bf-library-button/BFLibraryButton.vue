@@ -36,13 +36,15 @@
   </button>
 </template>
 
-<script>
-export default {
+<script lang="ts">
+import { defineComponent, type PropType } from "vue";
+
+export default defineComponent({
   name: "BfLibraryButton",
 
   props: {
     type: {
-      type: String,
+      type: String as PropType<"button" | "submit" | "reset">,
       default: "button",
     },
     autofocus: Boolean,
@@ -75,7 +77,7 @@ export default {
     //   // this.$emit('click', evt)
     // }
   },
-};
+});
 </script>
 
 <style lang="scss" scoped>
