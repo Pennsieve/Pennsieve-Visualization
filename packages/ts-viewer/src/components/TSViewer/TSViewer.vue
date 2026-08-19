@@ -50,10 +50,8 @@
       </div>
 
       <!--       Timeseries viewport-->
-      <!-- NOT keyed on the asset type. Remounting on a transport change looks
-           tempting, but TSPlotCanvas's onUnmounted calls resetViewer(), so the outgoing
-           instance would erase the activeViewer the incoming one needs. The canvas instead
-           closes its transport and creates the other kind in place; see createTransport. -->
+      <!-- Not keyed on the asset type: the transport swap happens above and the
+           canvas re-arms on it, so remounting would only discard warm caches. -->
       <TimeseriesViewerCanvas
         v-if="activeViewer?.content?.id"
         ref="viewerCanvas"
@@ -133,6 +131,7 @@
 <script setup lang="ts">
 import {
   ref,
+  shallowRef,
   computed,
   watch,
   nextTick,
@@ -143,13 +142,13 @@ import {
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
-import type { ViewerChannel } from "../../stores/tsviewer"
+import type { ActiveViewer, ViewerChannel } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
 import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
-import { getClient } from '@/composables/streaming/clientRegistry'
-import { isZarrAssetType } from '@/composables/streaming/assetTypes'
+import { createTransport } from '@/transport/createTransport'
+import type { TimeseriesTransport } from '@/transport/TimeseriesTransport'
+import { provideViewerTransport } from '@/state/viewerTransportContext'
 import {
-  measureAmplitudes,
   uvPerMmToZoomMult,
   zoomMultForAmplitudes
 } from '@/composables/streaming/autoscale'
@@ -212,6 +211,44 @@ const { viewerChannels, needsRerender } = storeToRefs(viewerStore)
 // Provide store and instanceId to child components
 provide('viewerStore', viewerStore)
 provide('viewerInstanceId', props.instanceId)
+
+// This viewer owns its transport. Descendants inject the ref rather than
+// constructing their own, so one viewer never holds two connections.
+const transport = shallowRef<TimeseriesTransport | null>(null)
+provideViewerTransport(transport)
+
+/**
+ * Points the viewer at the backend the active viewer's content selects, closing
+ * whatever was open before. A package switch that crosses asset types lands here
+ * and swaps the transport in place; descendants watch the ref and re-arm.
+ */
+const openTransportFor = async (content: NonNullable<ActiveViewer['content']>) => {
+  const previous = transport.value
+  transport.value = null
+  if (previous) {
+    await previous.close()
+  }
+
+  // The store's $id is `tsviewer-<instanceId>`, the same key the store uses to
+  // warm the zarr client registry in fetchAndSetActiveViewer.
+  const next = createTransport(content.assetType, { registryKey: viewerStore.$id })
+  // Assigned before open() so descendants register their handlers first; the
+  // catalog arrives during open() and a late handler would miss it.
+  transport.value = next
+
+  try {
+    await next.open({
+      packageId: content.id,
+      viewerAssetId: content.viewerAssetId ?? null,
+      url: content.url ?? null,
+      onUrlExpired: content.onUrlExpired ?? null,
+      timeseriesDiscoverApi: viewerStore.config.timeseriesDiscoverApi as string | undefined,
+      timeSeriesApi: viewerStore.config.timeSeriesApi as string | undefined
+    })
+  } catch (error) {
+    console.error('TSViewer: failed to open the transport:', error)
+  }
+}
 
 // Global message handler for toast/error events
 useGlobalMessageHandler()
@@ -334,9 +371,11 @@ const nrVisChannels = computed(() => {
  * length of the recording itself.
  */
 const maxDuration = computed(() => {
-  if (!isZarrAssetType(activeViewer.value?.content?.assetType)) {
-    return constants.MAXDURATION
+  const backendCap = transport.value?.capabilities.maxDurationUs ?? constants.MAXDURATION
+  if (backendCap !== null) {
+    return backendCap
   }
+  // The backend imposes no ceiling, so the recording length is the bound.
   if (ts_start.value === null || ts_end.value === null) {
     return constants.MAXDURATION
   }
@@ -385,19 +424,19 @@ let verticalScaleMeasured = false
  *
  * Reads the coarsest pyramid level over the whole recording, which the availability scan
  * has usually already fetched, and picks the sensitivity that keeps the median channel
- * inside its row. Only the Zarr path has a reader to ask; the streaming-server path keeps
- * `DEFAULT_UV_PER_MM`. Any failure leaves the current scale alone.
+ * inside its row. A backend without an amplitude survey keeps `DEFAULT_UV_PER_MM`. Any
+ * failure leaves the current scale alone.
  */
 const measureVerticalScale = async () => {
   if (verticalScaleMeasured) {
     return
   }
-  if (!isZarrAssetType(activeViewer.value?.content?.assetType)) {
+  const activeTransport = transport.value
+  if (!activeTransport?.capabilities.supportsAmplitudeSurvey || !activeTransport.measureAmplitudes) {
     return
   }
-  const entry = getClient(viewerStore.$id)
   const rowHeight = cHeight.value / nrVisChannels.value
-  if (!entry || !ts_start.value || !ts_end.value || !(rowHeight > 0)) {
+  if (!ts_start.value || !ts_end.value || !(rowHeight > 0)) {
     return
   }
   const channels = visibleChannels.value
@@ -409,8 +448,7 @@ const measureVerticalScale = async () => {
 
   verticalScaleMeasured = true
   try {
-    const amplitudes = await measureAmplitudes(
-      entry.client,
+    const amplitudes = await activeTransport.measureAmplitudes(
       channels,
       ts_start.value,
       ts_end.value
@@ -821,7 +859,26 @@ const initCanvasRenderer = () => {
 }
 
 // Lifecycle hooks
+// A package switch that crosses asset types swaps the transport; the id is in the
+// key so re-activating a different package on the same backend reconnects too.
+watch(
+  () => [activeViewer.value?.content?.id, activeViewer.value?.content?.assetType] as const,
+  ([id]) => {
+    const content = activeViewer.value?.content
+    if (id && content) {
+      void openTransportFor(content)
+    }
+  }
+)
+
 onMounted(() => {
+  // Opened here rather than in setup: children mount first, so their transport
+  // watchers are already registered when the catalog arrives during open().
+  const content = activeViewer.value?.content
+  if (content?.id && !transport.value) {
+    void openTransportFor(content)
+  }
+
   initChannels()
 
   const element = document.getElementById("ts_viewer")
@@ -855,7 +912,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
-  // Clean up the store instance when the component is unmounted
+  const openTransport = transport.value
+  transport.value = null
+  void openTransport?.close()
+  // Clean up the store instance when the component is unmounted. This also
+  // resets the store and disposes any zarr client held for this instance.
   clearViewerStore(props.instanceId)
 })
 
