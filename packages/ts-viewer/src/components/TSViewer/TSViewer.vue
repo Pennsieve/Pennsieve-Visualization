@@ -20,34 +20,14 @@
 
     <div id="channelCanvas">
       <!--       Channel labels-->
-      <div
-        id="channelLabels"
+      <ChannelLabels
         ref="channelLabels"
-      >
-        <div
-          v-for="item in visibleChannels"
-          :key="item.displayName"
-          class="chLabelWrap"
-          :data-id="item.id"
-          @tap="onLabelTap"
-        >
-          <div :class="[item.selected? 'labelDiv selected': 'labelDiv' ]" >
-            {{ item.displayName }}
-          </div>
-          <div
-            class="chLabelIndWrap"
-            :hidden="hideLabelInfo"
-            :class="[ item.selected? 'selected': '']"
-          >
-            <div
-              class="chLabelInd"
-              :hidden="hideLabelInfo"
-            >
-              {{ _computeLabelInfo(item, globalZoomMult, item.rowScale) }}
-            </div>
-          </div>
-        </div>
-      </div>
+        :channels="visibleChannels"
+        :global-zoom-mult="globalZoomMult"
+        :c-height="cHeight"
+        :constants="constants"
+        @labelTap="onLabelTap"
+      />
 
       <!--       Timeseries viewport-->
       <!-- Not keyed on the asset type: the transport swap happens above and the
@@ -155,6 +135,9 @@ import {
 import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
 
 // Component imports (required for <script setup>)
+// Loaded eagerly, unlike the components below: onMounted reads the rendered width of
+// the label column, which is only measurable once the child is in the DOM.
+import ChannelLabels from '@/components/TSViewer/ChannelLabels.vue'
 const TimeseriesScrubber = defineAsyncComponent(() => import('@/components/TSViewer/TSScrubber.vue'))
 const TimeseriesViewerCanvas = defineAsyncComponent(() => import('@/components/TSViewer/TSViewerCanvas.vue'))
 const TimeseriesViewerToolbar = defineAsyncComponent(() => import('@/components/TSViewer/TSViewerToolbar.vue'))
@@ -293,10 +276,16 @@ interface ViewerCanvasHandle {
   invalidate?: () => void
 }
 
+/** The ChannelLabels members this component reads through its template ref. */
+interface ChannelLabelsHandle {
+  /** Root element of the label column. */
+  el: HTMLDivElement | null
+}
+
 // Template refs
 const ts_viewer = ref<HTMLDivElement | null>(null)
 const scrubber = ref<ScrubberHandle | null>(null)
-const channelLabels = ref<HTMLDivElement | null>(null)
+const channelLabels = ref<ChannelLabelsHandle | null>(null)
 const viewerCanvas = ref<ViewerCanvasHandle | null>(null)
 // TODO(ts-phase4): TSViewer writes into the filter modal's instance state directly.
 const filterWindow = ref<any>(null)
@@ -350,14 +339,6 @@ const visibleChannels = computed(() => {
   return reactiveViewerChannels.value.filter(channel => channel.visible)
 })
 
-const hideLabelInfo = computed(() => {
-  let hide = false
-  if (cHeight.value / nrVisChannels.value < 30) {
-    hide = true
-  }
-  return hide
-})
-
 const nrVisChannels = computed(() => {
   return visibleChannels.value.length
 })
@@ -403,7 +384,9 @@ const onResize = async () => {
   await nextTick()
   window_width.value = ts_viewer.value.offsetWidth
 
-  const labelDiv = channelLabels.value
+  // ChannelLabels owns the label column's root element, so the width is read from the
+  // element it exposes rather than from a ref in this template.
+  const labelDiv = channelLabels.value?.el
   if (!labelDiv) {
     return
   }
@@ -792,11 +775,6 @@ const getChannelId = (channel: { id?: string; selected?: boolean; visible?: bool
   return getChannelIdFromAnnotation(channel)
 }
 
-const _computeLabelInfo = (item: ViewerChannel, globalZoomMult: number, rowscale: number | undefined) => {
-  const n = (((constants.DEFAULTDPI * window.devicePixelRatio) / (globalZoomMult * rowscale!)) / 25.4).toFixed(1)
-  return n + ' ' + item.unit + '/mm'
-}
-
 const initTimeRange = () => {
   const channels = activeViewer.value?.channels
 
@@ -898,7 +876,7 @@ onMounted(() => {
   }
   window.addEventListener('resize', onResize)
 
-  const labelDiv = channelLabels.value
+  const labelDiv = channelLabels.value?.el
   if (labelDiv) {
     labelWidth.value = labelDiv.clientWidth
     cWidth.value = (window_width.value - labelDiv.clientWidth - 5 - 10)
@@ -951,59 +929,5 @@ defineExpose({
   display: flex;
   background-color: white;
   flex: 1;
-}
-
-#channelLabels {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  line-height: normal;
-  margin-bottom: 32px;
-  min-width: 75px;
-}
-
-.chLabelWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-}
-
-.chLabelIndWrap {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-around;
-  width: 100%;
-  color: #3c54a4;
-}
-
-.chLabelInd {
-  font-size: 0.6em;
-  min-width: 70px;
-  color: rgb(150,150,150);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.labelDiv {
-  align-self: flex-end;
-  white-space: nowrap;
-  color: var(--neuron);
-
-  &.selected {
-    color: $orange_1 !important; /* Red color for selected channel labels */
-    font-weight: 600; /* Make selected labels slightly bolder */
-  }
-}
-
-.chLabelIndWrap[selected]{
-  color:$purple_2;
-}
-
-.labelDiv {
-  align-self: flex-end;
-  white-space: nowrap;
-  color: var(--neuron);
 }
 </style>
