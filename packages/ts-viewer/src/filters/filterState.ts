@@ -34,11 +34,43 @@ export const parseFilterInputs = (payload: FilterPayload): { input0: number; inp
     }
 }
 
+/** A frequency field of the filter modal. */
+export type FilterInputField = 'input0' | 'input1' | 'notchFreq'
+
+/**
+ * The first frequency field the filter type needs and the payload does not carry as a
+ * finite number. Returns null when the payload is complete, and for a filter type that
+ * needs no frequency.
+ */
+export const missingFilterInput = (payload: FilterPayload): FilterInputField | null => {
+    const { input0, input1 } = parseFilterInputs(payload)
+
+    switch (payload.filterType) {
+        case 'lowpass':
+        case 'highpass':
+            return Number.isFinite(input0) ? null : 'input0'
+        case 'bandpass':
+            if (!Number.isFinite(input0)) {
+                return 'input0'
+            }
+            return Number.isFinite(input1) ? null : 'input1'
+        case 'bandstop':
+            return Number.isFinite(payload.notchFreq) ? null : 'notchFreq'
+        default:
+            return null
+    }
+}
+
 /**
  * Builds the wire message for one filter payload. Returns null for a filter type the
- * legacy service has no message for.
+ * legacy service has no message for, and for a payload that leaves a frequency the
+ * filter type needs empty or non-finite.
  */
 export const buildFilterMessage = (payload: FilterPayload): LegacyFilterMessage | null => {
+    if (missingFilterInput(payload) !== null) {
+        return null
+    }
+
     const { input0, input1 } = parseFilterInputs(payload)
 
     switch (payload.filterType) {
@@ -68,8 +100,8 @@ export const buildFilterMessage = (payload: FilterPayload): LegacyFilterMessage 
                 channels: payload.selChannels
             }
         case 'bandstop':
-            // notchFreq travels unparsed. A payload without one reaches the wire as
-            // undefined, and the reader ignores a message it cannot read parameters from.
+            // notchFreq travels unparsed; missingFilterInput has already refused a
+            // payload that leaves it out.
             return {
                 filter: 'bandstop',
                 filterParameters: [BUTTERWORTH_ORDER, payload.notchFreq!, BANDSTOP_WIDTH_HZ],

@@ -69,7 +69,6 @@ export const useCanvasTools = (options: CanvasToolsOptions) => {
     const { viewerChannels, viewerAnnotations, viewerActiveTool, viewerSelectedChannels } = storeToRefs(options.store)
 
     const mouseDown = ref(false)
-    const resizeClicked = ref(false)
     const pointerMode = ref('pointer') // Start with a neutral default
     const startDragCoord = reactive({ x: 0, y: 0 })
     const startDragTimeStamp = ref(0)
@@ -178,7 +177,6 @@ export const useCanvasTools = (options: CanvasToolsOptions) => {
         switch (pointerMode.value) {
             case 'annResize-left':
             case 'annResize-right':
-                resizeClicked.value = true
                 options.annotationCanvas()?.onMouseDown(evt.clientX - cCoord.left, evt.clientY - cCoord.top)
                 break
         }
@@ -233,7 +231,6 @@ export const useCanvasTools = (options: CanvasToolsOptions) => {
     }
 
     const onMouseUp = (e: MouseEvent) => {
-        resizeClicked.value = false
         mouseDown.value = false
 
         switch (pointerMode.value) {
@@ -248,8 +245,14 @@ export const useCanvasTools = (options: CanvasToolsOptions) => {
                     if (append === false) {
                         channel.selected = false
                     }
-                    if ((channel.rowBaseline! > yStart && channel.rowBaseline! < yEnd) ||
-                        (channel.rowBaseline! < yStart && channel.rowBaseline! > yEnd)) {
+                    // A channel without a row baseline has no laid-out row, so no drag
+                    // can cover it.
+                    const rowBaseline = channel.rowBaseline
+                    if (typeof rowBaseline !== 'number') {
+                        return channel
+                    }
+                    if ((rowBaseline > yStart && rowBaseline < yEnd) ||
+                        (rowBaseline < yStart && rowBaseline > yEnd)) {
                         channel.selected = true
                     }
                     return channel

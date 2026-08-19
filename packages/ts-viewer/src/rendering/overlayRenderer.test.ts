@@ -3,7 +3,8 @@ import {
     computeAnnotationBoxRows,
     computeAnnotationBoxSpan,
     computeSelectBox,
-    drawAnnotationBox
+    drawAnnotationBox,
+    drawSelectBox
 } from './overlayRenderer'
 import type { AnnotationBoxChannel } from './overlayRenderer'
 
@@ -24,6 +25,49 @@ const recordingContext = () => ({
     lineWidth: 0,
     strokeStyle: '',
     fillStyle: ''
+})
+
+/** The stroke and fill state a draw can leave behind on the shared overlay canvas. */
+interface OverlayStyle {
+    lineWidth: number
+    strokeStyle: string
+    fillStyle: string
+    lineDash: number[]
+}
+
+/**
+ * Recording context whose save and restore keep a stack of the style fields, the way a
+ * real 2D context does, so a test can compare the state before and after a draw.
+ */
+const restoringContext = () => {
+    const stack: OverlayStyle[] = []
+    const ctx = {
+        ...recordingContext(),
+        lineWidth: 1,
+        strokeStyle: '#000',
+        fillStyle: '#000',
+        lineDash: [] as number[],
+        setLineDash: vi.fn((pattern: number[]) => {
+            ctx.lineDash = pattern
+        }),
+        save: vi.fn(() => {
+            stack.push(styleOf(ctx))
+        }),
+        restore: vi.fn(() => {
+            const previous = stack.pop()
+            if (previous) {
+                Object.assign(ctx, previous)
+            }
+        })
+    }
+    return ctx
+}
+
+const styleOf = (ctx: OverlayStyle): OverlayStyle => ({
+    lineWidth: ctx.lineWidth,
+    strokeStyle: ctx.strokeStyle,
+    fillStyle: ctx.fillStyle,
+    lineDash: ctx.lineDash
 })
 
 const channels: AnnotationBoxChannel[] = [
@@ -95,12 +139,27 @@ describe('computeAnnotationBoxRows', () => {
         expect(computeAnnotationBoxRows(channels, 500, 21).halfHeight).toBe(10)
     })
 
-    it('reports the canvas height as the span start when no row is drawn', () => {
+    it('reports no row to shade between when no channel row is drawn', () => {
         const rows = computeAnnotationBoxRows([{ selected: false, visible: true, rowBaseline: 100 }], 500, 20)
 
+        // An empty rowTops is what the draw reads to skip the shading. minOffset and
+        // maxOffset only place the two edge lines in that case.
         expect(rows.rowTops).toEqual([])
         expect(rows.minOffset).toBe(500)
         expect(rows.maxOffset).toBe(0)
+    })
+
+    it('skips a selected channel whose row baseline is null', () => {
+        // Channels carry a null baseline until the renderer lays them out, and a
+        // null read as 0 shades from the top of the canvas.
+        const rows = computeAnnotationBoxRows([
+            { selected: true, visible: true, rowBaseline: null },
+            { selected: true, visible: true, rowBaseline: 300 }
+        ], 500, 20)
+
+        expect(rows.rowTops).toEqual([290])
+        expect(rows.minOffset).toBe(300)
+        expect(rows.maxOffset).toBe(300)
     })
 })
 
@@ -150,5 +209,84 @@ describe('drawAnnotationBox', () => {
             [251, 390, -202, 20],
             [249, 110, -198, 280]
         ])
+    })
+
+    it('shades nothing when no selected channel is visible', () => {
+        const ctx = recordingContext()
+        const hidden: AnnotationBoxChannel[] = [{ selected: true, visible: false, rowBaseline: 300 }]
+
+        drawAnnotationBox(ctx as unknown as CanvasRenderingContext2D, {
+            ...params,
+            allChannels: false,
+            channels: hidden
+        })
+
+        expect(ctx.fillRect).not.toHaveBeenCalled()
+        // The two edge lines still span the canvas, as they do for a matched row.
+        expect(ctx.moveTo.mock.calls).toEqual([[250, 510], [50, 510]])
+        expect(ctx.lineTo.mock.calls).toEqual([[250, -10], [50, -10]])
+        expect(ctx.stroke).toHaveBeenCalledTimes(1)
+    })
+})
+
+describe('overlay draws and the shared context state', () => {
+    const selectBoxParams = {
+        curX: 300,
+        curY: 200,
+        canvasLeft: 50,
+        canvasTop: 20,
+        dragStartX: 100,
+        dragStartY: 60,
+        cWidth: 1000,
+        cHeight: 500,
+        pixelRatio: 1
+    }
+
+    const annotationBoxParams = {
+        curX: 300,
+        canvasLeft: 50,
+        dragStartX: 100,
+        cWidth: 1000,
+        cHeight: 500,
+        pHeight: 480,
+        pixelRatio: 1,
+        annotationHeight: 20,
+        allChannels: true,
+        channels,
+        layerColor: '#18BA62'
+    }
+
+    it('leaves the stroke state and the dash pattern as it found them after a select box draw', () => {
+        const ctx = restoringContext()
+        const before = styleOf(ctx)
+
+        drawSelectBox(ctx as unknown as CanvasRenderingContext2D, selectBoxParams)
+
+        expect(styleOf(ctx)).toEqual(before)
+        expect(ctx.save).toHaveBeenCalledTimes(1)
+        expect(ctx.restore).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves the stroke state and the dash pattern as it found them after an annotation box draw', () => {
+        const ctx = restoringContext()
+        const before = styleOf(ctx)
+
+        drawAnnotationBox(ctx as unknown as CanvasRenderingContext2D, annotationBoxParams)
+
+        expect(styleOf(ctx)).toEqual(before)
+        expect(ctx.save).toHaveBeenCalledTimes(1)
+        expect(ctx.restore).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the select box dash pattern out of a later annotation box draw', () => {
+        const ctx = restoringContext()
+        const before = styleOf(ctx)
+
+        drawSelectBox(ctx as unknown as CanvasRenderingContext2D, selectBoxParams)
+        drawAnnotationBox(ctx as unknown as CanvasRenderingContext2D, annotationBoxParams)
+
+        expect(styleOf(ctx)).toEqual(before)
+        expect(ctx.save).toHaveBeenCalledTimes(2)
+        expect(ctx.restore).toHaveBeenCalledTimes(2)
     })
 })

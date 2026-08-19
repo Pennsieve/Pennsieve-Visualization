@@ -102,7 +102,7 @@ import { storeToRefs } from 'pinia'
 import TSPlotCanvas from "@/components/TSViewer/TSPlotCanvas.vue"
 import { drawAxis } from '@/rendering/axisRenderer'
 import { drawCursor } from '@/rendering/cursorRenderer'
-import { buildFilterMessage, parseFilterInputs } from '@/filters/filterState'
+import { buildFilterMessage, missingFilterInput, parseFilterInputs } from '@/filters/filterState'
 import type { FilterPayload } from '@/filters/filterState'
 import { useCanvasTools } from '@/interaction/useCanvasTools'
 import type { AnnotationCanvasTools } from '@/interaction/useCanvasTools'
@@ -123,7 +123,6 @@ interface ViewerCanvasConstants extends RendererConstants {
   CURSOROFFSET: number
   XGRIDSPACING: number
   NRPXPERLABEL: number
-  PAGESIZEDIVIDER: number
   ANNOTATIONLABELHEIGHT: number
   PREFETCHPAGES: number
   LIMITANNFETCH: number
@@ -190,8 +189,6 @@ const iArea = ref<HTMLCanvasElement | null>(null)
 
 // Reactive data
 const rsPeriod = ref(0)
-const pageSize = ref(0)
-const lastrRsUpdate = ref(0)
 const pixelRatio = ref(1)
 
 // Throttled render, rebuilt when a caller asks for different throttle settings.
@@ -337,16 +334,24 @@ const createAnnotationLayer = (newLayer: NewAnnotationLayer) => {
   annCanvas.value?.createAnnotationLayer(newLayer)
 }
 
+// Both paging methods answer with the current viewport start when the active layer holds
+// no annotation to move to.
 const getNextAnnotation = (): number => {
-  let cursorOffset = (props.cursorLoc * props.cWidth - props.constants['CURSOROFFSET']) * rsPeriod.value
-  let nextAnn = annCanvas.value?.findNextAnnotation(props.start + cursorOffset)
-  return nextAnn!.start - cursorOffset
+  const cursorOffset = (props.cursorLoc * props.cWidth - props.constants['CURSOROFFSET']) * rsPeriod.value
+  const nextAnn = annCanvas.value?.findNextAnnotation(props.start + cursorOffset)
+  if (!nextAnn) {
+    return props.start
+  }
+  return nextAnn.start - cursorOffset
 }
 
 const getPreviousAnnotation = (): number => {
-  let cursorOffset = (props.cursorLoc * props.cWidth - props.constants['CURSOROFFSET']) * rsPeriod.value
-  let nextAnn = annCanvas.value?.findPreviousAnnotation(props.start + cursorOffset)
-  return nextAnn!.start - cursorOffset
+  const cursorOffset = (props.cursorLoc * props.cWidth - props.constants['CURSOROFFSET']) * rsPeriod.value
+  const previousAnn = annCanvas.value?.findPreviousAnnotation(props.start + cursorOffset)
+  if (!previousAnn) {
+    return props.start
+  }
+  return previousAnn.start - cursorOffset
 }
 
 const onUpdateAnnotation = (annotation: Annotation) => {
@@ -406,12 +411,9 @@ const resize = () => {
 }
 
 const updateRsPeriod = (w: number, d: number) => {
-  const oldRs = rsPeriod.value
   const newPeriod = d / w
-  if (newPeriod !== oldRs) {
-    lastrRsUpdate.value = Date.now()
+  if (newPeriod !== rsPeriod.value) {
     rsPeriod.value = newPeriod
-    pageSize.value = Math.floor(d / props.constants['PAGESIZEDIVIDER'])
   }
 }
 
@@ -494,6 +496,10 @@ const getScreenPixelRatio = () => {
 const setFilters = (payload: FilterPayload) => {
   const message = buildFilterMessage(payload)
   if (!message) {
+    const missing = missingFilterInput(payload)
+    if (missing) {
+      console.warn(`TSViewerCanvas: no filter applied. A ${payload.filterType} filter needs a finite ${missing}.`)
+    }
     return
   }
 

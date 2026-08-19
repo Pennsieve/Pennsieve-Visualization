@@ -98,8 +98,10 @@ export const computeAnnotationBoxRows = (
     let maxOffset = 0
 
     for (const channel of channels) {
-        if (channel.selected && channel.visible) {
-            const channelOffset = channel.rowBaseline! | 0
+        // A channel carries a null baseline until the renderer lays it out; reading
+        // that as 0 would shade the top of the canvas instead of the channel's row.
+        if (channel.selected && channel.visible && typeof channel.rowBaseline === 'number') {
+            const channelOffset = channel.rowBaseline | 0
             if (channelOffset < minOffset) {
                 minOffset = channelOffset
             }
@@ -121,6 +123,9 @@ export const drawSelectBox = (
     ctx.setTransform(params.pixelRatio, 0, 0, params.pixelRatio, 0, 0)
     clearOverlay(ctx, params.cWidth, params.cHeight)
 
+    // The annotation preview draws on the same canvas, so the width and the dash pattern
+    // must not outlive this draw.
+    ctx.save()
     ctx.beginPath()
     ctx.lineWidth = 2
     ctx.strokeStyle = '#295eff'
@@ -129,6 +134,7 @@ export const drawSelectBox = (
     const box = computeSelectBox(params)
     ctx.rect(box.x, box.y, box.width, box.height)
     ctx.stroke()
+    ctx.restore()
 }
 
 /** Draws the annotate tool drag preview. Clears the canvas first. */
@@ -197,12 +203,16 @@ export const drawAnnotationBox = (
         ctx.fillStyle = 'rgba(0,0,0,0.1)'
         ctx.setLineDash([5, 5, 5, 5])
 
-        ctx.fillRect(
-            xStart - 1,
-            rows.minOffset + rows.halfHeight,
-            dx + 2,
-            rows.maxOffset - rows.minOffset - annotationHeight
-        )
+        // A span exists only when a row matched. Without one, minOffset sits below
+        // maxOffset and the rect would come out with a negative height.
+        if (rows.rowTops.length > 0) {
+            ctx.fillRect(
+                xStart - 1,
+                rows.minOffset + rows.halfHeight,
+                dx + 2,
+                rows.maxOffset - rows.minOffset - annotationHeight
+            )
+        }
         ctx.beginPath()
         ctx.moveTo(xStart, rows.minOffset + rows.halfHeight)
         ctx.lineTo(xStart, rows.maxOffset - rows.halfHeight)

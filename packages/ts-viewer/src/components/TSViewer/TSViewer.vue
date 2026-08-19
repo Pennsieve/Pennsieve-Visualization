@@ -156,7 +156,6 @@ const constants = {
   ANNOTATIONLABELHEIGHT: 20,  // Height of annotation label
   ROUNDDATAPIXELS: false,     // If true, canvas point will be rounded to integer pixels for faster render (faster)
   MINMAXPOLYGON: true,        // If true, then polygon is rendered thru minMax values, otherwise vertical lines (faster)
-  PAGESIZEDIVIDER: 0.5,       // Number of pages that span the current canvas.
   PREFETCHPAGES: 5,           // Number of pages to read ahead of view.
   LIMITANNFETCH: 500,         // Maximum number of annotations that are fetched per request
   USEMEDIAN: false,           // Use Median instead of mean for centering channels
@@ -241,7 +240,6 @@ const {
   addAnnotation,
   updateAnnotation,
   removeAnnotation,
-  getChannelId: getChannelIdFromAnnotation,
 } = useTsAnnotation(viewerStore)
 
 /** Payload of the filter modal's setFilters event; matches TSViewerCanvas.setFilters. */
@@ -272,8 +270,6 @@ interface ViewerCanvasHandle {
   renderAll: (delay?: number, requestLeadingEdge?: boolean) => void
   renderAnnotationCanvas: () => void
   initViewerCanvas: () => void
-  /** Never exposed by TSViewerCanvas; the guarded call in onPageForward is a no-op. */
-  invalidate?: () => void
 }
 
 /** The ChannelLabels members this component reads through its template ref. */
@@ -696,11 +692,8 @@ const onPageForward = () => {
   // Update start position
   updateStart(newStart)
 
-  // Force canvas to invalidate cache and fetch new data
+  // Trigger re-render
   nextTick(() => {
-    if (viewerCanvas.value?.invalidate) {
-      viewerCanvas.value.invalidate()
-    }
     if (viewerCanvas.value?.renderAll) {
       viewerCanvas.value.renderAll()
     }
@@ -768,11 +761,6 @@ const setDuration = (value: number) => {
   } else {
     duration.value = value
   }
-}
-
-const getChannelId = (channel: { id?: string; selected?: boolean; visible?: boolean }) => {
-  // Use the method from the TsAnnotation composable
-  return getChannelIdFromAnnotation(channel)
 }
 
 const initTimeRange = () => {
