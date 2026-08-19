@@ -7,24 +7,22 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-// Records every call the mounted tree makes against the transport surface, and holds the
+// Records every call the mounted tree makes against the transport, and holds the
 // handlers the tree registers so tests can push canned envelopes back through them.
 const harness = vi.hoisted(() => ({
-    /** JSON-parsed page requests sent through `websocket.value.send`. */
-    wireSent: [] as Array<Record<string, unknown>>,
-    /** Messages sent through the surface's `send`, the montage path included. */
-    sent: [] as Array<Record<string, unknown>>,
+    /** Typed page requests handed to `transport.requestPage`. */
+    pageRequests: [] as Array<Record<string, unknown>>,
     filterMessages: [] as unknown[],
+    /** Payloads handed to `transport.setMontage`. */
     montageMessages: [] as unknown[],
     dumpBufferRequests: 0,
-    openCalls: [] as unknown[][],
+    openCalls: [] as unknown[],
     segmentHandlers: [] as Array<(envelope: unknown) => void>,
     eventHandlers: [] as Array<(envelope: unknown) => void>,
     channelDetailsHandlers: [] as Array<(details: unknown) => void>,
-    errorHandlers: [] as Array<(payload: Record<string, unknown>) => void>,
+    errorHandlers: [] as Array<(payload: unknown) => void>,
     reset() {
-        this.wireSent.length = 0
-        this.sent.length = 0
+        this.pageRequests.length = 0
         this.filterMessages.length = 0
         this.montageMessages.length = 0
         this.dumpBufferRequests = 0
@@ -36,60 +34,60 @@ const harness = vi.hoisted(() => ({
     }
 }))
 
-// The legacy path resolves the session token through Amplify, which is not configured
-// under test. A fixed token keeps the page-request snapshot stable.
+// The token is transport-internal now and the transport is mocked whole, but the
+// store still imports useToken, and Amplify is not configured under test.
 vi.mock('@/composables/useToken', () => ({
     useToken: vi.fn(async () => 'test-token'),
     useLogout: vi.fn(async () => {})
 }))
 
-vi.mock('@/composables/useTimeseriesTransport', async () => {
+vi.mock('@/transport/createTransport', async () => {
     const { ref } = await import('vue')
-    const websocket = ref({
-        readyState: 1,
-        send(data: string) {
-            harness.wireSent.push(JSON.parse(data))
-        }
-    })
-    const connectionStatus = ref<'connected' | 'disconnected'>('connected')
-    const surface = {
-        websocket,
-        connectionStatus,
-        openWebsocket: async (...args: unknown[]) => {
-            harness.openCalls.push(args)
+    const { BASE_PAGE_SIZE } = await import('@/composables/streaming/paging')
+    const status = ref<'disconnected' | 'connecting' | 'connected'>('disconnected')
+    const handlerSets: Record<string, Array<(payload: unknown) => void>> = {
+        segment: harness.segmentHandlers,
+        event: harness.eventHandlers,
+        channelDetails: harness.channelDetailsHandlers,
+        error: harness.errorHandlers
+    }
+    const transport = {
+        kind: 'websocket' as const,
+        status,
+        capabilities: {
+            maxDurationUs: null,
+            pageSizeFor: () => BASE_PAGE_SIZE,
+            postDumpDelayMs: 0,
+            supportsAmplitudeSurvey: false
         },
-        send(message: unknown) {
-            harness.sent.push(message as Record<string, unknown>)
+        open: async (opts: unknown) => {
+            harness.openCalls.push(opts)
+            status.value = 'connected'
+        },
+        close: async () => {
+            status.value = 'disconnected'
+        },
+        requestPage(req: Record<string, unknown>) {
+            harness.pageRequests.push(req)
             return true
         },
-        sendMontageMessage(montageScheme: unknown) {
-            harness.montageMessages.push(montageScheme)
+        setMontage(message: unknown) {
+            harness.montageMessages.push(message)
         },
-        sendFilterMessage(msg: unknown) {
+        setFilter(msg: unknown) {
             harness.filterMessages.push(msg)
         },
-        sendDumpBufferRequest() {
+        dumpBuffer() {
             harness.dumpBufferRequests += 1
             return true
         },
-        disconnect: async () => {},
-        setClearChannelsCallback(_callback: () => void) {},
-        setActiveId(_id: string) {},
-        setUseMedian(_value: boolean) {},
-        onSegment(handler: (envelope: unknown) => void) {
-            harness.segmentHandlers.push(handler)
-        },
-        onEvent(handler: (envelope: unknown) => void) {
-            harness.eventHandlers.push(handler)
-        },
-        onChannelDetails(handler: (details: unknown) => void) {
-            harness.channelDetailsHandlers.push(handler)
-        },
-        onError(handler: (payload: Record<string, unknown>) => void) {
-            harness.errorHandlers.push(handler)
+        dataSpans: async () => [],
+        on(event: string, handler: (payload: unknown) => void) {
+            handlerSets[event].push(handler)
+            return () => {}
         }
     }
-    return { useTimeseriesTransport: () => surface }
+    return { createTransport: () => transport }
 })
 
 import TSViewer from '@/components/TSViewer/TSViewer.vue'
@@ -138,7 +136,7 @@ interface PageRequestWindow {
 type ReaderSegment = Parameters<typeof buildContinuousSegm>[0]
 
 /**
- * Builds the envelope `onSegment` handlers expect, answering `req` with a minMax
+ * Builds the envelope `segment` handlers expect, answering `req` with a minMax
  * segment of 100 ms bins.
  */
 function makeSegmentEnvelope(chId: string, label: string, req: PageRequestWindow): SegmentEnvelope {
@@ -172,7 +170,7 @@ function drawCallCount(canvas: HTMLCanvasElement): number {
 }
 
 function pageRequestsFor(startTime: number): Array<Record<string, unknown>> {
-    return harness.wireSent.filter((message) => message.startTime === startTime)
+    return harness.pageRequests.filter((message) => message.startTime === startTime)
 }
 
 describe('TSViewer mounted against a recorded transport', () => {
@@ -254,25 +252,20 @@ describe('TSViewer mounted against a recorded transport', () => {
         }, { timeout: 3000 })
     })
 
-    it('requests the viewport page over the wire with both channels in one message', async () => {
+    it('requests the viewport page with both channels in one typed PageRequest', async () => {
         await mountViewer('dom-test-requests')
         await initializeChannels()
 
         const pageRequest = pageRequestsFor(TS_START)[0]
         expect(pageRequest).toBeDefined()
-        // Every field derives from seeded constants and the mocked token; nothing here is
-        // wall-clock dependent. pixelWidth is 1 because the unlaid-out canvas reports a
-        // non-positive width and rsPeriod falls back to 1.
-        // pins current behavior; revisit in the refactor
+        // The typed PageRequest carries no session or packageId: the token and the
+        // package id are transport-internal. The byte-exact legacy wire JSON is
+        // pinned in src/transport/websocketTransport.wire.test.ts. pixelWidth is 1
+        // because the unlaid-out canvas reports a non-positive width and rsPeriod
+        // falls back to 1. pins current behavior; revisit in the refactor
         expect(pageRequest).toMatchInlineSnapshot(`
           {
-            "endTime": 30000000,
-            "minMax": true,
-            "packageId": "pkg-1",
-            "pixelWidth": 1,
-            "session": "test-token",
-            "startTime": 15000000,
-            "virtualChannels": [
+            "channels": [
               {
                 "id": "ch-1",
                 "name": "CH1",
@@ -282,6 +275,10 @@ describe('TSViewer mounted against a recorded transport', () => {
                 "name": "CH2",
               },
             ],
+            "endTime": 30000000,
+            "minMax": true,
+            "pixelWidth": 1,
+            "startTime": 15000000,
           }
         `)
     })
@@ -395,7 +392,7 @@ describe('TSViewer mounted against a recorded transport', () => {
         `)
     })
 
-    it('sends the montage payload through transport send when the montage scheme changes', async () => {
+    it('sends the montage payload through transport setMontage when the montage scheme changes', async () => {
         const { store } = await mountViewer('dom-test-montage')
 
         store.setWorkspaceMontages([
@@ -403,9 +400,9 @@ describe('TSViewer mounted against a recorded transport', () => {
         ])
         store.setViewerMontageScheme('TEST_MONTAGE')
         await vi.waitFor(() => {
-            expect(harness.sent.length).toBe(1)
+            expect(harness.montageMessages.length).toBe(1)
         }, { timeout: 3000 })
-        expect(harness.sent[0]).toMatchInlineSnapshot(`
+        expect(harness.montageMessages[0]).toMatchInlineSnapshot(`
           {
             "montage": "CUSTOM_MONTAGE",
             "montageMap": [
@@ -420,18 +417,14 @@ describe('TSViewer mounted against a recorded transport', () => {
 
         store.setViewerMontageScheme('NOT_MONTAGED')
         await vi.waitFor(() => {
-            expect(harness.sent.length).toBe(2)
+            expect(harness.montageMessages.length).toBe(2)
         }, { timeout: 3000 })
-        expect(harness.sent[1]).toMatchInlineSnapshot(`
+        expect(harness.montageMessages[1]).toMatchInlineSnapshot(`
           {
             "montage": "NOT_MONTAGED",
             "montageMap": [],
             "packageId": "pkg-1",
           }
         `)
-
-        // The montage payload travels through the surface's send; sendMontageMessage has
-        // no caller on this path. pins current behavior; revisit in the refactor
-        expect(harness.montageMessages).toEqual([])
     })
 })

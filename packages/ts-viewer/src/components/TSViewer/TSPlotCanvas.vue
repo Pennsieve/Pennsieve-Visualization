@@ -23,14 +23,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, onUnmounted, reactive, ref, inject } from 'vue'
+import { computed, watch, onMounted, onUnmounted, reactive, ref, shallowRef, inject } from 'vue'
 import type { Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore } from '../../stores/tsviewer'
 import type { ActiveViewer } from '../../stores/tsviewer'
-import { useTimeseriesTransport } from '@/composables/useTimeseriesTransport'
-import { isZarrAssetType } from '@/composables/streaming/assetTypes'
-import { adaptivePageSize, BASE_PAGE_SIZE } from '@/composables/streaming/paging'
+import { createTransport } from '@/transport/createTransport'
+import type {
+  TimeseriesTransport,
+  MontageMessage,
+  TransportSegmentEnvelope,
+  TransportError
+} from '@/transport/TimeseriesTransport'
+import { BASE_PAGE_SIZE } from '@/composables/streaming/paging'
 import { useCanvasRenderer } from '@/composables/useCanvasRenderer'
 import type { RendererConstants, RendererChannelView } from '@/composables/useCanvasRenderer'
 import { useTimeSeriesData } from '@/composables/useTimeSeriesData'
@@ -40,8 +45,8 @@ import type { PlannedRequest } from '@/composables/useDataRequests'
 import { useChannelProcessing } from '@/composables/useChannelProcessing'
 import type { VirtualChannel } from '@/composables/useChannelProcessing'
 import type { ChannelDetail } from '@/composables/streaming/channelDetails'
+import type { LegacyFilterMessage } from '@/composables/streaming/filters'
 import { createThrottle } from '@/utils/throttle'
-import {useToken} from "@/composables/useToken";
 
 /** Keys of the viewer constants object this component reads or forwards. */
 interface PlotCanvasConstants extends RendererConstants {
@@ -80,37 +85,23 @@ const {
   workspaceMontages,
 } = storeToRefs(viewerStore)
 
-// The viewer asset's type picks the data path: a Zarr bundle is read directly in the
-// browser, everything else streams over the discovery WebSocket.
-const isZarrSource = () => isZarrAssetType(props.activeViewer?.content?.assetType)
+// One typed transport per connection, chosen by the viewer asset's type. Created in
+// initPlotCanvas, once the active viewer's content is known; a package switch that
+// crosses asset types re-runs initPlotCanvas, which closes this transport and creates
+// the other kind in place, without remounting this component -- which matters because
+// the unmount below calls resetViewer().
+const transport = shallowRef<TimeseriesTransport | null>(null)
 
-// A Zarr bundle answers a wide window from its pyramid in a few reads, so the page span
+// A Zarr bundle answers a wide window from its pyramid in a few reads, so its page span
 // grows with the viewport instead of splitting it into dozens of fixed 15-second
-// columns. The legacy streaming service keeps the fixed span it was built around.
-const currentPageSize = () => (isZarrSource() ? adaptivePageSize(props.duration) : BASE_PAGE_SIZE)
+// columns. The legacy streaming service keeps the fixed span it was built around. The
+// difference travels through the transport's capabilities.
+const currentPageSize = () =>
+  transport.value ? transport.value.capabilities.pageSizeFor(props.duration) : BASE_PAGE_SIZE
 
-// The token only ever travels in the request's `session` field, which the Zarr path ignores.
-// Asking Amplify for one would reject outright for a public or locally served bundle, so
-// this is re-evaluated per call rather than captured.
-const resolveUserToken = () => (isZarrSource() ? Promise.resolve(null) : useToken())
-
-// Both transports are held open and dispatched per call, so a package switch that crosses
-// asset types is picked up without remounting this component -- which matters because the
-// unmount below calls resetViewer().
-const {
-  websocket,
-    connectionStatus,
-    openWebsocket,
-    send,
-    sendFilterMessage,
-    sendDumpBufferRequest,
-    disconnect,
-    setClearChannelsCallback,
-    onSegment,
-    onEvent,
-    onChannelDetails,
-    onError
-} = useTimeseriesTransport(isZarrSource)
+const sendFilterMessage = (message: LegacyFilterMessage) => {
+  transport.value?.setFilter(message)
+}
 
 const {
   plotCanvasRef,
@@ -289,6 +280,10 @@ const generateAndProcessRequests = async () => {
     return
   }
 
+  // Captured once per pass, so a transport swap mid-pass cannot split the dump
+  // and the requests across two backends.
+  const activeTransport = transport.value
+
   const showChannels = chData.value.filter(channel => {
     const channelConfig = viewerChannels.value.find(config =>
       config.id === channel.id  // Direct id comparison (both are unique)
@@ -356,16 +351,18 @@ const generateAndProcessRequests = async () => {
     isDumpingBuffer.value = true
 
     try {
-      if (sendDumpBufferRequest()) {
+      if (activeTransport && activeTransport.dumpBuffer()) {
         // Clear client state after successful dump
         requestedPages.value.clear()
         clearRequests()
         staleDataCounter.value = 0
 
         // Brief delay to let the legacy server process the dump request. The Zarr
-        // client aborts synchronously, so its next requests can go out at once.
-        if (!isZarrSource()) {
-          await new Promise(resolve => setTimeout(resolve, 50))
+        // transport aborts synchronously and reports 0 ms, so its next requests
+        // can go out at once.
+        const postDumpDelayMs = activeTransport.capabilities.postDumpDelayMs
+        if (postDumpDelayMs > 0) {
+          await new Promise(resolve => setTimeout(resolve, postDumpDelayMs))
         }
 
         // The first pass skipped every page that was pending when it ran, and the dump
@@ -387,16 +384,11 @@ const generateAndProcessRequests = async () => {
   lastRequestStart.value = props.start
   lastRequestDuration.value = props.duration
 
-  const userToken = await resolveUserToken()
-
-  if (requests.asyncRequests.length > 0) {
+  if (requests.asyncRequests.length > 0 && activeTransport) {
     requestDataFromServer(
       requests.asyncRequests,
       0,
-      websocket.value,
-      userToken,
-      activeViewer.value as { content: { id: string } },
-      currentRsPeriod,
+      activeTransport,
       requestedPages.value,
       props.ts_end!
     )
@@ -456,8 +448,9 @@ watch(() => props.duration, () => {
 
 watch(() => viewerMontageScheme.value, (newScheme) => {
 
-  if (!websocket.value || websocket.value.readyState !== 1) {
-    console.warn('Cannot switch montage: WebSocket not connected')
+  const activeTransport = transport.value
+  if (!activeTransport || activeTransport.status.value !== 'connected') {
+    console.warn('Cannot switch montage: transport not connected')
     return
   }
 
@@ -482,7 +475,9 @@ watch(() => viewerMontageScheme.value, (newScheme) => {
   const montagePayload = createMontagePayload(newScheme)
 
   if (montagePayload) {
-    send(montagePayload)
+    // createMontagePayload types montageMap as string[][]; the wire pairs are
+    // always two channel names.
+    activeTransport.setMontage(montagePayload as MontageMessage)
   } else {
     // Montage not found in workspace montages: abort the transition
     console.warn('Montage definition not found for:', newScheme)
@@ -500,8 +495,8 @@ watch(() => [props.start, props.duration, props.cWidth, props.cHeight, props.rsP
   viewport.rsPeriod = props.rsPeriod
 })
 
-// WebSocket event handlers
-onSegment((segmentData) => {
+// Transport event handlers, registered on each transport initPlotCanvas creates
+const handleSegment = (segmentData: TransportSegmentEnvelope) => {
   const isOutsideViewport = segmentData.pageStart >= (props.start + props.duration)
 
   if (isOutsideViewport) {
@@ -516,7 +511,7 @@ onSegment((segmentData) => {
   // A block requested before the last resolution change must not enter the cache: the
   // request pass would treat its page as fulfilled and never fetch it at the current
   // resolution. Its page entry was already cleared when the resolution changed.
-  if (!isDataCurrentForViewport(segmentData.data)) {
+  if (!isDataCurrentForViewport(segmentData.data as { requestedSamplePeriod?: number })) {
     staleDataCounter.value++
     return
   }
@@ -528,9 +523,9 @@ onSegment((segmentData) => {
   if (segmentData.pageStart < (props.start + props.duration)) {
     throttledGetRenderData()
   }
-})
+}
 
-onEvent((eventData) => {
+const handleEvent = (eventData: TransportSegmentEnvelope) => {
   if (!isDataCurrentForViewport(eventData.data as { requestedSamplePeriod?: number })) {
     staleDataCounter.value++
     return
@@ -542,9 +537,9 @@ onEvent((eventData) => {
   if (eventData.pageStart < (props.start + props.duration)) {
     throttledGetRenderData()
   }
-})
+}
 
-onChannelDetails((channelDetails) => {
+const handleChannelDetails = (channelDetails: ChannelDetail[]) => {
   // Montage transition complete: new channels are here, accept data again
   isSwitchingMontage.value = false
 
@@ -570,38 +565,27 @@ onChannelDetails((channelDetails) => {
     console.error('Error processing channel details:', err)
     viewerStore.setViewerErrors({ error: 'Error processing channel details' })
   }
-})
+}
 
-onError((error) => {
+const handleError = (error: TransportError) => {
   viewerStore.setViewerErrors(error)
-})
+}
 
 const initPlotCanvas = async () => {
   const initialRsPeriod = computedRsPeriod.value
   updateCurrentRequestedSamplePeriod(initialRsPeriod)
 
-  // Configure WebSocket
-  setClearChannelsCallback(() => {
-    if (viewerChannels.value?.length) {
-      const chIds = viewerChannels.value.map(ch => ch.id)
-      const message = { 'channelFiltersToClear': chIds }
-      sendFilterMessage(message)
-    }
-  })
-
-  const userToken = await resolveUserToken()
-
   // Initialize prefetch function - create a wrapper that captures current values
   initializePrefetch(
     (requests: PlannedRequest[]) => {
-      const currentRsPeriod = computedRsPeriod.value
+      const activeTransport = transport.value
+      if (!activeTransport) {
+        return false
+      }
       return requestDataFromServer(
         requests,
         0,
-        websocket.value,
-        userToken,
-        activeViewer.value as { content: { id: string } },
-        currentRsPeriod,
+        activeTransport,
         requestedPages.value,
         props.ts_end!
       )
@@ -609,26 +593,38 @@ const initPlotCanvas = async () => {
     requestedPages
   )
 
-  if (activeViewer.value?.content?.id) {
+  const content = activeViewer.value?.content
+  if (content?.id) {
     try {
-      // Use viewerAssetId for the WebSocket ID when available, fall back to content.id (packageId)
-      const wsId = activeViewer.value.content.viewerAssetId || activeViewer.value.content.id
-      const wsIdType = activeViewer.value.content.viewerAssetId ? 'viewerAsset' : (activeViewer.value.content.idType || 'viewerAsset')
-      // Pass packageId separately so discover streaming gets both params
-      const wsPackageId = activeViewer.value.content.viewerAssetId ? activeViewer.value.content.id : null
-      await openWebsocket(
-        viewerStore.config.timeseriesDiscoverApi as string,
-        wsId,
-        userToken,
-        wsIdType,
-        wsPackageId,
-      )
+      // A re-init (package switch) releases the old connection before the new
+      // transport opens, so a live socket or an open bundle is never left behind.
+      if (transport.value) {
+        await transport.value.close()
+      }
+
+      // The store's $id is `tsviewer-<instanceId>`, the same key the store used
+      // to warm the zarr client registry in fetchAndSetActiveViewer.
+      const activeTransport = createTransport(content.assetType, { registryKey: viewerStore.$id })
+      activeTransport.on('segment', handleSegment)
+      activeTransport.on('event', handleEvent)
+      activeTransport.on('channelDetails', handleChannelDetails)
+      activeTransport.on('error', handleError)
+      transport.value = activeTransport
+
+      await activeTransport.open({
+        packageId: content.id,
+        viewerAssetId: content.viewerAssetId ?? null,
+        url: content.url ?? null,
+        onUrlExpired: content.onUrlExpired ?? null,
+        timeseriesDiscoverApi: viewerStore.config.timeseriesDiscoverApi as string | undefined,
+        timeSeriesApi: viewerStore.config.timeSeriesApi as string | undefined
+      })
 
       // Only start monitoring after successful connection
       monitorPrefetchActivity()
 
     } catch (error) {
-      console.error('Failed to establish WebSocket connection:', error)
+      console.error('Failed to establish transport connection:', error)
       // Handle connection failure gracefully
       return
     }
@@ -647,11 +643,11 @@ onUnmounted(() => {
   clearInterval(PrefetchInterval.value)
 
   if (requestedPages.value.size > 0) {
-    sendDumpBufferRequest()
+    transport.value?.dumpBuffer()
   }
   viewerStore.resetViewer()
   clearRequests()
-  disconnect()
+  void transport.value?.close()
   if (throttledGetRenderData.cancel) {
     throttledGetRenderData.cancel()
   }

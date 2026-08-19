@@ -4,12 +4,7 @@ import type { Ref } from 'vue'
 import { BASE_PAGE_SIZE } from '@/composables/streaming/paging'
 import type { SegmentBlock } from './streaming/segments'
 import type { ChannelData, ViewData, ViewDataChannel } from './useTimeSeriesData'
-
-/** Minimal socket surface shared by the legacy websocket and the Zarr shim. */
-export interface WireSocket {
-    readyState: number
-    send(data: string): void
-}
+import type { PageRequest, TimeseriesTransport } from '@/transport/TimeseriesTransport'
 
 /** One page request planned for the transport. */
 export interface PlannedRequest {
@@ -315,7 +310,7 @@ export const useDataRequests = () => {
     }
 
     // Request data from server (from original) - now accepts ts_end as parameter
-    const requestDataFromServer = (requests: PlannedRequest[], firstRequest = 0, websocket: WireSocket | null | undefined, userToken: string | null, activeViewer: { content: { id: string } }, rsPeriod: number, requestedPages: Map<number, RequestedPageInfo>, ts_end: number) => {
+    const requestDataFromServer = (requests: PlannedRequest[], firstRequest = 0, transport: TimeseriesTransport, requestedPages: Map<number, RequestedPageInfo>, ts_end: number) => {
         if (requests.length === 0) {
             return false
         }
@@ -356,30 +351,24 @@ export const useDataRequests = () => {
                 continue
             }
 
-            const ws = websocket
-            if (ws && ws.readyState === 1) {
-                const virtualChannels = curRequest.channels.map(channel => {
-                    return {
-                        // The server expects the serverId; montaged traces keep
-                        // their composite label
-                        id: channel.serverId || channel.id,
-                        name: channel.label || channel.name
-                    }
-                })
-
-                const req = {
-                    session: userToken,
-                    minMax: true,
-                    startTime: curRequest.start,
-                    endTime: requestEndTime,
-                    packageId: activeViewer.content.id,
-                    pixelWidth: curRequest.pixelWidth,
-                    virtualChannels
+            const virtualChannels = curRequest.channels.map(channel => {
+                return {
+                    // The server expects the serverId; montaged traces keep
+                    // their composite label
+                    id: channel.serverId || channel.id,
+                    name: channel.label || channel.name || ''
                 }
+            })
 
-                const reqJson = JSON.stringify(req)
-                ws.send(reqJson)
+            const req: PageRequest = {
+                startTime: curRequest.start,
+                endTime: requestEndTime,
+                pixelWidth: curRequest.pixelWidth,
+                minMax: true,
+                channels: virtualChannels
+            }
 
+            if (transport.requestPage(req)) {
                 // Track the request with client channel IDs
                 const nrChannels = curRequest.channels.length
                 const channelCounter = new Map()
@@ -398,8 +387,8 @@ export const useDataRequests = () => {
 
                 requestedPages.set(curRequest.start, requestInfo)
             } else {
-                console.error('WebSocket not ready for sending requests:', {
-                    readyState: ws?.readyState
+                console.error('Transport not ready for sending requests:', {
+                    status: transport.status.value
                 })
                 return false
             }

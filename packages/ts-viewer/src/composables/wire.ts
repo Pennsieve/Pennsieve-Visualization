@@ -1,6 +1,6 @@
 // @/composables/wire.ts
 //
-// Decoded shapes of the inline protobuf schema in useWebSocket.ts, hand-declared
+// Decoded shapes of the protobuf schema in transport/websocketTransport.ts, hand-declared
 // as the message handling observes them. uint64 fields decode to plain numbers
 // because the `long` package is not installed; a value above 2^53 - 1 loses
 // precision.
