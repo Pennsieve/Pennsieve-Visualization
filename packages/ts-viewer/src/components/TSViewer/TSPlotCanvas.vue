@@ -28,7 +28,7 @@ import type { Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore } from '../../stores/tsviewer'
 import type { ActiveViewer } from '../../stores/tsviewer'
-import { createTransport } from '@/transport/createTransport'
+import { useViewerTransport } from "@/state/viewerTransportContext"
 import type {
   TimeseriesTransport,
   MontageMessage,
@@ -85,12 +85,9 @@ const {
   workspaceMontages,
 } = storeToRefs(viewerStore)
 
-// One typed transport per connection, chosen by the viewer asset's type. Created in
-// initPlotCanvas, once the active viewer's content is known; a package switch that
-// crosses asset types re-runs initPlotCanvas, which closes this transport and creates
-// the other kind in place, without remounting this component -- which matters because
-// the unmount below calls resetViewer().
-const transport = shallowRef<TimeseriesTransport | null>(null)
+// TSViewer owns the transport and swaps it when the asset type changes; this
+// canvas arms whichever one is current.
+const transport = useViewerTransport()
 
 // A Zarr bundle answers a wide window from its pyramid in a few reads, so its page span
 // grows with the viewport instead of splitting it into dozens of fixed 15-second
@@ -571,7 +568,7 @@ const handleError = (error: TransportError) => {
   viewerStore.setViewerErrors(error)
 }
 
-const initPlotCanvas = async () => {
+const initPlotCanvas = () => {
   const initialRsPeriod = computedRsPeriod.value
   updateCurrentRequestedSamplePeriod(initialRsPeriod)
 
@@ -592,44 +589,50 @@ const initPlotCanvas = async () => {
     },
     requestedPages
   )
-
-  const content = activeViewer.value?.content
-  if (content?.id) {
-    try {
-      // A re-init (package switch) releases the old connection before the new
-      // transport opens, so a live socket or an open bundle is never left behind.
-      if (transport.value) {
-        await transport.value.close()
-      }
-
-      // The store's $id is `tsviewer-<instanceId>`, the same key the store used
-      // to warm the zarr client registry in fetchAndSetActiveViewer.
-      const activeTransport = createTransport(content.assetType, { registryKey: viewerStore.$id })
-      activeTransport.on('segment', handleSegment)
-      activeTransport.on('event', handleEvent)
-      activeTransport.on('channelDetails', handleChannelDetails)
-      activeTransport.on('error', handleError)
-      transport.value = activeTransport
-
-      await activeTransport.open({
-        packageId: content.id,
-        viewerAssetId: content.viewerAssetId ?? null,
-        url: content.url ?? null,
-        onUrlExpired: content.onUrlExpired ?? null,
-        timeseriesDiscoverApi: viewerStore.config.timeseriesDiscoverApi as string | undefined,
-        timeSeriesApi: viewerStore.config.timeSeriesApi as string | undefined
-      })
-
-      // Only start monitoring after successful connection
-      monitorPrefetchActivity()
-
-    } catch (error) {
-      console.error('Failed to establish transport connection:', error)
-      // Handle connection failure gracefully
-      return
-    }
-  }
 }
+
+let unsubscribeTransport: Array<() => void> = []
+
+/**
+ * Arms the current transport: registers the handlers and discards anything the
+ * previous one left behind.
+ *
+ * Runs synchronously with the assignment in TSViewer, before that transport's
+ * `open()` starts, so the catalog emission always lands on a live handler.
+ */
+watch(transport, (activeTransport, previous) => {
+  for (const off of unsubscribeTransport) {
+    off()
+  }
+  unsubscribeTransport = []
+
+  if (previous) {
+    // The outgoing transport's pages will never arrive.
+    requestedPages.value.clear()
+    clearRequests()
+    invalidate()
+    staleDataCounter.value = 0
+    lastRequestedSamplePeriod.value = null
+    lastRequestStart.value = null
+    lastRequestDuration.value = null
+  }
+
+  if (!activeTransport) {
+    return
+  }
+
+  unsubscribeTransport = [
+    activeTransport.on('segment', handleSegment),
+    activeTransport.on('event', handleEvent),
+    activeTransport.on('channelDetails', handleChannelDetails),
+    activeTransport.on('error', handleError)
+  ]
+
+  // One sweeper per transport; a swap must not leave the old timer running.
+  clearInterval(PrefetchInterval.value)
+  monitorPrefetchActivity()
+}, { flush: 'sync', immediate: true })
+
 // Lifecycle (from original mounted/unmounted logic)
 onMounted(async () => {
   pixelRatio.value = 1
@@ -645,9 +648,14 @@ onUnmounted(() => {
   if (requestedPages.value.size > 0) {
     transport.value?.dumpBuffer()
   }
-  viewerStore.resetViewer()
+  // The store outlives this canvas and the transport belongs to TSViewer, so
+  // neither is torn down here. Resetting the store from this unmount hook used
+  // to erase the state an incoming canvas needed.
   clearRequests()
-  void transport.value?.close()
+  for (const off of unsubscribeTransport) {
+    off()
+  }
+  unsubscribeTransport = []
   if (throttledGetRenderData.cancel) {
     throttledGetRenderData.cancel()
   }

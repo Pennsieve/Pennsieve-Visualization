@@ -219,6 +219,10 @@ describe('TSViewer mounted against a recorded transport', () => {
         await flushPromises()
         await vi.waitFor(() => {
             expect(harness.openCalls.length).toBeGreaterThan(0)
+            // TSViewer owns the transport, so an open call no longer implies the
+            // plot canvas has mounted. Wait for its subscription instead: the
+            // tests below push the catalog by hand and need a live handler.
+            expect(harness.channelDetailsHandlers.length).toBeGreaterThan(0)
         }, { timeout: 3000 })
         await flushPromises()
         return { store }

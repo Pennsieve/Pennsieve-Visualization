@@ -37,7 +37,7 @@ import { createViewerStore } from '../../stores/tsviewer'
 import type { ActiveViewer, ViewerChannel } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
-import { getClient } from "@/composables/streaming/clientRegistry"
+import { useViewerTransport } from "@/state/viewerTransportContext"
 import { isZarrAssetType } from "@/composables/streaming/assetTypes"
 
 /** Keys of the viewer constants object the scrubber reads. */
@@ -71,6 +71,9 @@ const emit = defineEmits<{
 // Store - inject from parent TSViewer component
 // Falls back to default store for backwards compatibility
 const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
+
+// Availability spans come from whichever transport TSViewer opened.
+const transport = useViewerTransport()
 
 // Template refs
 const canvasWrap = ref<HTMLDivElement | null>(null)
@@ -397,30 +400,20 @@ const _requestSegmentSpanFromApi = async (channel: string, start: number, end: n
  * `gapThresholdUs` is one cell of the scrubber's own 5000-cell bitmap: a gap narrower than a
  * cell cannot be drawn, so coalescing at that width matches what is actually rendered.
  */
-const _requestSegmentSpanFromBundle = async (channel: string, channelIdx: number, start: number, end: number) => {
-  const entry = getClient(viewerStore.$id)
-  if (!entry) {
-    console.warn('TSScrubber: streaming client not ready, skipping segment spans')
+const _requestSegmentSpanFromBundle = async (channel: string, start: number, end: number) => {
+  const activeTransport = transport.value
+  if (!activeTransport) {
+    console.warn('TSScrubber: transport not ready, skipping segment spans')
     return null
-  }
-
-  const chConfig = viewerStore.viewerChannels[channelIdx]
-  if (chConfig?.type === 'UNIT') {
-    return null
-  }
-
-  // A montaged channel id is `${leadId}_${label}`; availability follows the lead channel.
-  let bundleChannel = channel
-  const label = chConfig?.label
-  if (label && label.includes('<->') && channel.endsWith(`_${label}`)) {
-    bundleChannel = channel.slice(0, -(label.length + 1))
   }
 
   const span = props.ts_end! - props.ts_start!
   const gapThresholdUs = Math.max(1, Math.floor(span / 5000))
 
-  return await entry.client.dataSpans({
-    channel: bundleChannel,
+  // Unit channels and montage lead resolution are the transport's business; it
+  // answers a unit channel with no spans rather than throwing.
+  return await activeTransport.dataSpans({
+    channel,
     startUs: start,
     endUs: end,
     gapThresholdUs
@@ -444,7 +437,7 @@ const _requestSegmentSpan = async (channel: string, channelIdx: number, start: n
 
   try {
     const resp = useBundle
-      ? await _requestSegmentSpanFromBundle(channel, channelIdx, start, end)
+      ? await _requestSegmentSpanFromBundle(channel, start, end)
       : await _requestSegmentSpanFromApi(channel, start, end)
 
     if (resp === null) {
