@@ -50,10 +50,10 @@
       </div>
 
       <!--       Timeseries viewport-->
-      <!-- Deliberately NOT keyed on the asset type. Remounting on a transport change looks
+      <!-- NOT keyed on the asset type. Remounting on a transport change looks
            tempting, but TSPlotCanvas's onUnmounted calls resetViewer(), so the outgoing
            instance would erase the activeViewer the incoming one needs. The canvas instead
-           holds both transports and dispatches per call; see useTimeseriesTransport. -->
+           closes its transport and creates the other kind in place; see createTransport. -->
       <TimeseriesViewerCanvas
         v-if="activeViewer?.content?.id"
         ref="viewerCanvas"
