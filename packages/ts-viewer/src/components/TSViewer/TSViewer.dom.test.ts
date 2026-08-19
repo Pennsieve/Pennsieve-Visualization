@@ -91,6 +91,8 @@ vi.mock('@/transport/createTransport', async () => {
 })
 
 import TSViewer from '@/components/TSViewer/TSViewer.vue'
+import TSViewerCanvas from '@/components/TSViewer/TSViewerCanvas.vue'
+import TSViewerToolbar from '@/components/TSViewer/TSViewerToolbar.vue'
 import { createViewerStore } from '@/stores/tsviewer'
 import type { ViewerStore } from '@/stores/tsviewer'
 import type { ChannelDetail } from '@/composables/streaming/channelDetails'
@@ -394,6 +396,38 @@ describe('TSViewer mounted against a recorded transport', () => {
             ],
           }
         `)
+    })
+
+    it('sends no filter message and writes no channel filter for a bandstop without a notch frequency', async () => {
+        const { store } = await mountViewer('dom-test-filter-refused')
+        await initializeChannels()
+
+        const viewer = wrapper!.vm as unknown as { setTimeseriesFilters: (payload: FilterPayload) => void }
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        viewer.setTimeseriesFilters({ filterType: 'bandstop', selChannels: ['ch-1'] })
+
+        expect(harness.filterMessages).toEqual([])
+        expect(store.viewerChannels.find((channel) => channel.id === 'ch-1')?.filter).toEqual({})
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(String(warn.mock.calls[0][0])).toContain('notchFreq')
+
+        warn.mockRestore()
+    })
+
+    it('leaves the viewport where it is when the active annotation layer holds no annotations', async () => {
+        await mountViewer('dom-test-annotation-paging')
+        await initializeChannels()
+
+        const canvas = wrapper!.findComponent(TSViewerCanvas)
+        const toolbar = wrapper!.findComponent(TSViewerToolbar)
+        const startBefore = canvas.props('start')
+
+        toolbar.vm.$emit('nextAnnotation')
+        toolbar.vm.$emit('previousAnnotation')
+        await flushPromises()
+
+        expect(canvas.props('start')).toBe(startBefore)
     })
 
     it('sends the montage payload through transport setMontage when the montage scheme changes', async () => {
