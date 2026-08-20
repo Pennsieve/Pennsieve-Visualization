@@ -241,33 +241,29 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
         emit('annotationsReceived')
     }
 
+    /** The first annotation starting after `curTime`, or null past the last one. */
     const findNextAnnotation = (curTime: number) => {
         const annLayer = viewerStore.getViewerActiveLayer()
         if (!annLayer?.annotations?.length) return null
+        // The last index at or before curTime, so the next one starts after it.
+        // A negative index means every annotation starts later, and -1 + 1 is 0.
         const index = annIndexOf(annLayer.annotations, curTime, false)
-
-        if (index < annLayer.annotations.length) {
-            if (annLayer.annotations[index].start > curTime) {
-                return annLayer.annotations[index]
-            }
-            return annLayer.annotations[index + 1] || annLayer.annotations[index]
-        }
-        return annLayer.annotations[index]
+        return annLayer.annotations[index + 1] ?? null
     }
 
+    /** The last annotation starting before `curTime`, or null before the first one. */
     const findPreviousAnnotation = (curTime: number) => {
         const annLayer = viewerStore.getViewerActiveLayer()
         if (!annLayer?.annotations?.length) return null
         const index = annIndexOf(annLayer.annotations, curTime, true)
+        if (index < 0) return null
 
+        // A miss lands on the preceding annotation; an exact hit lands on the
+        // first of the annotations starting at curTime, so step back off the run.
         if (annLayer.annotations[index].start < curTime) {
             return annLayer.annotations[index]
         }
-
-        if (index > 0) {
-            return annLayer.annotations[index - 1]
-        }
-        return annLayer.annotations[index]
+        return index > 0 ? annLayer.annotations[index - 1] : null
     }
 
     return {
