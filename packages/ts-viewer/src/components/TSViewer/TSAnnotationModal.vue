@@ -4,7 +4,7 @@
     ref="annotation-modal"
     :title="dialogTitle"
     :modelValue="localVisible"
-    @update:modelValue="value => { localVisible = value; if (!value) emit('closeWindow') }"
+    @update:modelValue="(value: boolean) => { localVisible = value; if (!value) emit('closeWindow') }"
     @close="close"
     @closed="onClosed">
 
@@ -103,21 +103,21 @@
   </el-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, defineAsyncComponent, inject } from 'vue'
 import { createViewerStore } from '../../stores/tsviewer'
 import { storeToRefs } from 'pinia'
+import type { Annotation } from '@/utils/annotationUtils'
 import IconSelection from "../icons/IconSelection.vue"
 
 // Async component imports
 const BfLibraryButton = defineAsyncComponent(() => import('@/components/Shared/bf-library-button/BFLibraryButton.vue'))
 
 // Define props
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false
-  }
+const props = withDefaults(defineProps<{
+  visible?: boolean
+}>(), {
+  visible: false
 })
 
 const localVisible = ref(false)
@@ -129,12 +129,12 @@ watch(() => props.visible, (newValue) => {
 
   // Convert microseconds to milliseconds for JavaScript Date
   // Assuming annotation times are stored in microseconds
-  const startMs = activeAnnotation.value.start / 1000
-  const endMs = activeAnnotation.value.end / 1000
+  const startMs = activeAnnotation.value.start! / 1000
+  const endMs = activeAnnotation.value.end! / 1000
 
   initialTimeRange.value = {
-    start: activeAnnotation.value.start,
-    end: activeAnnotation.value.end
+    start: activeAnnotation.value.start!,
+    end: activeAnnotation.value.end!
   }
 
   if (activeAnnotation.value.duration == 0) {
@@ -148,7 +148,10 @@ watch(() => props.visible, (newValue) => {
 
 
 // Define emits
-const emit = defineEmits(['closeWindow', 'createUpdateAnnotation'])
+const emit = defineEmits<{
+  (e: 'closeWindow'): void
+  (e: 'createUpdateAnnotation', annotation: Partial<Annotation>): void
+}>()
 
 // Store - inject from parent TSViewer component
 // Falls back to default store for backwards compatibility
@@ -166,7 +169,7 @@ const input = ref(null)
 
 // Reactive data
 const isProcessing = ref(false)
-const selectedRange = ref(null)
+const selectedRange = ref<number | number[] | null>(null)
 const initialTimeRange = ref({
   start: 0,
   end: 0
@@ -215,12 +218,12 @@ watch(() => props.visible, (newValue) => {
 
   // Convert microseconds to milliseconds for JavaScript Date
   // Assuming annotation times are stored in microseconds
-  const startMs = activeAnnotation.value.start / 1000
-  const endMs = activeAnnotation.value.end / 1000
+  const startMs = activeAnnotation.value.start! / 1000
+  const endMs = activeAnnotation.value.end! / 1000
 
   initialTimeRange.value = {
-    start: activeAnnotation.value.start,
-    end: activeAnnotation.value.end
+    start: activeAnnotation.value.start!,
+    end: activeAnnotation.value.end!
   }
 
   if (activeAnnotation.value.duration == 0) {
@@ -234,8 +237,8 @@ watch(() => props.visible, (newValue) => {
 
 watch(hasRangeValue, (value) => {
   // Convert microseconds to milliseconds for the date picker
-  const startMs = activeAnnotation.value.start / 1000
-  const endMs = activeAnnotation.value.end / 1000
+  const startMs = activeAnnotation.value.start! / 1000
+  const endMs = activeAnnotation.value.end! / 1000
 
   if (value) {
     // Range mode: set array of start and end times
@@ -267,7 +270,7 @@ const submitForm = () => {
     if (Array.isArray(selectedRange.value) && selectedRange.value.length >= 2) {
       activeAnnotation.value.start = selectedRange.value[0] * 1000
       activeAnnotation.value.end = selectedRange.value[1] * 1000
-      activeAnnotation.value.duration = activeAnnotation.value.end - activeAnnotation.value.start
+      activeAnnotation.value.duration = activeAnnotation.value.end! - activeAnnotation.value.start!
     } else {
       console.error('Invalid range value for range mode:', selectedRange.value)
       return
@@ -286,7 +289,7 @@ const submitForm = () => {
   }
 
   // Use Pinia store instead of Vuex dispatch
-  viewerStore.setActiveAnnotation(activeAnnotation.value)
+  viewerStore.setActiveAnnotation(activeAnnotation.value as Annotation)
   emit('createUpdateAnnotation', activeAnnotation.value)
 
   // Close the modal
@@ -302,21 +305,20 @@ const onClosed = () => {
   isProcessing.value = false
 }
 
-const getUTCDateString = (d) => {
+const getUTCDateString = (d: number) => {
   if(d > 0) {
-    d = new Date(d/1000);
-    return ( d.toDateString() );
+    const date = new Date(d/1000);
+    return ( date.toDateString() );
   } else {
     return 'unknown';
   }
 }
 
-const getUTCTimeString = (d) => {
+const getUTCTimeString = (d: number) => {
   if(d > 0) {
-    d = d / 1000;
-    d = new Date(d);
-    return ( ('0' + d.getUTCHours()).slice(-2) + ':' +
-      ('0' + d.getUTCMinutes()).slice(-2) + ':' + ('0' + d.getUTCSeconds()).slice(-2) );
+    const date = new Date(d / 1000);
+    return ( ('0' + date.getUTCHours()).slice(-2) + ':' +
+      ('0' + date.getUTCMinutes()).slice(-2) + ':' + ('0' + date.getUTCSeconds()).slice(-2) );
   }
 }
 </script>
