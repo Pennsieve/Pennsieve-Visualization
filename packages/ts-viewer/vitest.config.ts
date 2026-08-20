@@ -19,6 +19,39 @@ const alias = { "@": resolve(__dirname, "src") };
 // vite.config.ts minus the build-only pieces (lib mode, externals, dts).
 export default defineConfig({
   test: {
+    coverage: {
+      provider: "v8",
+      // Both projects contribute; run the whole suite to get real numbers.
+      include: ["src/**/*.{ts,vue}"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/*.dom.test.ts",
+        "src/test/**",
+        "src/transport/conformance/**",
+        // Type-only modules and ambient declarations have nothing to execute.
+        "src/env.d.ts",
+        "src/composables/wire.ts",
+        "src/transport/TimeseriesTransport.ts",
+      ],
+      reporter: ["text-summary", "json-summary", "html"],
+      // Floors, not targets. Each sits a few points under what the suite covers
+      // today, so an unrelated change does not fail CI, but a real regression
+      // does. Raise them when coverage rises; never lower one to make CI pass.
+      thresholds: {
+        statements: 78,
+        lines: 78,
+        functions: 70,
+        branches: 70,
+        // The data layer is where correctness lives and it is cheap to test, so
+        // it is held far higher than the component average.
+        "src/stores/**": { statements: 95, lines: 95, functions: 95, branches: 90 },
+        "src/composables/**": { statements: 85, lines: 85, functions: 85, branches: 75 },
+        "src/rendering/**": { statements: 95, lines: 95, functions: 95, branches: 90 },
+        "src/interaction/**": { statements: 95, lines: 95, functions: 95, branches: 90 },
+        "src/filters/**": { statements: 95, lines: 95, functions: 95, branches: 90 },
+        "src/events/**": { statements: 95, lines: 95, functions: 95, branches: 90 },
+      },
+    },
     projects: [
       {
         resolve: { alias },

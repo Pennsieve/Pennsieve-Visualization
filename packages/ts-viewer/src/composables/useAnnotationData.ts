@@ -119,6 +119,9 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
             const channelIds = viewerChannels.value.map(channel => getChannelId(channel))
 
             for (const curRange of reqRange) {
+                let answered = 0
+                let failed = 0
+
                 for (const curLayer of viewerAnnotations.value) {
                     if (!curLayer.id) {
                         console.warn('Layer ID is undefined, skipping annotation request for layer:', curLayer)
@@ -152,14 +155,22 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
 
                         const data = await response.json() as AnnotationsResponse
                         await processAnnotationResponse(data, emit)
+                        answered++
                     } catch (err) {
                         useHandleXhrError(err)
+                        failed++
                     }
                 }
-                cachedAnnRange.value.push({
-                    start: Math.floor(curRange.start),
-                    end: Math.floor(curRange.end)
-                })
+
+                // A cached span is never requested again. Caching one whose layers
+                // failed, or that had no layer to request, would leave its annotations
+                // permanently missing.
+                if (answered > 0 && failed === 0) {
+                    cachedAnnRange.value.push({
+                        start: Math.floor(curRange.start),
+                        end: Math.floor(curRange.end)
+                    })
+                }
             }
 
             // Sort cached ranges
@@ -241,33 +252,29 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
         emit('annotationsReceived')
     }
 
+    /** The first annotation starting after `curTime`, or null past the last one. */
     const findNextAnnotation = (curTime: number) => {
         const annLayer = viewerStore.getViewerActiveLayer()
         if (!annLayer?.annotations?.length) return null
+        // The last index at or before curTime, so the next one starts after it.
+        // A negative index means every annotation starts later, and -1 + 1 is 0.
         const index = annIndexOf(annLayer.annotations, curTime, false)
-
-        if (index < annLayer.annotations.length) {
-            if (annLayer.annotations[index].start > curTime) {
-                return annLayer.annotations[index]
-            }
-            return annLayer.annotations[index + 1] || annLayer.annotations[index]
-        }
-        return annLayer.annotations[index]
+        return annLayer.annotations[index + 1] ?? null
     }
 
+    /** The last annotation starting before `curTime`, or null before the first one. */
     const findPreviousAnnotation = (curTime: number) => {
         const annLayer = viewerStore.getViewerActiveLayer()
         if (!annLayer?.annotations?.length) return null
         const index = annIndexOf(annLayer.annotations, curTime, true)
+        if (index < 0) return null
 
+        // A miss lands on the preceding annotation; an exact hit lands on the
+        // first of the annotations starting at curTime, so step back off the run.
         if (annLayer.annotations[index].start < curTime) {
             return annLayer.annotations[index]
         }
-
-        if (index > 0) {
-            return annLayer.annotations[index - 1]
-        }
-        return annLayer.annotations[index]
+        return index > 0 ? annLayer.annotations[index - 1] : null
     }
 
     return {

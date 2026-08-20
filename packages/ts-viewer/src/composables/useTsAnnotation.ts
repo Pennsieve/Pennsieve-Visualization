@@ -26,6 +26,16 @@ interface AnnotationApiResult {
 }
 
 /**
+ * Rejects a failed request with the response itself, the way `useSendXhr` does:
+ * `useHandleXhrError` routes on the status, and an Error would carry none.
+ */
+const rejectFailedResponse = (response: Response) => {
+    if (!response.ok) {
+        throw response
+    }
+}
+
+/**
  * Composable for annotation CRUD operations.
  * @param storeInstance - Optional store instance. If not provided, will inject from parent or use default.
  */
@@ -138,10 +148,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
                 body: JSON.stringify(apiPayload)
             })
 
-            if (!response.ok) {
-                const errorText = await response.text()
-                throw new Error(`HTTP ${response.status}: ${errorText}`)
-            }
+            rejectFailedResponse(response)
 
             const result = await response.json() as AnnotationApiResult
 
@@ -238,10 +245,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
                 body: JSON.stringify(apiPayload)
             })
 
-            if (!response.ok) {
-                const errorText = await response.text()
-                throw new Error(`HTTP ${response.status}: ${errorText}`)
-            }
+            rejectFailedResponse(response)
 
             const result = await response.json() as AnnotationApiResult
 
@@ -294,10 +298,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
                 }
             })
 
-            if (!response.ok) {
-                const errorText = await response.text()
-                throw new Error(`HTTP ${response.status}: ${errorText}`)
-            }
+            rejectFailedResponse(response)
 
             // Use Pinia store method
             viewerStore.deleteAnnotation(annotation)

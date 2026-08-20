@@ -56,7 +56,7 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
         '#FF6C21', '#000000', '#9B9B9B', '#00FF00', '#FA8072', '#808000', '#A0522D', '#2760FF'
     ])
 
-    const initializeLayers = async (response: LayersResponse, emit: LayersEmit) => {
+    const initializeLayers = async (response: LayersResponse, activeViewer: ActiveViewer | null, emit: LayersEmit) => {
         const annLayers: AnnotationLayer[] = []
 
         // If no layers exist, create a default layer
@@ -66,7 +66,12 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
                 color: '#18BA62',
                 description: 'Default Annotation Layer'
             }
-            await createAnnotationLayer(payload, null, emit)
+            // createAnnotationLayer is not given the emit: it would close a layer
+            // window that no one opened during the initial load.
+            const created = await createAnnotationLayer(payload, activeViewer)
+            if (created) {
+                emit('annLayersInitialized')
+            }
         } else {
             // Process existing layers
             for (let i = 0; i < response.results.length; i++) {
@@ -235,16 +240,20 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
             return null
         }
 
+        let response: LayersResponse
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers?api_key=${token}`
-            const response = await useSendXhr(url) as LayersResponse
-            await initializeLayers(response, emit)
-            return response
+            response = await useSendXhr(url) as LayersResponse
         } catch (error) {
             useHandleXhrError(error)
             throw error
         }
+
+        // Deliberately outside the catch above. A default-layer creation reports its
+        // own failure, and one failure must not raise two messages.
+        await initializeLayers(response, activeViewer, emit)
+        return response
     }
 
     return {
