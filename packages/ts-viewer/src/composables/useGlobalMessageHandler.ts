@@ -1,20 +1,17 @@
 import { onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { MessageOptions, messageType } from 'element-plus'
-import EventBus from '../utils/event-bus'
+import { unscopedViewerEmitter } from '@/events/emitter'
+import type { ViewerEmitter, ViewerMessage } from '@/events/emitter'
 
-interface ToastEvent {
-  msg?: string
-  detail?: {
-    msg?: string
-    type?: string
-    showClose?: boolean
-    duration?: number
-  }
-}
-
-export function useGlobalMessageHandler() {
-  const onToast = (evt?: ToastEvent) => {
+/**
+ * Renders the messages of one viewer.
+ *
+ * The emitter is passed in rather than injected: the viewer that provides it is
+ * the viewer that listens, and Vue resolves `inject` against the parent.
+ */
+export function useGlobalMessageHandler(emitter: ViewerEmitter) {
+  const onToast = (evt?: ViewerMessage) => {
     const detailMsg = evt?.detail?.msg ?? ''
     const message = evt?.msg ?? detailMsg
     const type = (evt?.detail?.type ?? 'info').toLowerCase() as messageType
@@ -36,13 +33,21 @@ export function useGlobalMessageHandler() {
     } as MessageOptions)
   }
 
+  // Two sources: this viewer's own messages, and the messages of callers that
+  // no viewer could be resolved for. The two are the same object when no
+  // TSViewer provided an emitter, and one subscription covers that case.
+  const sources = emitter === unscopedViewerEmitter ? [emitter] : [emitter, unscopedViewerEmitter]
+  let unsubscribes: Array<() => void> = []
+
   onMounted(() => {
-    EventBus.$on('toast', onToast)
-    EventBus.$on('ajaxError', onToast)
+    unsubscribes = sources.flatMap((source) => [
+      source.on('toast', onToast),
+      source.on('ajaxError', onToast)
+    ])
   })
 
   onBeforeUnmount(() => {
-    EventBus.$off('toast', onToast)
-    EventBus.$off('ajaxError', onToast)
+    unsubscribes.forEach((unsubscribe) => unsubscribe())
+    unsubscribes = []
   })
 }
