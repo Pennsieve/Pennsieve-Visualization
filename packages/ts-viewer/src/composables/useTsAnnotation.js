@@ -13,7 +13,7 @@ import { createViewerStore } from '../stores/tsviewer'
 export function useTsAnnotation(storeInstance = null) {
     // Use provided store, inject from parent, or fall back to default
     const viewerStore = storeInstance || inject('viewerStore', null) || createViewerStore('default')
-    const { viewerChannels, viewerAnnotations } = storeToRefs(viewerStore)
+    const { viewerChannels, viewerAnnotations, activeAnnotation } = storeToRefs(viewerStore)
 
     // Helper function to get channel ID
     const getChannelId = (channel) => {
@@ -162,7 +162,7 @@ export function useTsAnnotation(storeInstance = null) {
 
             return newAnn
         } catch (error) {
-            console.error('🔧 useTsAnnotation: Error creating annotation:', error)
+            console.error('Error creating annotation:', error)
             useHandleXhrError(error)
             throw error
         }
@@ -233,7 +233,7 @@ export function useTsAnnotation(storeInstance = null) {
             viewerStore.updateAnnotation(updatedAnnotation)
             return result
         } catch (error) {
-            console.error('🔧 useTsAnnotation: Error updating annotation:', error)
+            console.error('Error updating annotation:', error)
             useHandleXhrError(error)
             throw error
         }
@@ -278,7 +278,7 @@ export function useTsAnnotation(storeInstance = null) {
             viewerStore.deleteAnnotation(annotation)
             return true
         } catch (error) {
-            console.error('🔧 useTsAnnotation: Error deleting annotation:', error)
+            console.error('Error deleting annotation:', error)
             useHandleXhrError(error)
             throw error
         }

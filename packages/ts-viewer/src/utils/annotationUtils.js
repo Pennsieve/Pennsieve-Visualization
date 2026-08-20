@@ -1,5 +1,4 @@
 // utils/annotationUtils.js
-import { defaultTo, find, propEq } from 'ramda'
 
 /**
  * Convert hex color to RGBA with specified opacity
@@ -33,7 +32,7 @@ export const sortAnnotations = (annotationArray) => {
  */
 export const getLayer = (annotation, viewerAnnotations) => {
     const layerId = annotation?.layer_id || 0
-    return defaultTo({}, find(propEq('id', layerId), viewerAnnotations))
+    return viewerAnnotations.find(l => l.id === layerId) ?? {}
 }
 
 /**

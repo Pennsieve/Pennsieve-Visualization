@@ -1,6 +1,5 @@
 // @/composables/useChannelProcessing.js
 import { computed, reactive, ref, watch, readonly } from 'vue'
-import { head, propOr, findIndex, propEq } from 'ramda'
 
 export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspaceMontages, activeViewer) => {    // Processing state
     const processingStats = reactive({
@@ -44,19 +43,19 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     const getChannelId = (channel) => {
         if (!channel) return ''
         // Use the id field (which is unique for client-side)
-        return propOr('', 'id', channel)
+        return channel?.id ?? ''
     }
 
     const getServerChannelId = (channel) => {
         if (!channel) return ''
-        return propOr('', 'serverId', channel) || propOr('', 'id', channel)
+        return (channel?.serverId ?? '') || (channel?.id ?? '')
     }
 
     /**
      * Get clean channel identifier without montage modifications
      */
     const getRawChannelId = (channel) => {
-        return propOr('', 'id', channel)
+        return channel?.id ?? ''
     }
     /**
      * Get base channel identifier (strips montage suffix)
@@ -65,12 +64,12 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
     const getBaseChannelId = (channel) => {
         if (!channel) return ''
 
-        let id = propOr('', 'id', channel)
+        let id = channel?.id ?? ''
 
         // Handle montage IDs - remove channel name suffix for montaged channels
         if (isViewingMontage.value && typeof id === 'string') {
             const parts = id.split('_')
-            id = parts.length > 1 ? head(parts) : id
+            id = parts.length > 1 ? parts[0] : id
         }
 
         return id
@@ -128,18 +127,11 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
         processingStats.processedChannels = 0
         processingStats.errors = 0
 
-        // console.log('🔄 Processing channel data:', {
-        //     totalChannels: channelDetails.length,
-        //     isViewingMontage: isViewingMontage.value,
-        //     montageScheme: viewerMontageScheme.value,
-        //     channelDetails: channelDetails.map(ch => ({ id: ch.id, name: ch.name }))
-        // })
-
         const virtualChannels = channelDetails.map(({ id, name }) => {
             try {
                 const baseChannel = findBaseChannel(id)
                 if (!baseChannel) {
-                    console.warn(`❌ Base channel not found for ID: ${id}, available base channels:`,
+                    console.warn(`Base channel not found for ID: ${id}, available base channels:`,
                         baseChannels.value?.map(ch => ({ id: ch?.id, name: ch?.name })) || []
                     )
                     processingStats.errors++
@@ -149,41 +141,19 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
                 const virtualChannel = createVirtualChannel(id, name, baseChannel)
                 processingStats.processedChannels++
 
-                // console.log('✅ Created virtual channel:', {
-                //     serverId: id,
-                //     serverName: name,
-                //     clientId: virtualChannel.content.id,
-                //     clientLabel: virtualChannel.content.label,
-                //     displayName: virtualChannel.content.displayName,
-                //     isMontaged: virtualChannel.content.isMontaged
-                // })
-
                 if (isViewingMontage.value) {
                     processingStats.montageChannels++
                 }
 
                 return virtualChannel
             } catch (error) {
-                console.error(`❌ Error processing channel ${id}:`, error)
+                console.error(`Error processing channel ${id}:`, error)
                 processingStats.errors++
                 return null
             }
         }).filter(Boolean)
 
         processingStats.lastProcessingTime = performance.now() - startTime
-
-        // console.log('📊 Channel processing complete:', {
-        //     processed: processingStats.processedChannels,
-        //     errors: processingStats.errors,
-        //     montageChannels: processingStats.montageChannels,
-        //     processingTime: processingStats.lastProcessingTime.toFixed(2) + 'ms',
-        //     resultChannels: virtualChannels.map(ch => ({
-        //         id: ch.content.id,
-        //         serverId: ch.content.serverId,
-        //         label: ch.content.label,
-        //         displayName: ch.content.displayName
-        //     }))
-        // })
 
         return virtualChannels
     }
@@ -229,8 +199,8 @@ export const useChannelProcessing = (baseChannels, viewerMontageScheme, workspac
         }
 
         const content = {
-            id: uniqueId,            // ✅ Unique for client-side operations
-            serverId: serverId,      // ✅ What server provided/expects
+            id: uniqueId,            // unique client-side id
+            serverId: serverId,      // id the server provided and expects back
             name,
             channelType: baseChannel.channelType,
             label: name,

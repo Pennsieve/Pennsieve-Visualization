@@ -105,7 +105,6 @@
 
 <script setup>
 import { ref, computed, watch, defineAsyncComponent, inject } from 'vue'
-import { propOr } from 'ramda'
 import { createViewerStore } from '../../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import IconSelection from "../icons/IconSelection.vue"
@@ -202,10 +201,10 @@ const channelSelectionStr = computed(() => {
   let str = ""
   if (activeAnnotation.value.allChannels) {
     str = "Adding to all channels"
-  } else if (propOr([], 'channelIds', activeAnnotation.value).length == 1) {
+  } else if ((activeAnnotation.value?.channelIds ?? []).length == 1) {
     str = "Adding to single channel"
   } else {
-    str = `Adding to ${propOr([], 'channelIds', activeAnnotation.value).length} channels`
+    str = `Adding to ${(activeAnnotation.value?.channelIds ?? []).length} channels`
   }
   return str
 })
@@ -319,12 +318,6 @@ const getUTCTimeString = (d) => {
     return ( ('0' + d.getUTCHours()).slice(-2) + ':' +
       ('0' + d.getUTCMinutes()).slice(-2) + ':' + ('0' + d.getUTCSeconds()).slice(-2) );
   }
-}
-
-// Register components
-const components = {
-  IconSelection,
-  'bf-library-button': BfLibraryButton
 }
 </script>
 

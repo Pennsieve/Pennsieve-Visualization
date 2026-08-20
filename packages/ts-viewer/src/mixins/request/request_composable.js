@@ -1,7 +1,5 @@
 // request_composable.js
 
-import {compose, defaultTo, prop, propOr, tryCatch} from "ramda";
-import {useHandleLogout} from "../logout-handler/logout_handler_composable";
 import EventBus from '@/utils/event-bus';
 
 const _isString = (x) => Object.prototype.toString.call(x) === '[object String]'
@@ -28,12 +26,12 @@ export function useSendXhr(url, opts) {
         return Promise.reject({status: 400, message: 'Url is missing!'})
     }
 
-    const method = propOr('GET', 'method', opts)
+    const method = opts?.method ?? 'GET'
 
-    const optsHeader = propOr({}, 'header', opts)
+    const optsHeader = opts?.header ?? {}
     const headers = Object.assign({}, { 'Content-type': 'application/json' }, optsHeader)
 
-    const optsBody = prop('body', opts)
+    const optsBody = opts?.body
     let requestOpts = { headers, method: method }
 
     if (optsBody) {
@@ -67,20 +65,21 @@ export function useSendXhr(url, opts) {
  * @param {ReadableStream} err.body Error body.
  */
 export function useHandleXhrError(err) {
-    const optionalStatus = prop('status', err)
-    let status
-    if (optionalStatus === undefined) {
-        // emit ajaxError
-        console.log(err)
+    const status = err?.status
+    if (status === undefined) {
+        console.error(err)
         return
-    } else {
-        status = err.status
     }
 
     if (status === 400 && err.body) {
-        err.body.getReader().read().then(({ done, value }) => {
+        err.body.getReader().read().then(({ value }) => {
             const strData = value instanceof Uint8Array ? String.fromCharCode.apply(null, value) : value
-            const errorMsg = compose(defaultTo(strData), tryCatch(compose(prop('message'), JSON.parse), (_, v) => v))(strData)
+            let errorMsg = strData
+            try {
+                errorMsg = JSON.parse(strData)?.message ?? strData
+            } catch {
+                // Not JSON; show the raw body
+            }
             EventBus.$emit('ajaxError', {
                 detail: {
                     type: 'error',
@@ -88,16 +87,20 @@ export function useHandleXhrError(err) {
                 }
             })
         })
-    } // logout
+    }
     else if (status === 401) {
-        // debugger
-        return useHandleLogout()
+        console.error('Request failed with status 401')
+        EventBus.$emit('ajaxError', {
+            detail: {
+                type: 'error',
+                msg: 'Session expired. Sign in again to continue.'
+            }
+        })
     }
     else {
         err.json().then(errorJson => {
           if (errorJson) {
             const msg = errorJson.message
-            console.log('error message is ', msg)
             EventBus.$emit('ajaxError', {
               detail: {
                 type: 'info',

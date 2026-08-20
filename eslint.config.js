@@ -14,21 +14,6 @@ export default defineConfigWithVueTs(
       "**/node_modules/**",
       "test-data/**",
       "scripts/**",
-      // Dead files scheduled for deletion in the ts-viewer cleanup (2026-08).
-      // Remove these entries with the files.
-      "packages/ts-viewer/src/mixins/logger/**",
-      "packages/ts-viewer/src/mixins/ts-annotation/**",
-      "packages/ts-viewer/src/mixins/viewer-store-mixin/**",
-      "packages/ts-viewer/src/mixins/viewer-active-tool/**",
-      "packages/ts-viewer/src/mixins/logout-handler/index.js",
-      "packages/ts-viewer/src/mixins/request/index.js",
-      "packages/ts-viewer/src/mixins/request/request.spec.js",
-      "packages/ts-viewer/src/components/TSViewer/services/**",
-      "packages/ts-viewer/src/components/TSViewer/segmentUtlis.js",
-      "packages/ts-viewer/src/components/Shared/CircleIcon/**",
-      "packages/ts-viewer/src/components/Shared/bf-library-button/BFLibraryButtonGroup.vue",
-      "packages/ts-viewer/src/components/Shared/**/*.spec.js",
-      "packages/ts-viewer/src/utils/constants.js",
     ],
   },
   js.configs.recommended,
@@ -83,18 +68,6 @@ export default defineConfigWithVueTs(
     rules: {
       "vue/no-dupe-keys": "warn",
       "no-useless-escape": "warn",
-    },
-  },
-  // Live bugs that lint found; fixes are staged in the cleanup PR. Restore
-  // no-undef to an error for these files when it lands.
-  {
-    files: [
-      "packages/ts-viewer/src/composables/useToken.js",
-      "packages/ts-viewer/src/composables/useTsAnnotation.js",
-      "packages/ts-viewer/src/mixins/logout-handler/logout_handler_composable.js",
-    ],
-    rules: {
-      "no-undef": "warn",
     },
   },
 );

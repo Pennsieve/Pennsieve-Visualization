@@ -59,9 +59,6 @@ pennsieve-visualization/
 │   ├── orthogonal/        # @pennsieve-viz/orthogonal
 │   ├── ts-viewer/         # @pennsieve-viz/tsviewer
 │   └── micro-ct/          # @pennsieve-viz/micro-ct
-├── src/                   # Dev playground app (not published)
-│   ├── store/duckdbStore.js
-│   └── main.js
 ├── pnpm-workspace.yaml
 └── package.json
 ```
@@ -130,6 +127,10 @@ pnpm --filter @pennsieve-viz/orthogonal dev:embed
 pnpm --filter @pennsieve-viz/orthogonal dev:embed
 # Terminal 2: core playground on port 5173
 pnpm dev
+
+# When editing ts-viewer source, rebuild it on change in a third terminal.
+# The playground consumes the built dist, so a refresh picks up each rebuild.
+pnpm dev:tsviewer-watch
 ```
 
 The viewer will automatically be deployed to non-prod by Jenkins when a PR is merged into main. Prod deployments are handled manually by running a service-deploy job in Jenkins.

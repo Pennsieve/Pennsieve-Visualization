@@ -4,7 +4,6 @@ import { createViewerStore } from '../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError } from "@/mixins/request/request_composable"
-import { pathOr, propOr, head } from 'ramda'
 import { annIndexOf } from '@/utils/annotationUtils'
 
 /**
@@ -22,10 +21,10 @@ export function useAnnotationData(storeInstance = null) {
 
     const getChannelId = (channel) => {
         const isViewingMontage = viewerMontageScheme.value !== 'NOT_MONTAGED'
-        let id = propOr('', 'id', channel)
+        let id = channel?.id ?? ''
         if (isViewingMontage) {
             const list = id.split('_')
-            id = list.length ? head(list) : id
+            id = list.length ? list[0] : id
         }
         return id
     }
@@ -134,8 +133,8 @@ export function useAnnotationData(storeInstance = null) {
     }
 
     const processAnnotationResponse = async (response, emit) => {
-        const linkedPackages = propOr({}, 'linkedPackages', response)
-        let resp = pathOr([], ['annotations', 'results'], response)
+        const linkedPackages = response?.linkedPackages ?? {}
+        let resp = response?.annotations?.results ?? []
 
         // Handle pagination limit
         if (resp.length >= 500) {
@@ -177,7 +176,7 @@ export function useAnnotationData(storeInstance = null) {
 
                 if (curAnn.linkedPackage) {
                     const pkgId = curAnn.linkedPackage
-                    newAnn.linkedPackage = pathOr('', ['content', 'id'], linkedPackages[pkgId])
+                    newAnn.linkedPackage = linkedPackages[pkgId]?.content?.id ?? ''
                     newAnn.linkedPackageDTO = linkedPackages[pkgId]
                 }
 

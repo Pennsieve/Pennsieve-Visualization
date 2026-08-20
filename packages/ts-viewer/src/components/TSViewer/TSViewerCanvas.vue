@@ -99,7 +99,6 @@ import {
   inject
 } from 'vue'
 import { storeToRefs } from 'pinia'
-import { find, propEq } from 'ramda'
 
 import TSPlotCanvas from "@/components/TSViewer/TSPlotCanvas.vue"
 import { createViewerStore } from "../../stores/tsviewer"
@@ -546,8 +545,6 @@ const _onMouseMove = (e) => {
   const mY = e.clientY - cCoord.top
   const mX = e.clientX - cCoord.left
 
-  // console.log('TSViewerCanvas: _onMouseMove called with tool:', viewerActiveTool.value, 'pointerMode:', pointerMode.value, 'mouseDown:', mouseDown.value)
-
   switch (viewerActiveTool.value) {
     case 'pan':
       if (mouseDown.value) {
@@ -960,7 +957,7 @@ const setFilters = (payload) => {
 
   for (let i = 0; i < payload.selChannels.length; i++) {
     let channelId = payload.selChannels[i]
-    let channel = find(propEq('id', channelId), viewerChannels.value)
+    let channel = viewerChannels.value.find(ch => ch.id === channelId)
 
     // An id with no channel row would throw below and skip the invalidate that
     // refetches the filtered signal.

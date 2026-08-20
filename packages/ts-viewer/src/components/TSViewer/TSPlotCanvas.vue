@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { computed, watch, onMounted, onUnmounted, reactive, ref, nextTick, inject } from 'vue'
+import { computed, watch, onMounted, onUnmounted, reactive, ref, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore } from '../../stores/tsviewer'
 import { useTimeseriesTransport } from '@/composables/useTimeseriesTransport'
@@ -188,98 +188,39 @@ const computedRsPeriod = computed(() => {
 
   // Calculate from viewport as fallback
   if (viewport.duration > 0 && viewport.cWidth > 0) {
-    const calculated = viewport.duration / viewport.cWidth
-    // console.log('📐 Calculated rsPeriod locally:', calculated)
-    return calculated
+    return viewport.duration / viewport.cWidth
   }
 
   // Safe fallback
-  console.warn('⚠️ Using fallback rsPeriod = 1')
+  console.warn('Using fallback rsPeriod = 1')
   return 1
 })
 
-// ✅ NEW: Watch for rsPeriod changes and update requestedSamplePeriod validation
 watch(computedRsPeriod, (newRsPeriod) => {
   if (newRsPeriod > 0) {
     updateCurrentRequestedSamplePeriod(newRsPeriod)
-    // console.log('🎯 Updated requestedSamplePeriod validation for rsPeriod:', newRsPeriod)
   }
 }, { immediate: true })
 
 // Main methods (from original) - Define these first before throttled functions
 const renderDataInternal = () => {
-  // console.log('🎨 renderDataInternal ENTRY')
-
   try {
     if (!channelsReady.value) {
       return
     }
-
-    // console.log('📊 Render state check:', {
-    //   channelsReady: channelsReady.value,
-    //   viewDataChannelsCount: viewData.channels.length,
-    //   viewerChannelsCount: viewerChannels.value?.length || 0,
-    //   pixelRatio: pixelRatio.value
-    // })
 
     // Update visible channel count
     viewport.nrVisibleChannels = viewerChannels.value?.reduce((count, ch) => {
       return ch.visible ? count + 1 : count
     }, 0) || 0
 
-    // console.log('👁️ Visible channels:', viewport.nrVisibleChannels)
-
-    // Check what data is available for rendering
-    let totalDataBlocks = 0
-    let channelsWithData = 0
-
-    // console.log('📋 Checking viewData.channels:')
-    viewData.channels.forEach((ch, idx) => {
-      const blocks = ch.blocks || []
-      const dataPoints = blocks.reduce((sum, b) => sum + (b.nrPoints || 0), 0)
-
-      if (blocks.length > 0) {
-        channelsWithData++
-        totalDataBlocks += blocks.length
-
-        // console.log(`  📊 Channel ${idx} (${ch.id}):`, {
-        //   blocks: blocks.length,
-        //   dataPoints: dataPoints,
-        //   blockTypes: blocks.map(b => b.type),
-        //   firstBlockRange: blocks[0] ? { start: blocks[0].startTs, points: blocks[0].nrPoints } : null
-        // })
-      } else {
-        // console.log(`  ⚠️ Channel ${idx} (${ch.id}): NO DATA`)
-      }
-    })
-
-    // console.log('📈 RENDER SUMMARY:', {
-    //   totalChannelsWithData: channelsWithData,
-    //   totalDataBlocks: totalDataBlocks,
-    //   viewport: {
-    //     start: viewport.start,
-    //     duration: viewport.duration,
-    //     width: viewport.cWidth,
-    //     height: viewport.cHeight,
-    //     nrVisibleChannels: viewport.nrVisibleChannels
-    //   }
-    // })
+    const channelsWithData = viewData.channels.reduce((count, ch) => {
+      return (ch.blocks || []).length > 0 ? count + 1 : count
+    }, 0)
 
     if (channelsWithData === 0) {
-      // console.warn('❌ NO DATA TO RENDER - all channels empty')
       return
     }
-
-    // console.log('🖼️ Checking canvas refs:', {
-    //   plotCanvasRef: !!plotCanvasRef.value,
-    //   blurCanvasRef: !!blurCanvasRef.value
-    // })
-
-    // console.log('✅ CALLING renderData with:', {
-    //   channelsWithData: channelsWithData,
-    //   constantsKeys: Object.keys(props.constants),
-    //   globalZoomMult: props.globalZoomMult
-    // })
 
     renderData(
       viewData,
@@ -290,76 +231,39 @@ const renderDataInternal = () => {
       pixelRatio.value
     )
 
-    // console.log('🎨 RENDER COMPLETE')
-
   } catch (error) {
-    console.error('💥 ERROR in renderDataInternal:', error)
-    console.error('💥 Stack trace:', error.stack)
+    console.error('renderDataInternal failed:', error)
   }
 }
 
 const PrefetchInterval = ref()
+// Sweeps page requests whose responses never arrived, so a lost response
+// cannot leave a page permanently pending.
 const monitorPrefetchActivity = () => {
   PrefetchInterval.value = setInterval(() => {
     if (!channelsReady.value) return
 
-    const stats = {
-      timestamp: new Date().toISOString(),
-      requestedPagesSize: requestedPages.value.size,
-      isPrefetching: isPrefetching.value,
-      pendingAsyncRequests: aSyncRequests.value.length,
-      pendingPreRequests: aSyncPreRequests.value.length,
-      currentMontage: viewerMontageScheme.value,
-      channelCount: viewerChannels.value?.length || 0,
-      visibleChannelCount: viewerChannels.value?.filter(ch => ch.visible).length || 0,
-      connectionStatus: connectionStatus.value,
-      requestedPages: Array.from(requestedPages.value.entries()).map(([pageStart, info]) => ({
+    const STUCK_REQUEST_TIMEOUT = 10000
+    const now = Date.now()
+    const stuckPages = Array.from(requestedPages.value.entries())
+      .filter(([, info]) => now - info.ts > STUCK_REQUEST_TIMEOUT)
+
+    if (stuckPages.length > 0) {
+      console.warn('Cleaning up stuck page requests:', stuckPages.map(([pageStart, info]) => ({
         pageStart,
-        channelCount: info.count,
-        inViewport: info.inViewport,
-        age: Date.now() - info.ts,
-        channels: info.channels?.map(ch => ch.id) || Array.from(info.counter.keys())
-      }))
-    }
-
-    // console.log('📊 Prefetch Monitor:', stats)
-
-    // Check for stuck requests (older than 10 seconds) and clean them up
-    const STUCK_REQUEST_TIMEOUT = 10000 // 10 seconds
-    const stuckRequests = stats.requestedPages.filter(page => page.age > STUCK_REQUEST_TIMEOUT)
-    
-    if (stuckRequests.length > 0) {
-      console.warn('⚠️ Detected stuck requests, cleaning up:', stuckRequests.map(req => ({
-        pageStart: req.pageStart,
-        age: Math.round(req.age / 1000) + 's',
-        channels: req.channels
+        age: Math.round((now - info.ts) / 1000) + 's'
       })))
-      
-      // Clean up stuck requests
-      stuckRequests.forEach(req => {
-        requestedPages.value.delete(req.pageStart)
+
+      stuckPages.forEach(([pageStart]) => {
+        requestedPages.value.delete(pageStart)
       })
-      
+
       // Decrement stale counter to allow retries
       if (staleDataCounter.value > 0) {
         staleDataCounter.value = Math.max(0, staleDataCounter.value - 1)
       }
     }
-
-    // Check if prefetch is blocked
-    if (stats.pendingPreRequests > 0 && !stats.isPrefetching) {
-      console.warn('⚠️ Prefetch is blocked with pending requests:', {
-        pendingPreRequests: stats.pendingPreRequests,
-        requestedPagesSize: stats.requestedPagesSize
-      })
-    }
-
-  }, 5000) // Log every 5 seconds
-
-  // Clear interval on unmount
-  // onUnmounted(() => {
-  //   clearInterval(interval)
-  // })
+  }, 5000)
 }
 
 const generateAndProcessRequests = async () => {
@@ -400,7 +304,7 @@ const generateAndProcessRequests = async () => {
   // Check for ANY rsPeriod change (any resolution change makes pending requests stale)
   if (lastRequestedSamplePeriod.value !== null && currentRequestedSamplePeriod !== lastRequestedSamplePeriod.value) {
     shouldDumpBuffer = true
-    dumpReason = `rsPeriod changed: ${lastRequestedSamplePeriod.value} → ${currentRequestedSamplePeriod} (resolution change)`
+    dumpReason = `rsPeriod changed: ${lastRequestedSamplePeriod.value} -> ${currentRequestedSamplePeriod} (resolution change)`
   }
 
   // Check for large time jump
@@ -429,7 +333,7 @@ const generateAndProcessRequests = async () => {
     dumpReason = `High stale data rate: ${staleDataCounter.value} consecutive stale segments`
   }
 
-  // ✅ RACE CONDITION PROTECTION: Only one dump at a time
+  // Only one dump at a time
   if (shouldDumpBuffer && !isDumpingBuffer.value) {
     isDumpingBuffer.value = true
 
@@ -468,8 +372,7 @@ const generateAndProcessRequests = async () => {
   const userToken = await resolveUserToken()
 
   if (requests.asyncRequests.length > 0) {
-    // console.log('📤 Making requests with currentRequestedSamplePeriod:', currentRequestedSamplePeriod)
-    const success = requestDataFromServer(
+    requestDataFromServer(
       requests.asyncRequests,
       0,
       websocket.value,
@@ -493,15 +396,12 @@ const renderAll = () => {
 }
 
 const renderDataOnMessage = () => {
-  // console.log('🔄 renderDataOnMessage called')
   generateAndProcessRequests()
 
   if (autoScale.value === 0) {
     autoScale.value--
-    // console.log('🎯 Triggering auto scale')
     handleAutoScale()
   } else {
-    // console.log('🎨 Calling renderDataInternal')
     renderDataInternal()
   }
 }
@@ -522,34 +422,28 @@ const throttledGetRenderData = createThrottle(renderDataOnMessage, 100)
 const throttledDataRender = createThrottle(() => renderAll(), 50)
 
 // Watchers (from original)
-watch(() => props.rsPeriod, (newRsPeriod, oldRsPeriod) => {
-  // console.log('🔄 rsPeriod prop changed:', { old: oldRsPeriod, new: newRsPeriod })
-
+watch(() => props.rsPeriod, (newRsPeriod) => {
   if (newRsPeriod > 0) {
     updateCurrentRequestedSamplePeriod(newRsPeriod)
   }
 
   invalidate()
   requestedPages.value.clear()
-  // console.log('✅ rsPeriod change - cleared caches and updated requestedSamplePeriod validation')
 })
 
-watch(() => props.duration, (newDuration, oldDuration) => {
-  // console.log('🔄 Duration changed:', { old: oldDuration, new: newDuration })
-
+watch(() => props.duration, () => {
   // Only clear caches, don't reject responses
-  invalidate()  // This clears chData segments + viewData blocks
-  // console.log('✅ Duration change - invalidated data caches only')
+  invalidate()
 })
 
 watch(() => viewerMontageScheme.value, (newScheme) => {
 
   if (!websocket.value || websocket.value.readyState !== 1) {
-    console.warn('Cannot switch montage — WebSocket not connected')
+    console.warn('Cannot switch montage: WebSocket not connected')
     return
   }
 
-  // Flag that we're transitioning — silently discard stale in-flight responses
+  // Flag the transition so stale in-flight responses are discarded
   isSwitchingMontage.value = true
 
   // Clear all pending requests and data
@@ -572,7 +466,7 @@ watch(() => viewerMontageScheme.value, (newScheme) => {
   if (montagePayload) {
     send(montagePayload)
   } else {
-    // Montage not found in workspace montages — abort transition
+    // Montage not found in workspace montages: abort the transition
     console.warn('Montage definition not found for:', newScheme)
     isSwitchingMontage.value = false
   }
@@ -590,20 +484,9 @@ watch(() => [props.start, props.duration, props.cWidth, props.cHeight, props.rsP
 
 // WebSocket event handlers
 onSegment((segmentData) => {
-  // 🔍 ADD MONITORING LOGIC HERE (before existing logic)
   const isOutsideViewport = segmentData.pageStart >= (props.start + props.duration)
 
   if (isOutsideViewport) {
-    // console.log('📦 Prefetch data received:', {
-    //   pageStart: segmentData.pageStart,
-    //   channelId: segmentData.data?.chId || segmentData.data?.source,
-    //   channelName: segmentData.data?.label || segmentData.data?.name,
-    //   type: segmentData.type,
-    //   nrPoints: segmentData.data?.nrPoints,
-    //   viewportStart: props.start,
-    //   viewportEnd: props.start + props.duration
-    // })
-
     prefetchStats.value.totalRequests++
     if (viewerMontageScheme.value !== 'NOT_MONTAGED') {
       prefetchStats.value.montageRequests++
@@ -630,16 +513,8 @@ onSegment((segmentData) => {
 })
 
 onEvent((eventData) => {
-  // console.log('✅ REQUEST SUCCESS - Received event:', {
-  //   pageStart: eventData.pageStart,
-  //   channelId: eventData.data.chId || eventData.data.source,
-  //   dataType: eventData.type,
-  //   nrResponses: eventData.nrResponses
-  // })
-
   if (!isDataCurrentForViewport(eventData.data)) {
     staleDataCounter.value++
-    // console.log(`🗑️ Discarding stale event (${staleDataCounter.value}/5)`)
     return
   }
 
@@ -647,13 +522,12 @@ onEvent((eventData) => {
   dataCallback(eventData)
 
   if (eventData.pageStart < (props.start + props.duration)) {
-    // console.log('🎯 Event in viewport - triggering render')
     throttledGetRenderData()
   }
 })
 
 onChannelDetails((channelDetails) => {
-  // Montage transition complete — new channels are here, accept data again
+  // Montage transition complete: new channels are here, accept data again
   isSwitchingMontage.value = false
 
   try {

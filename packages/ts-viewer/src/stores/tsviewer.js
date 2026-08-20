@@ -1,7 +1,6 @@
 // @/stores/tsviewer.js
 import { defineStore } from 'pinia'
 import { ref, computed, reactive } from 'vue'
-import { propEq, findIndex } from 'ramda'
 import { useToken } from '@/composables/useToken'
 import { useChannelDataRequest } from '@/composables/useChannelDataRequest';
 import { acquireClient, ensureCatalog, disposeClient } from '@/composables/streaming/clientRegistry'
@@ -202,9 +201,8 @@ export function createViewerStore(instanceId = 'default') {
       disposeClient(`tsviewer-${instanceId}`)
 
       const token = await useToken();
-      let urlSegment = config.timeseriesDiscoverApi
-      let channelData = null;
-      channelData = await openConnection(urlSegment, id, token, idType, viewerAssetId ? packageId : null)
+      const urlSegment = config.timeseriesDiscoverApi
+      const channelData = await openConnection(urlSegment, id, token, idType, viewerAssetId ? packageId : null)
       setActiveViewer({ channels: channelData.res, content })
     }
 
@@ -254,7 +252,7 @@ export function createViewerStore(instanceId = 'default') {
         viewerAnnotations.value.forEach(annotation => annotation.selected = false)
 
         // Find and select the target layer
-        const layerIndex = findIndex(propEq('id', layerId), viewerAnnotations.value)
+        const layerIndex = viewerAnnotations.value.findIndex(l => l.id === layerId)
         if (layerIndex >= 0) {
             viewerAnnotations.value[layerIndex].selected = true
         } else {
@@ -270,9 +268,9 @@ export function createViewerStore(instanceId = 'default') {
 
         // Set the new active annotation as selected if it has an ID
         if (annotation.id) {
-            const layerIndex = findIndex(propEq('id', annotation.layer_id), viewerAnnotations.value)
+            const layerIndex = viewerAnnotations.value.findIndex(l => l.id === annotation.layer_id)
             if (layerIndex >= 0) {
-                const annotationIndex = findIndex(propEq('id', annotation.id), viewerAnnotations.value[layerIndex].annotations)
+                const annotationIndex = viewerAnnotations.value[layerIndex].annotations.findIndex(a => a.id === annotation.id)
                 if (annotationIndex >= 0) {
                     viewerAnnotations.value[layerIndex].annotations[annotationIndex].selected = true
                 }
@@ -314,7 +312,7 @@ export function createViewerStore(instanceId = 'default') {
 
 
     const updateLayer = (layerData) => {
-        const index = findIndex(propEq('id', layerData.id), viewerAnnotations.value)
+        const index = viewerAnnotations.value.findIndex(l => l.id === layerData.id)
         if (index >= 0) {
             const updatedLayer = Object.assign(viewerAnnotations.value[index], layerData)
             viewerAnnotations.value[index] = updatedLayer
@@ -322,14 +320,14 @@ export function createViewerStore(instanceId = 'default') {
     }
 
     const deleteLayer = (layerData) => {
-        const index = findIndex(propEq('id', layerData.id), viewerAnnotations.value)
+        const index = viewerAnnotations.value.findIndex(l => l.id === layerData.id)
         if (index >= 0) {
             viewerAnnotations.value.splice(index, 1)
         }
     }
 
     const createAnnotation = (annotation) => {
-        const layerIndex = findIndex(propEq('id', annotation.layer_id), viewerAnnotations.value)
+        const layerIndex = viewerAnnotations.value.findIndex(l => l.id === annotation.layer_id)
         if (layerIndex >= 0) {
             if (!viewerAnnotations.value[layerIndex].annotations) {
                 viewerAnnotations.value[layerIndex].annotations = []
@@ -340,10 +338,10 @@ export function createViewerStore(instanceId = 'default') {
     }
 
     const updateAnnotation = (annotation) => {
-        const layerIndex = findIndex(propEq('id', annotation.layer_id), viewerAnnotations.value)
+        const layerIndex = viewerAnnotations.value.findIndex(l => l.id === annotation.layer_id)
         if (layerIndex >= 0) {
             const annotations = viewerAnnotations.value[layerIndex].annotations
-            const annotationIndex = findIndex(propEq('id', annotation.id), annotations)
+            const annotationIndex = annotations.findIndex(a => a.id === annotation.id)
             if (annotationIndex >= 0) {
                 annotations[annotationIndex] = annotation
             }
@@ -351,10 +349,10 @@ export function createViewerStore(instanceId = 'default') {
     }
 
     const deleteAnnotation = (annotation) => {
-        const layerIndex = findIndex(propEq('id', annotation.layer_id), viewerAnnotations.value)
+        const layerIndex = viewerAnnotations.value.findIndex(l => l.id === annotation.layer_id)
         if (layerIndex >= 0) {
             const annotations = viewerAnnotations.value[layerIndex].annotations
-            const annotationIndex = findIndex(propEq('id', annotation.id), annotations)
+            const annotationIndex = annotations.findIndex(a => a.id === annotation.id)
             if (annotationIndex >= 0) {
                 annotations.splice(annotationIndex, 1)
             }

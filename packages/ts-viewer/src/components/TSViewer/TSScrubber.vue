@@ -19,7 +19,6 @@
           <canvas id="iCanvas" class="canvas" ref="iCanvas"
                   :width="_cpCanvasScaler(cWidth, pixelRatio, 0)"
                   :height="_cpCanvasScaler(viewportHeight, pixelRatio, 0)"
-                  @click="_onTap"
                   @mousemove="_onMouseMove"
                   @mousedown="_onMouseDown"
                   @mouseup="_onMouseUp"
@@ -39,7 +38,6 @@ import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import { getClient } from "@/composables/streaming/clientRegistry"
 import { isZarrAssetType } from "@/composables/streaming/assetTypes"
-import { map } from 'ramda'
 
 // Props
 const props = defineProps({
@@ -262,13 +260,6 @@ const getUTCDateString = (d, s, c) => {
 }
 
 // Mouse Interactions
-// const _onTap = (e) => {
-//   const cCoord = iCanvas.value.getBoundingClientRect()
-//   const cClickOffset = e.clientX - cCoord.left
-//   const realStart = (cClickOffset / scrubberCWidth.value) * (props.ts_end - props.ts_start)
-//   emit('setStart', realStart + props.ts_start)
-// }
-
 const _onMouseMove = (e) => {
   if (!mouseDown.value) {
     const cCoord = iCanvas.value.getBoundingClientRect()
@@ -546,7 +537,7 @@ const getAnnotations = async () => {
 
   try {
     const token = await useToken()
-    const layerIds = map(obj => obj.id, viewerStore.viewerAnnotations)
+    const layerIds = viewerStore.viewerAnnotations.map(obj => obj.id)
     const endTime = props.ts_end
     const baseUrl = `${viewerStore.config.apiUrl}/timeseries/${currentViewerId}/annotations/window`
     let url = baseUrl + `?api_key=${token}&aggregation=count&start=${props.ts_start}&end=${props.ts_end}&period=${period.value}&mergePeriods=true`

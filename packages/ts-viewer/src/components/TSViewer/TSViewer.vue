@@ -142,11 +142,6 @@ import {
   provide
 } from 'vue'
 import { storeToRefs } from 'pinia'
-import {
-  propOr,
-  isEmpty
-} from 'ramda'
-
 import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
 import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
@@ -620,8 +615,6 @@ const onAnnLayersInitialized = () => {
 }
 
 const onChannelsInitialized = () => {
-  // console.log('update scrubber')
-
 }
 
 const onPageBack = () => {
@@ -766,14 +759,14 @@ const openLayerWindow = (payload) => {
 }
 
 const openFilterWindow = (payload) => {
-  const channels = propOr([], 'channels', payload)
-  const filter = propOr('', 'filter', payload)
+  const channels = payload?.channels ?? []
+  const filter = payload?.filter ?? null
   const filterWindowRef = filterWindow.value
   if (!filterWindowRef) return
 
   filterWindowRef.onChannels = channels
 
-  if (!isEmpty(filter)) {
+  if (filter && Object.keys(filter).length > 0) {
     filterWindowRef.input0 = filter.input0
     filterWindowRef.input1 = filter.input1
   } else {
@@ -804,7 +797,7 @@ onMounted(() => {
     return
   }
 
-  var style = window.getComputedStyle(element, null)
+  const style = window.getComputedStyle(element, null)
   const hhh = parseInt(style.getPropertyValue('height'))
 
   const toolbarOffset = props.isPreview ? 0 : 100
