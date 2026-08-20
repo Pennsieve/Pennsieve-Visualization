@@ -23,11 +23,10 @@ export const TIMESERIES_WEBSOCKET = 'timeseries'
  *
  * Anything else -- including an absent type, and including `timeseries` -- routes to the
  * legacy WebSocket, so an unrecognized or newly-invented asset type degrades to the old
- * behaviour rather than failing.
+ * behavior rather than failing.
  *
- * @param {?string} assetType Raw `asset_type` from the viewer-asset record.
- * @returns {boolean}
+ * @param assetType Raw `asset_type` from the viewer-asset record.
  */
-export function isZarrAssetType(assetType) {
+export function isZarrAssetType(assetType: string | null | undefined): boolean {
     return assetType === TIMESERIES_ZARR
 }

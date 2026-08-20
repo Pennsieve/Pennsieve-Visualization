@@ -1,5 +1,6 @@
 import './assets/styles.scss';
 
+import type { App } from 'vue';
 import TSViewer from './components/TSViewer/TSViewer.vue';
 import {
   createViewerStore,
@@ -30,7 +31,7 @@ export {
 export { TIMESERIES_ZARR, TIMESERIES_WEBSOCKET, isZarrAssetType };
 
 export default {
-  install(app) {
+  install(app: App) {
     app.component('TSViewer', TSViewer);
   },
 };
