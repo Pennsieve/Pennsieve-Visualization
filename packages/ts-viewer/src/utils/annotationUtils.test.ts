@@ -158,36 +158,33 @@ describe('annIndexOf over start times', () => {
         expect(annIndexOf(annotations, 40, false)).toBe(4)
     })
 
-    it('returns 0 for an empty array', () => {
-        expect(annIndexOf([], 42, true)).toBe(0)
-        expect(annIndexOf([], 42, false)).toBe(0)
+    it('reports no match for an empty array', () => {
+        expect(annIndexOf([], 42, true)).toBe(-1)
+        expect(annIndexOf([], 42, false)).toBe(-1)
     })
 
-    it('returns 0 for a value below every start time', () => {
-        expect(annIndexOf(annotations, 5, true)).toBe(0)
-        expect(annIndexOf(annotations, 5, false)).toBe(0)
+    it('reports nothing preceding a value below every start time', () => {
+        expect(annIndexOf(annotations, 5, true)).toBe(-1)
+        expect(annIndexOf(annotations, 5, false)).toBe(-1)
     })
 
-    it('returns an index one short of the predecessor for a value between two start times', () => {
-        // pins current behavior; see report. Start 25 sits between index 1 (start 20)
-        // and index 2 (start 30), and the negative-index decoding reports 0.
-        expect(annIndexOf(annotations, 25, true)).toBe(0)
-        expect(annIndexOf(annotations, 25, false)).toBe(0)
+    it('returns the preceding index for a value between two start times', () => {
+        // Start 25 sits between index 1 (start 20) and index 2 (start 30).
+        expect(annIndexOf(annotations, 25, true)).toBe(1)
+        expect(annIndexOf(annotations, 25, false)).toBe(1)
     })
 
-    it('returns an index one short of the last element for a value above every start time', () => {
-        // pins current behavior; see report
-        expect(annIndexOf(annotations, 100, true)).toBe(3)
-        expect(annIndexOf(annotations, 100, false)).toBe(3)
+    it('returns the last index for a value above every start time', () => {
+        expect(annIndexOf(annotations, 100, true)).toBe(4)
+        expect(annIndexOf(annotations, 100, false)).toBe(4)
     })
 
     it('searches from startAtIndex when one is given', () => {
         expect(annIndexOf(annotations, 40, true, 3)).toBe(4)
     })
 
-    it('can report an index below startAtIndex when the value is out of that range', () => {
-        // pins current behavior; see report
-        expect(annIndexOf(annotations, 5, true, 3)).toBe(1)
+    it('never reports an index below startAtIndex', () => {
+        expect(annIndexOf(annotations, 5, true, 3)).toBe(-1)
     })
 
     it('handles a single element array', () => {
@@ -195,7 +192,7 @@ describe('annIndexOf over start times', () => {
         expect(annIndexOf(single, 10, true)).toBe(0)
         expect(annIndexOf(single, 10, false)).toBe(0)
         expect(annIndexOf(single, 50, true)).toBe(0)
-        expect(annIndexOf(single, 5, true)).toBe(0)
+        expect(annIndexOf(single, 5, true)).toBe(-1)
     })
 })
 
@@ -225,22 +222,20 @@ describe('annIndexOf over end times', () => {
         expect(annIndexOf(duplicates, 200, false, 0, true)).toBe(2)
     })
 
-    it('returns 0 for an empty array', () => {
-        expect(annIndexOf([], 5, true, 0, true)).toBe(0)
+    it('reports no match for an empty array', () => {
+        expect(annIndexOf([], 5, true, 0, true)).toBe(-1)
     })
 
-    it('returns 0 for a value below every end time', () => {
-        expect(annIndexOf(annotations, 1, true, 0, true)).toBe(0)
+    it('reports nothing preceding a value below every end time', () => {
+        expect(annIndexOf(annotations, 1, true, 0, true)).toBe(-1)
     })
 
-    it('returns an index one short of the predecessor for a value between two end times', () => {
-        // pins current behavior; see report
+    it('returns the preceding index for a value between two end times', () => {
         expect(annIndexOf(annotations, 120, true, 0, true)).toBe(0)
     })
 
-    it('returns an index one short of the last element for a value above every end time', () => {
-        // pins current behavior; see report
-        expect(annIndexOf(annotations, 999, false, 0, true)).toBe(1)
+    it('returns the last index for a value above every end time', () => {
+        expect(annIndexOf(annotations, 999, false, 0, true)).toBe(2)
     })
 })
 

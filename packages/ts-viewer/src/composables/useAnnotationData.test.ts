@@ -497,25 +497,22 @@ describe('findNextAnnotation', () => {
         expect(findNextAnnotation(20)?.id).toBe('c')
     })
 
-    it('returns an earlier annotation for a time in a later gap', () => {
-        // pins current behavior; see report
+    it('returns the next annotation for a time in a gap', () => {
         const { findNextAnnotation } = useAnnotationData(freshStore([spaced()]))
 
-        expect(findNextAnnotation(25)?.id).toBe('b')
+        expect(findNextAnnotation(25)?.id).toBe('c')
     })
 
-    it('returns the last annotation for a time after them all', () => {
-        // pins current behavior; see report
+    it('returns null for a time after them all', () => {
         const { findNextAnnotation } = useAnnotationData(freshStore([spaced()]))
 
-        expect(findNextAnnotation(100)?.id).toBe('c')
+        expect(findNextAnnotation(100)).toBeNull()
     })
 
-    it('returns the last annotation when the current time is its own start', () => {
-        // pins current behavior; see report
+    it('returns null when the current time is the last annotation start', () => {
         const { findNextAnnotation } = useAnnotationData(freshStore([spaced()]))
 
-        expect(findNextAnnotation(30)?.id).toBe('c')
+        expect(findNextAnnotation(30)).toBeNull()
     })
 
     it('returns null when the active layer holds no annotations', () => {
@@ -550,18 +547,16 @@ describe('findPreviousAnnotation', () => {
         expect(findPreviousAnnotation(30)?.id).toBe('b')
     })
 
-    it('returns the first annotation for a time before them all', () => {
-        // pins current behavior; see report
+    it('returns null for a time before them all', () => {
         const { findPreviousAnnotation } = useAnnotationData(freshStore([spaced()]))
 
-        expect(findPreviousAnnotation(5)?.id).toBe('a')
+        expect(findPreviousAnnotation(5)).toBeNull()
     })
 
-    it('skips past the closest earlier annotation for a time in a later gap', () => {
-        // pins current behavior; see report
+    it('returns the closest earlier annotation for a time in a gap', () => {
         const { findPreviousAnnotation } = useAnnotationData(freshStore([spaced()]))
 
-        expect(findPreviousAnnotation(35)?.id).toBe('b')
+        expect(findPreviousAnnotation(35)?.id).toBe('c')
     })
 
     it('returns null when the active layer holds no annotations', () => {

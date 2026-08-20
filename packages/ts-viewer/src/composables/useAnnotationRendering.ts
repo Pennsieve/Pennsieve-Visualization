@@ -310,7 +310,9 @@ export function useAnnotationRendering(storeInstance: ViewerStore | null = null)
         // Populate render array from visible layers
         for (const curLayer of viewerAnnotations.value) {
             if (curLayer.visible && curLayer.annotations?.length > 0) {
-                // Instead of relying on annIndexOf which might be buggy, use simple filtering
+                // A scan, not a binary search: an annotation starting before the
+                // viewport can still overlap it, so start order alone cannot
+                // bound the search.
                 const annotationsInViewport = curLayer.annotations.filter(ann => {
 
                     const annStart = ann.start
