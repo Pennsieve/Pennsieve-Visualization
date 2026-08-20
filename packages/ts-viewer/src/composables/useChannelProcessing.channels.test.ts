@@ -430,15 +430,19 @@ describe('createMontagePayload', () => {
         expect(createMontagePayload('DOUBLE_BANANA')).toMatchObject({ montage: 'CUSTOM_MONTAGE' })
     })
 
-    it('throws for a custom scheme when the active viewer carries no content', () => {
-        // pins current behavior; see report. The store's activeViewer starts as {},
-        // and TSPlotCanvas casts it to the shape this composable declares.
+    it('reports an undefined package id for a custom scheme when the active viewer carries no content', () => {
+        // The store's activeViewer starts as {}, and TSPlotCanvas casts it to the
+        // shape this composable declares.
         const activeViewer = ref({} as unknown as { content: { id: string } })
         const { createMontagePayload } = useChannelProcessing(
             ref(undefined), ref('DOUBLE_BANANA'), ref([doubleBanana]), activeViewer
         )
 
-        expect(() => createMontagePayload('DOUBLE_BANANA')).toThrow(TypeError)
+        expect(createMontagePayload('DOUBLE_BANANA')).toEqual({
+            montage: 'CUSTOM_MONTAGE',
+            packageId: undefined,
+            montageMap: [['Fp1', 'F7'], ['F7', 'T3'], ['T3'], ['T3', 'T5', 'O1']]
+        })
         expect(createMontagePayload('NOT_MONTAGED')).toMatchObject({ montage: 'NOT_MONTAGED' })
     })
 })

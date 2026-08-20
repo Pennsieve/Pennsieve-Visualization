@@ -102,9 +102,10 @@ export function useViewerControls(instanceId = 'default') {
     }
 
     /**
-     * Get an annotation by ID
+     * Get an annotation by ID. Ids are matched exactly, so a numeric id does not
+     * match its string form.
      */
-    const getAnnotation = (annotationId: string): Annotation | undefined => {
+    const getAnnotation = (annotationId: number | string): Annotation | undefined => {
         return viewerStore.getAnnotationById(annotationId)
     }
 
@@ -216,7 +217,7 @@ export function useViewerControls(instanceId = 'default') {
     /**
      * Select an annotation by ID
      */
-    const selectAnnotation = (annotationId: string) => {
+    const selectAnnotation = (annotationId: number | string) => {
         const annotation = viewerStore.getAnnotationById(annotationId)
         if (annotation) {
             viewerStore.setActiveAnnotation(annotation)
@@ -226,14 +227,14 @@ export function useViewerControls(instanceId = 'default') {
     /**
      * Set the active annotation layer
      */
-    const setActiveLayer = (layerId: string) => {
+    const setActiveLayer = (layerId: number | string) => {
         viewerStore.setActiveAnnotationLayer(layerId)
     }
 
     /**
      * Toggle annotation layer visibility
      */
-    const toggleLayerVisibility = (layerId: string) => {
+    const toggleLayerVisibility = (layerId: number | string) => {
         const layer = viewerAnnotations.value.find(l => l.id === layerId)
         if (layer) {
             layer.visible = !layer.visible

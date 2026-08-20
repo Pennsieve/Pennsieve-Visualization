@@ -44,14 +44,6 @@ const annotation = (
     extra: Partial<Annotation> = {}
 ): Annotation => ({ id, layer_id: layerId, start: 0, duration: 10, ...extra })
 
-// The layer controls narrow their layer id to string, while store layers carry
-// number | string ids. These wrappers call them with the ids the store holds.
-const setActiveLayer = (controls: Controls, layerId: number | string) =>
-    (controls.setActiveLayer as (id: number | string) => void)(layerId)
-
-const toggleLayerVisibility = (controls: Controls, layerId: number | string) =>
-    (controls.toggleLayerVisibility as (id: number | string) => void)(layerId)
-
 let instance = 0
 /** Controls plus the store behind them, both for a never-before-used instance id. */
 const freshControls = (): { controls: Controls; store: ViewerStore } => {
@@ -202,6 +194,13 @@ describe('state queries', () => {
         const { controls } = populated()
 
         expect(controls.getAnnotation('ghost')).toBeUndefined()
+    })
+
+    it('returns an annotation whose id is a number', () => {
+        const { controls, store } = freshControls()
+        store.setAnnotations([layer(1, { annotations: [annotation(42, 1)] })])
+
+        expect(controls.getAnnotation(42)!.layer_id).toBe(1)
     })
 
     it('returns the selected annotation layer', () => {
@@ -403,16 +402,26 @@ describe('annotation controls', () => {
         expect(store.activeAnnotation.id).toBe('a1')
     })
 
+    it('makes an annotation with a numeric id the active one', () => {
+        const { controls, store } = freshControls()
+        store.setAnnotations([layer(1, { annotations: [annotation(42, 1)] })])
+
+        controls.selectAnnotation(42)
+
+        expect(store.activeAnnotation.id).toBe(42)
+        expect(store.viewerAnnotations[0].annotations[0].selected).toBe(true)
+    })
+
     it('sets the active annotation layer', () => {
         const { controls, store } = populated()
 
-        setActiveLayer(controls, 2)
+        controls.setActiveLayer(2)
 
         expect(store.activeAnnotationLayer).toBe(2)
         expect(controls.getActiveLayer()!.id).toBe(2)
     })
 
-    it('accepts a string layer id as its signature declares', () => {
+    it('accepts a string layer id', () => {
         const { controls, store } = freshControls()
         store.setAnnotations([layer('seizures'), layer('spikes')])
 
@@ -421,12 +430,11 @@ describe('annotation controls', () => {
         expect(controls.getActiveLayer()!.id).toBe('spikes')
     })
 
-    it('accepts a numeric layer id at runtime although the signature narrows it to string', () => {
-        // pins current behavior; see report
+    it('accepts a numeric layer id', () => {
         const { controls, store } = populated()
 
-        setActiveLayer(controls, 1)
-        toggleLayerVisibility(controls, 1)
+        controls.setActiveLayer(1)
+        controls.toggleLayerVisibility(1)
 
         expect(store.activeAnnotationLayer).toBe(1)
         expect(store.viewerAnnotations[0].visible).toBe(false)
@@ -435,12 +443,12 @@ describe('annotation controls', () => {
     it('toggles layer visibility and asks for a rerender', () => {
         const { controls, store } = populated()
 
-        toggleLayerVisibility(controls, 1)
+        controls.toggleLayerVisibility(1)
 
         expect(store.viewerAnnotations[0].visible).toBe(false)
         expect(store.needsRerender!.cause).toBe('layer-visibility')
 
-        toggleLayerVisibility(controls, 1)
+        controls.toggleLayerVisibility(1)
 
         expect(store.viewerAnnotations[0].visible).toBe(true)
     })
@@ -448,7 +456,7 @@ describe('annotation controls', () => {
     it('does nothing and asks for no rerender for an unknown layer id', () => {
         const { controls, store } = populated()
 
-        toggleLayerVisibility(controls, 99)
+        controls.toggleLayerVisibility(99)
 
         expect(store.needsRerender).toBeNull()
         expect(store.viewerAnnotations.every(l => l.visible)).toBe(true)

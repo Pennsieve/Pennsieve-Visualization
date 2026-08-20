@@ -183,32 +183,69 @@ describe('loadLayers', () => {
         expect(emit).not.toHaveBeenCalled()
     })
 
-    it('creates no default layer when the server reports an empty layer list', async () => {
-        // pins current behavior; see report
+    it('creates a default layer when the server reports an empty layer list', async () => {
         const store = freshStore()
-        respond = () => jsonResponse({ results: [] })
+        // The GET is recorded before respond runs, so the second call is the POST.
+        respond = () => requests.length === 1
+            ? jsonResponse({ results: [] })
+            : jsonResponse({ id: 99, name: 'Default', color: '#18BA62', description: 'Default Annotation Layer' })
         const { loadLayers, annLayerInfo } = useAnnotationLayers(store)
 
         await loadLayers(activeViewer, emit)
 
-        expect(requests).toHaveLength(1)
-        expect(store.viewerAnnotations).toEqual([])
-        expect(emit).not.toHaveBeenCalled()
-        expect(toasts).toEqual([])
+        expect(requests).toHaveLength(2)
+        expect(requests[1].url).toBe(LAYERS_URL)
+        expect(requests[1].method).toBe('POST')
+        expect(requests[1].body).toEqual({
+            name: 'Default',
+            color: '#18BA62',
+            description: 'Default Annotation Layer'
+        })
+
+        expect(store.viewerAnnotations).toHaveLength(1)
+        expect(store.viewerAnnotations[0]).toMatchObject({
+            id: 99,
+            name: 'Default',
+            visible: true,
+            selected: true,
+            hexColor: '#18BA62',
+            color: 'rgba(24,186,98,0.7)'
+        })
+        expect(store.activeAnnotationLayer).toBe(99)
+        expect(emit.mock.calls).toEqual([['annLayersInitialized']])
+        expect(toasts.map(toast => toast.detail?.msg)).toEqual(["'Default' Layer Created"])
         expect(annLayerInfo.value).toEqual([])
     })
 
-    it('creates no default layer when the response carries no results at all', async () => {
-        // pins current behavior; see report
+    it('creates a default layer when the response carries no results at all', async () => {
         const store = freshStore()
-        respond = () => jsonResponse({})
+        respond = () => requests.length === 1
+            ? jsonResponse({})
+            : jsonResponse({ id: 99, name: 'Default', color: '#18BA62' })
         const { loadLayers, annLayerInfo } = useAnnotationLayers(store)
 
         await loadLayers(activeViewer, emit)
 
-        expect(requests).toHaveLength(1)
-        expect(store.viewerAnnotations).toEqual([])
+        expect(requests).toHaveLength(2)
+        expect(store.viewerAnnotations.map(l => l.id)).toEqual([99])
+        expect(emit.mock.calls).toEqual([['annLayersInitialized']])
         expect(annLayerInfo.value).toBeUndefined()
+    })
+
+    it('reports the failure once and stores no layer when the default layer cannot be created', async () => {
+        const store = freshStore()
+        respond = () => requests.length === 1
+            ? jsonResponse({ results: [] })
+            : jsonResponse({ message: 'no token' }, 401)
+        const { loadLayers } = useAnnotationLayers(store)
+
+        const failure = await rejectionOf(loadLayers(activeViewer, emit)) as Response
+
+        expect(failure.status).toBe(401)
+        expect(store.viewerAnnotations).toEqual([])
+        expect(ajaxErrors).toHaveLength(1)
+        expect(ajaxErrors[0].detail?.msg).toBe('Session expired. Sign in again to continue.')
+        expect(emit).not.toHaveBeenCalled()
     })
 
     it('throws and raises a session-expired message when the layer request is unauthorized', async () => {
@@ -221,6 +258,19 @@ describe('loadLayers', () => {
         expect(store.viewerAnnotations).toEqual([])
         expect(ajaxErrors).toHaveLength(1)
         expect(ajaxErrors[0].detail?.msg).toBe('Session expired. Sign in again to continue.')
+    })
+})
+
+describe('initializeLayers', () => {
+    it('creates no default layer and emits nothing without an active viewer', async () => {
+        const store = freshStore()
+        const { initializeLayers } = useAnnotationLayers(store)
+
+        await initializeLayers({ results: [] }, null, emit)
+
+        expect(requests).toHaveLength(0)
+        expect(store.viewerAnnotations).toEqual([])
+        expect(emit).not.toHaveBeenCalled()
     })
 })
 

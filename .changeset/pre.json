@@ -1,0 +1,19 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "@pennsieve-viz/core": "0.3.3",
+    "@pennsieve-viz/micro-ct": "1.0.72",
+    "@pennsieve-viz/orthogonal": "0.1.0",
+    "@pennsieve-viz/plot": "0.1.0",
+    "@pennsieve-viz/tsviewer": "1.4.2"
+  },
+  "changesets": [
+    "tsviewer-2-0-api",
+    "tsviewer-defects",
+    "tsviewer-dependency-cleanup",
+    "tsviewer-packaging",
+    "tsviewer-transport",
+    "tsviewer-typescript"
+  ]
+}
