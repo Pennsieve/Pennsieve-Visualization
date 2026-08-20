@@ -175,16 +175,21 @@ const canvasStyle = computed(() => ({
   height: pHeight.value + 'px'
 }))
 
-// Viewport object
-const viewport = reactive({
+/** Visible channel count, recomputed each render pass. */
+const nrVisibleChannels = ref(0)
+
+// The renderer's view of the viewport. Derived rather than mirrored: a watcher
+// copying these props left the object holding stale numbers for anything that
+// read it before the watcher flushed.
+const viewport = computed(() => ({
   start: props.start,
   duration: props.duration,
   cWidth: props.cWidth,
   cHeight: props.cHeight,
   pHeight: pHeight.value,
   rsPeriod: props.rsPeriod,
-  nrVisibleChannels: 0
-})
+  nrVisibleChannels: nrVisibleChannels.value
+}))
 
 const computedRsPeriod = computed(() => {
   // Use props value if valid
@@ -192,9 +197,9 @@ const computedRsPeriod = computed(() => {
     return props.rsPeriod
   }
 
-  // Calculate from viewport as fallback
-  if (viewport.duration > 0 && viewport.cWidth > 0) {
-    return viewport.duration / viewport.cWidth
+  // Fall back to the ratio the viewport implies
+  if (props.duration > 0 && props.cWidth > 0) {
+    return props.duration / props.cWidth
   }
 
   // Safe fallback
@@ -216,7 +221,7 @@ const renderDataInternal = () => {
     }
 
     // Update visible channel count
-    viewport.nrVisibleChannels = viewerChannels.value?.reduce((count, ch) => {
+    nrVisibleChannels.value = viewerChannels.value?.reduce((count, ch) => {
       return ch.visible ? count + 1 : count
     }, 0) || 0
 
@@ -232,7 +237,7 @@ const renderDataInternal = () => {
       viewData,
       (viewerChannels.value || []) as unknown as RendererChannelView[],
       props.constants,
-      viewport,
+      viewport.value,
       props.globalZoomMult,
       pixelRatio.value
     )
@@ -482,15 +487,6 @@ watch(() => viewerMontageScheme.value, (newScheme) => {
   }
 })
 
-// Update viewport when props change
-watch(() => [props.start, props.duration, props.cWidth, props.cHeight, props.rsPeriod], () => {
-  viewport.start = props.start
-  viewport.duration = props.duration
-  viewport.cWidth = props.cWidth
-  viewport.cHeight = props.cHeight
-  viewport.pHeight = pHeight.value
-  viewport.rsPeriod = props.rsPeriod
-})
 
 // Transport event handlers, registered on each transport initPlotCanvas creates
 const handleSegment = (segmentData: TransportSegmentEnvelope) => {

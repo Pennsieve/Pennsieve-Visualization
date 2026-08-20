@@ -128,6 +128,8 @@ import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
 import { createTransport } from '@/transport/createTransport'
 import type { TimeseriesTransport } from '@/transport/TimeseriesTransport'
 import { provideViewerTransport } from '@/state/viewerTransportContext'
+import { createEmitter, provideViewerEmitter } from '@/events/emitter'
+import type { ViewerEvents } from '@/events/emitter'
 import {
   uvPerMmToZoomMult,
   zoomMultForAmplitudes
@@ -199,6 +201,11 @@ provide('viewerInstanceId', props.instanceId)
 const transport = shallowRef<TimeseriesTransport | null>(null)
 provideViewerTransport(transport)
 
+// One emitter per viewer instance. A toast raised in this viewer's subtree is
+// rendered by this viewer, not by a second viewer mounted on the same page.
+const emitter = createEmitter<ViewerEvents>()
+provideViewerEmitter(emitter)
+
 /**
  * Points the viewer at the backend the active viewer's content selects, closing
  * whatever was open before. A package switch that crosses asset types lands here
@@ -233,7 +240,7 @@ const openTransportFor = async (content: NonNullable<ActiveViewer['content']>) =
 }
 
 // Global message handler for toast/error events
-useGlobalMessageHandler()
+useGlobalMessageHandler(emitter)
 
 // TsAnnotation composable setup - pass the store instance
 const {

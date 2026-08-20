@@ -28,8 +28,7 @@
   },
   "dependencies": {
     "@pennsieve/timeseries-zarr-reader": "0.4.0",
-    "protobufjs": "^7.6.3",
-    "tiny-emitter": "2.1.0"
+    "protobufjs": "^7.6.3"
   },
   "devDependencies": {
     "@aws-amplify/auth": "^6.13.0",
