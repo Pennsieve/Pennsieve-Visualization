@@ -37,10 +37,9 @@ import { createViewerStore } from '../../stores/tsviewer'
 import type { ActiveViewer, ViewerChannel } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
-import { getClient } from "@/composables/streaming/clientRegistry"
-import { isZarrAssetType } from "@/composables/streaming/assetTypes"
+import { useViewerTransport } from "@/state/viewerTransportContext"
 
-/** Keys of the viewer constants object the scrubber reads. */
+/** Viewer constants TSViewer passes whole. The transport owns the segment-span walk. */
 interface ScrubberConstants {
   SEGMENTSPAN: number
   MAXRECURSION: number
@@ -71,6 +70,9 @@ const emit = defineEmits<{
 // Store - inject from parent TSViewer component
 // Falls back to default store for backwards compatibility
 const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
+
+// Availability spans come from whichever transport TSViewer opened.
+const transport = useViewerTransport()
 
 // Template refs
 const canvasWrap = ref<HTMLDivElement | null>(null)
@@ -355,8 +357,8 @@ const initSegmentSpans = () => {
     return
   }
 
-  if (!viewerStore.config?.timeSeriesApi && !isZarrSource()) {
-    console.warn('TSScrubber: Cannot init segment spans - no timeSeriesApi configured and no Zarr bundle')
+  if (!transport.value) {
+    console.warn('TSScrubber: Cannot init segment spans - transport not ready')
     return
   }
 
@@ -364,76 +366,25 @@ const initSegmentSpans = () => {
   resetSegmentState()
 
   // GET SEGMENTS AND GAPS
-  const fetchSpan = Math.min(props.constants['SEGMENTSPAN'], (props.ts_end - props.ts_start))
   const vChans = viewerStore.viewerChannels
 
   for (let i = 0; i < vChans.length; i++) {
-    _requestSegmentSpan(vChans[i].id, i, props.ts_start, (props.ts_start + fetchSpan), 0)
+    _requestSegmentSpan(vChans[i].id, i)
   }
 }
 
 /**
- * Whether this package's data comes from a Zarr bundle. Read from the active viewer rather
- * than config because the asset type describes the package, and re-evaluated per call so a
- * package switch is picked up without remounting the scrubber.
- */
-const isZarrSource = () => isZarrAssetType(props.activeViewer?.content?.assetType)
-
-/** Legacy availability lookup: one REST call per channel per page of the recording. */
-const _requestSegmentSpanFromApi = async (channel: string, start: number, end: number) => {
-  const token = await useToken()
-  const url = `${viewerStore.config.timeSeriesApi}/ts/retrieve/segments?session=${token}&channel=${channel}&start=${start}&end=${end}`
-  return await useSendXhr(url) as Array<[number, number]>
-}
-
-/**
- * Availability spans read straight from the bundle's coarsest pyramid level.
+ * Availability spans for one channel, from wherever the transport reads them.
  *
- * Returns the same `Array<[startUs, endUs]>` the REST endpoint yields, so the bitmap fill and
- * span walk below are shared by both paths. Returns null when there is nothing to ask for:
- * unit channels have no pyramid and make `dataSpans` throw, and the client is absent if the
- * scrubber runs before the plot canvas has opened the bundle.
+ * One call covers `ts_start` to `ts_end`; the transport chunks that range itself.
  *
  * `gapThresholdUs` is one cell of the scrubber's own 5000-cell bitmap: a gap narrower than a
  * cell cannot be drawn, so coalescing at that width matches what is actually rendered.
  */
-const _requestSegmentSpanFromBundle = async (channel: string, channelIdx: number, start: number, end: number) => {
-  const entry = getClient(viewerStore.$id)
-  if (!entry) {
-    console.warn('TSScrubber: streaming client not ready, skipping segment spans')
-    return null
-  }
-
-  const chConfig = viewerStore.viewerChannels[channelIdx]
-  if (chConfig?.type === 'UNIT') {
-    return null
-  }
-
-  // A montaged channel id is `${leadId}_${label}`; availability follows the lead channel.
-  let bundleChannel = channel
-  const label = chConfig?.label
-  if (label && label.includes('<->') && channel.endsWith(`_${label}`)) {
-    bundleChannel = channel.slice(0, -(label.length + 1))
-  }
-
-  const span = props.ts_end! - props.ts_start!
-  const gapThresholdUs = Math.max(1, Math.floor(span / 5000))
-
-  return await entry.client.dataSpans({
-    channel: bundleChannel,
-    startUs: start,
-    endUs: end,
-    gapThresholdUs
-  })
-}
-
-const _requestSegmentSpan = async (channel: string, channelIdx: number, start: number, end: number, ix: number) => {
-  const max_recursion = props.constants['MAXRECURSION']
-
-  // Validate inputs before making API call
-  const useBundle = isZarrSource()
-  if (!useBundle && !viewerStore.config?.timeSeriesApi) {
-    console.warn('TSScrubber: Cannot request segment span - no timeSeriesApi configured')
+const _requestSegmentSpan = async (channel: string, channelIdx: number) => {
+  const activeTransport = transport.value
+  if (!activeTransport) {
+    console.warn('TSScrubber: transport not ready, skipping segment spans')
     return
   }
 
@@ -442,14 +393,18 @@ const _requestSegmentSpan = async (channel: string, channelIdx: number, start: n
     return
   }
 
-  try {
-    const resp = useBundle
-      ? await _requestSegmentSpanFromBundle(channel, channelIdx, start, end)
-      : await _requestSegmentSpanFromApi(channel, start, end)
+  const span = props.ts_end! - props.ts_start!
+  const gapThresholdUs = Math.max(1, Math.floor(span / 5000))
 
-    if (resp === null) {
-      return
-    }
+  try {
+    // Unit channels and montage lead resolution are the transport's business; it
+    // answers a unit channel with no spans rather than throwing.
+    const resp = await activeTransport.dataSpans({
+      channel,
+      startUs: props.ts_start!,
+      endUs: props.ts_end!,
+      gapThresholdUs
+    })
 
     // Validate that we still have the same channels (user might have switched packages)
     if (!viewerStore.viewerChannels[channelIdx] || viewerStore.viewerChannels[channelIdx].id !== channel) {
@@ -496,7 +451,7 @@ const _requestSegmentSpan = async (channel: string, channelIdx: number, start: n
     }
     segmentSpans.value = segmentSpans.value.concat([5000])
 
-    // remove first value if there is overlap with previous request
+    // remove first value if there is overlap with what a previous init stored
     let firstValue = vector[0]
     let chConfig = viewerStore.viewerChannels[channelIdx] as ViewerChannel & { dataSegments: number[] }
 
@@ -516,13 +471,7 @@ const _requestSegmentSpan = async (channel: string, channelIdx: number, start: n
     // Update channel in store
     viewerStore.updateChannelProperty(chConfig.id, 'dataSegments', chConfig.dataSegments)
 
-    // If we did not request all segment-spans yet, get next segment or bail when recursion limit.
-    let span = end - start
-    if ((start + span) < props.ts_end! && ix < max_recursion) {
-      _requestSegmentSpan(channel, channelIdx, end, (end + span), ix + 1)
-    } else {
-      renderSegments()
-    }
+    renderSegments()
   } catch (err) {
     console.error(`TSScrubber: Error fetching segments for channel ${channel}:`, err)
     useHandleXhrError(err)

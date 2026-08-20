@@ -20,40 +20,18 @@
 
     <div id="channelCanvas">
       <!--       Channel labels-->
-      <div
-        id="channelLabels"
+      <ChannelLabels
         ref="channelLabels"
-      >
-        <div
-          v-for="item in visibleChannels"
-          :key="item.displayName"
-          class="chLabelWrap"
-          :data-id="item.id"
-          @tap="onLabelTap"
-        >
-          <div :class="[item.selected? 'labelDiv selected': 'labelDiv' ]" >
-            {{ item.displayName }}
-          </div>
-          <div
-            class="chLabelIndWrap"
-            :hidden="hideLabelInfo"
-            :class="[ item.selected? 'selected': '']"
-          >
-            <div
-              class="chLabelInd"
-              :hidden="hideLabelInfo"
-            >
-              {{ _computeLabelInfo(item, globalZoomMult, item.rowScale) }}
-            </div>
-          </div>
-        </div>
-      </div>
+        :channels="visibleChannels"
+        :global-zoom-mult="globalZoomMult"
+        :c-height="cHeight"
+        :constants="constants"
+        @labelTap="onLabelTap"
+      />
 
       <!--       Timeseries viewport-->
-      <!-- Deliberately NOT keyed on the asset type. Remounting on a transport change looks
-           tempting, but TSPlotCanvas's onUnmounted calls resetViewer(), so the outgoing
-           instance would erase the activeViewer the incoming one needs. The canvas instead
-           holds both transports and dispatches per call; see useTimeseriesTransport. -->
+      <!-- Not keyed on the asset type: the transport swap happens above and the
+           canvas re-arms on it, so remounting would only discard warm caches. -->
       <TimeseriesViewerCanvas
         v-if="activeViewer?.content?.id"
         ref="viewerCanvas"
@@ -133,6 +111,7 @@
 <script setup lang="ts">
 import {
   ref,
+  shallowRef,
   computed,
   watch,
   nextTick,
@@ -143,19 +122,24 @@ import {
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
-import type { ViewerChannel } from "../../stores/tsviewer"
+import type { ActiveViewer, ViewerChannel } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
 import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
-import { getClient } from '@/composables/streaming/clientRegistry'
-import { isZarrAssetType } from '@/composables/streaming/assetTypes'
+import { createTransport } from '@/transport/createTransport'
+import type { TimeseriesTransport } from '@/transport/TimeseriesTransport'
+import { provideViewerTransport } from '@/state/viewerTransportContext'
+import { createEmitter, provideViewerEmitter } from '@/events/emitter'
+import type { ViewerEvents } from '@/events/emitter'
 import {
-  measureAmplitudes,
   uvPerMmToZoomMult,
   zoomMultForAmplitudes
 } from '@/composables/streaming/autoscale'
 import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
 
 // Component imports (required for <script setup>)
+// Loaded eagerly, unlike the components below: onMounted reads the rendered width of
+// the label column, which is only measurable once the child is in the DOM.
+import ChannelLabels from '@/components/TSViewer/ChannelLabels.vue'
 const TimeseriesScrubber = defineAsyncComponent(() => import('@/components/TSViewer/TSScrubber.vue'))
 const TimeseriesViewerCanvas = defineAsyncComponent(() => import('@/components/TSViewer/TSViewerCanvas.vue'))
 const TimeseriesViewerToolbar = defineAsyncComponent(() => import('@/components/TSViewer/TSViewerToolbar.vue'))
@@ -174,7 +158,6 @@ const constants = {
   ANNOTATIONLABELHEIGHT: 20,  // Height of annotation label
   ROUNDDATAPIXELS: false,     // If true, canvas point will be rounded to integer pixels for faster render (faster)
   MINMAXPOLYGON: true,        // If true, then polygon is rendered thru minMax values, otherwise vertical lines (faster)
-  PAGESIZEDIVIDER: 0.5,       // Number of pages that span the current canvas.
   PREFETCHPAGES: 5,           // Number of pages to read ahead of view.
   LIMITANNFETCH: 500,         // Maximum number of annotations that are fetched per request
   USEMEDIAN: false,           // Use Median instead of mean for centering channels
@@ -213,15 +196,57 @@ const { viewerChannels, needsRerender } = storeToRefs(viewerStore)
 provide('viewerStore', viewerStore)
 provide('viewerInstanceId', props.instanceId)
 
+// This viewer owns its transport. Descendants inject the ref rather than
+// constructing their own, so one viewer never holds two connections.
+const transport = shallowRef<TimeseriesTransport | null>(null)
+provideViewerTransport(transport)
+
+// One emitter per viewer instance. A toast raised in this viewer's subtree is
+// rendered by this viewer, not by a second viewer mounted on the same page.
+const emitter = createEmitter<ViewerEvents>()
+provideViewerEmitter(emitter)
+
+/**
+ * Points the viewer at the backend the active viewer's content selects, closing
+ * whatever was open before. A package switch that crosses asset types lands here
+ * and swaps the transport in place; descendants watch the ref and re-arm.
+ */
+const openTransportFor = async (content: NonNullable<ActiveViewer['content']>) => {
+  const previous = transport.value
+  transport.value = null
+  if (previous) {
+    await previous.close()
+  }
+
+  // The store's $id is `tsviewer-<instanceId>`, the same key the store uses to
+  // warm the zarr client registry in fetchAndSetActiveViewer.
+  const next = createTransport(content.assetType, { registryKey: viewerStore.$id })
+  // Assigned before open() so descendants register their handlers first; the
+  // catalog arrives during open() and a late handler would miss it.
+  transport.value = next
+
+  try {
+    await next.open({
+      packageId: content.id,
+      viewerAssetId: content.viewerAssetId ?? null,
+      url: content.url ?? null,
+      onUrlExpired: content.onUrlExpired ?? null,
+      timeseriesDiscoverApi: viewerStore.config.timeseriesDiscoverApi as string | undefined,
+      timeSeriesApi: viewerStore.config.timeSeriesApi as string | undefined
+    })
+  } catch (error) {
+    console.error('TSViewer: failed to open the transport:', error)
+  }
+}
+
 // Global message handler for toast/error events
-useGlobalMessageHandler()
+useGlobalMessageHandler(emitter)
 
 // TsAnnotation composable setup - pass the store instance
 const {
   addAnnotation,
   updateAnnotation,
   removeAnnotation,
-  getChannelId: getChannelIdFromAnnotation,
 } = useTsAnnotation(viewerStore)
 
 /** Payload of the filter modal's setFilters event; matches TSViewerCanvas.setFilters. */
@@ -252,14 +277,18 @@ interface ViewerCanvasHandle {
   renderAll: (delay?: number, requestLeadingEdge?: boolean) => void
   renderAnnotationCanvas: () => void
   initViewerCanvas: () => void
-  /** Never exposed by TSViewerCanvas; the guarded call in onPageForward is a no-op. */
-  invalidate?: () => void
+}
+
+/** The ChannelLabels members this component reads through its template ref. */
+interface ChannelLabelsHandle {
+  /** Root element of the label column. */
+  el: HTMLDivElement | null
 }
 
 // Template refs
 const ts_viewer = ref<HTMLDivElement | null>(null)
 const scrubber = ref<ScrubberHandle | null>(null)
-const channelLabels = ref<HTMLDivElement | null>(null)
+const channelLabels = ref<ChannelLabelsHandle | null>(null)
 const viewerCanvas = ref<ViewerCanvasHandle | null>(null)
 // TODO(ts-phase4): TSViewer writes into the filter modal's instance state directly.
 const filterWindow = ref<any>(null)
@@ -313,14 +342,6 @@ const visibleChannels = computed(() => {
   return reactiveViewerChannels.value.filter(channel => channel.visible)
 })
 
-const hideLabelInfo = computed(() => {
-  let hide = false
-  if (cHeight.value / nrVisChannels.value < 30) {
-    hide = true
-  }
-  return hide
-})
-
 const nrVisChannels = computed(() => {
   return visibleChannels.value.length
 })
@@ -334,9 +355,11 @@ const nrVisChannels = computed(() => {
  * length of the recording itself.
  */
 const maxDuration = computed(() => {
-  if (!isZarrAssetType(activeViewer.value?.content?.assetType)) {
-    return constants.MAXDURATION
+  const backendCap = transport.value?.capabilities.maxDurationUs ?? constants.MAXDURATION
+  if (backendCap !== null) {
+    return backendCap
   }
+  // The backend imposes no ceiling, so the recording length is the bound.
   if (ts_start.value === null || ts_end.value === null) {
     return constants.MAXDURATION
   }
@@ -364,7 +387,9 @@ const onResize = async () => {
   await nextTick()
   window_width.value = ts_viewer.value.offsetWidth
 
-  const labelDiv = channelLabels.value
+  // ChannelLabels owns the label column's root element, so the width is read from the
+  // element it exposes rather than from a ref in this template.
+  const labelDiv = channelLabels.value?.el
   if (!labelDiv) {
     return
   }
@@ -385,19 +410,19 @@ let verticalScaleMeasured = false
  *
  * Reads the coarsest pyramid level over the whole recording, which the availability scan
  * has usually already fetched, and picks the sensitivity that keeps the median channel
- * inside its row. Only the Zarr path has a reader to ask; the streaming-server path keeps
- * `DEFAULT_UV_PER_MM`. Any failure leaves the current scale alone.
+ * inside its row. A backend without an amplitude survey keeps `DEFAULT_UV_PER_MM`. Any
+ * failure leaves the current scale alone.
  */
 const measureVerticalScale = async () => {
   if (verticalScaleMeasured) {
     return
   }
-  if (!isZarrAssetType(activeViewer.value?.content?.assetType)) {
+  const activeTransport = transport.value
+  if (!activeTransport?.capabilities.supportsAmplitudeSurvey || !activeTransport.measureAmplitudes) {
     return
   }
-  const entry = getClient(viewerStore.$id)
   const rowHeight = cHeight.value / nrVisChannels.value
-  if (!entry || !ts_start.value || !ts_end.value || !(rowHeight > 0)) {
+  if (!ts_start.value || !ts_end.value || !(rowHeight > 0)) {
     return
   }
   const channels = visibleChannels.value
@@ -409,8 +434,7 @@ const measureVerticalScale = async () => {
 
   verticalScaleMeasured = true
   try {
-    const amplitudes = await measureAmplitudes(
-      entry.client,
+    const amplitudes = await activeTransport.measureAmplitudes(
       channels,
       ts_start.value,
       ts_end.value
@@ -675,11 +699,8 @@ const onPageForward = () => {
   // Update start position
   updateStart(newStart)
 
-  // Force canvas to invalidate cache and fetch new data
+  // Trigger re-render
   nextTick(() => {
-    if (viewerCanvas.value?.invalidate) {
-      viewerCanvas.value.invalidate()
-    }
     if (viewerCanvas.value?.renderAll) {
       viewerCanvas.value.renderAll()
     }
@@ -749,16 +770,6 @@ const setDuration = (value: number) => {
   }
 }
 
-const getChannelId = (channel: { id?: string; selected?: boolean; visible?: boolean }) => {
-  // Use the method from the TsAnnotation composable
-  return getChannelIdFromAnnotation(channel)
-}
-
-const _computeLabelInfo = (item: ViewerChannel, globalZoomMult: number, rowscale: number | undefined) => {
-  const n = (((constants.DEFAULTDPI * window.devicePixelRatio) / (globalZoomMult * rowscale!)) / 25.4).toFixed(1)
-  return n + ' ' + item.unit + '/mm'
-}
-
 const initTimeRange = () => {
   const channels = activeViewer.value?.channels
 
@@ -821,7 +832,26 @@ const initCanvasRenderer = () => {
 }
 
 // Lifecycle hooks
+// A package switch that crosses asset types swaps the transport; the id is in the
+// key so re-activating a different package on the same backend reconnects too.
+watch(
+  () => [activeViewer.value?.content?.id, activeViewer.value?.content?.assetType] as const,
+  ([id]) => {
+    const content = activeViewer.value?.content
+    if (id && content) {
+      void openTransportFor(content)
+    }
+  }
+)
+
 onMounted(() => {
+  // Opened here rather than in setup: children mount first, so their transport
+  // watchers are already registered when the catalog arrives during open().
+  const content = activeViewer.value?.content
+  if (content?.id && !transport.value) {
+    void openTransportFor(content)
+  }
+
   initChannels()
 
   const element = document.getElementById("ts_viewer")
@@ -841,7 +871,7 @@ onMounted(() => {
   }
   window.addEventListener('resize', onResize)
 
-  const labelDiv = channelLabels.value
+  const labelDiv = channelLabels.value?.el
   if (labelDiv) {
     labelWidth.value = labelDiv.clientWidth
     cWidth.value = (window_width.value - labelDiv.clientWidth - 5 - 10)
@@ -855,7 +885,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
-  // Clean up the store instance when the component is unmounted
+  const openTransport = transport.value
+  transport.value = null
+  void openTransport?.close()
+  // Clean up the store instance when the component is unmounted. This also
+  // resets the store and disposes any zarr client held for this instance.
   clearViewerStore(props.instanceId)
 })
 
@@ -890,59 +924,5 @@ defineExpose({
   display: flex;
   background-color: white;
   flex: 1;
-}
-
-#channelLabels {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  line-height: normal;
-  margin-bottom: 32px;
-  min-width: 75px;
-}
-
-.chLabelWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-}
-
-.chLabelIndWrap {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-around;
-  width: 100%;
-  color: #3c54a4;
-}
-
-.chLabelInd {
-  font-size: 0.6em;
-  min-width: 70px;
-  color: rgb(150,150,150);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.labelDiv {
-  align-self: flex-end;
-  white-space: nowrap;
-  color: var(--neuron);
-
-  &.selected {
-    color: $orange_1 !important; /* Red color for selected channel labels */
-    font-weight: 600; /* Make selected labels slightly bolder */
-  }
-}
-
-.chLabelIndWrap[selected]{
-  color:$purple_2;
-}
-
-.labelDiv {
-  align-self: flex-end;
-  white-space: nowrap;
-  color: var(--neuron);
 }
 </style>
