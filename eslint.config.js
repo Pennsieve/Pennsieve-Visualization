@@ -12,6 +12,7 @@ export default defineConfigWithVueTs(
       "**/dist/**",
       "**/dist-embed/**",
       "**/node_modules/**",
+      "**/coverage/**",
       "test-data/**",
       "scripts/**",
     ],

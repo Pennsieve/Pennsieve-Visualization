@@ -24,6 +24,7 @@
     "build": "vite build",
     "dev": "vite",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "type-check": "vue-tsc --noEmit -p tsconfig.typecheck.json"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@aws-amplify/auth": "^6.13.0",
     "@vitejs/plugin-vue": "^5.2.4",
+    "@vitest/coverage-v8": "^4.0.0",
     "@vue/test-utils": "^2.4.6",
     "element-plus": "^2.10.2",
     "happy-dom": "^20.11.2",
