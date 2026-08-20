@@ -240,18 +240,18 @@ describe('checkAnnotationRange requests', () => {
         expect(requests.map(request => request.url)).toEqual([annotationUrl(1, 0, 1000)])
     })
 
-    it('caches the span when there is no layer to request, and never revisits it', async () => {
-        // pins current behavior; see report
+    it('caches no span while there is no layer to request, and requests it once a layer arrives', async () => {
         const store = freshStore([])
         const { checkAnnotationRange, cachedAnnRange } = useAnnotationData(store)
 
         await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
         expect(requests).toHaveLength(0)
-        expect(cachedAnnRange.value).toEqual([{ start: 0, end: 1000 }])
+        expect(cachedAnnRange.value).toEqual([])
 
         store.setAnnotations([layer(1)])
         await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
-        expect(requests).toHaveLength(0)
+        expect(requests.map(request => request.url)).toEqual([annotationUrl(1, 0, 1000)])
+        expect(cachedAnnRange.value).toEqual([{ start: 0, end: 1000 }])
     })
 })
 
@@ -416,8 +416,7 @@ describe('checkAnnotationRange response mapping', () => {
 })
 
 describe('checkAnnotationRange failures', () => {
-    it('caches the span and reports to the console when a layer request fails', async () => {
-        // pins current behavior; see report
+    it('caches no span and reports to the console when a layer request fails, then retries it', async () => {
         const store = freshStore()
         respond = () => jsonResponse({ message: 'server on fire' }, 500)
         const { checkAnnotationRange, cachedAnnRange } = useAnnotationData(store)
@@ -425,8 +424,11 @@ describe('checkAnnotationRange failures', () => {
         await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
         await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
 
-        expect(requests).toHaveLength(1)
-        expect(cachedAnnRange.value).toEqual([{ start: 0, end: 1000 }])
+        expect(requests.map(request => request.url)).toEqual([
+            annotationUrl(1, 0, 1000),
+            annotationUrl(1, 0, 1000)
+        ])
+        expect(cachedAnnRange.value).toEqual([])
         expect(store.viewerAnnotations[0].annotations).toHaveLength(0)
         expect(emit).not.toHaveBeenCalled()
         expect(console.error).toHaveBeenCalled()
@@ -439,12 +441,24 @@ describe('checkAnnotationRange failures', () => {
             : jsonResponse(payload([
                 { id: 'b', label: 'Two', start: 0, end: 10, channelIds: [], layerId: 2 }
             ]))
-        const { checkAnnotationRange } = useAnnotationData(store)
+        const { checkAnnotationRange, cachedAnnRange } = useAnnotationData(store)
 
         await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
 
         expect(requests).toHaveLength(2)
         expect(store.viewerAnnotations[1].annotations.map(ann => ann.id)).toEqual(['b'])
+        expect(cachedAnnRange.value).toEqual([])
+    })
+
+    it('caches the span when every layer that was requested answered', async () => {
+        const store = freshStore([layer(1), layer(2)])
+        store.viewerAnnotations[1].id = ''
+        const { checkAnnotationRange, cachedAnnRange } = useAnnotationData(store)
+
+        await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
+
+        expect(requests.map(request => request.url)).toEqual([annotationUrl(1, 0, 1000)])
+        expect(cachedAnnRange.value).toEqual([{ start: 0, end: 1000 }])
     })
 })
 

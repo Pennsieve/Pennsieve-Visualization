@@ -1,6 +1,6 @@
 {
   "name": "@pennsieve-viz/tsviewer",
-  "version": "1.4.2",
+  "version": "2.0.0-beta.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -15,7 +15,8 @@
     "./style.css": "./dist/style.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "MIGRATION-2.0.md"
   ],
   "sideEffects": [
     "*.css"

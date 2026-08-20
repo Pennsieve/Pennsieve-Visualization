@@ -5,6 +5,7 @@ import { useToken } from '@/composables/useToken'
 import { useChannelDataRequest } from '@/composables/useChannelDataRequest';
 import { acquireClient, ensureCatalog, disposeClient } from '@/composables/streaming/clientRegistry'
 import { isZarrAssetType } from '@/composables/streaming/assetTypes'
+import { sortAnnotations } from '@/utils/annotationUtils'
 import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
 import type { WorkspaceMontage } from '@/composables/useChannelProcessing'
 import type { ChannelDetail } from '@/composables/streaming/channelDetails'
@@ -86,7 +87,6 @@ const storeInstances = new Map<string, ViewerStoreHook>()
 
 // Track if we've already shown warnings (to avoid spam)
 let hasShownDefaultWarning = false
-let hasShownDeprecationWarning = false
 
 /**
  * Defines the per-instance store. Split from `createViewerStore` so the
@@ -388,14 +388,33 @@ function defineViewerStore(instanceId: string) {
     }
 
     const updateAnnotation = (annotation: Annotation) => {
-        const layerIndex = viewerAnnotations.value.findIndex(l => l.id === annotation.layer_id)
-        if (layerIndex >= 0) {
-            const annotations = viewerAnnotations.value[layerIndex].annotations
-            const annotationIndex = annotations.findIndex(a => a.id === annotation.id)
-            if (annotationIndex >= 0) {
-                annotations[annotationIndex] = annotation
-            }
+        // layer_id names the layer the annotation belongs to after the edit, which is
+        // not always the layer it currently sits in: an edit can move it.
+        const sourceLayer = viewerAnnotations.value.find(
+            l => l.annotations.some(a => a.id === annotation.id)
+        )
+        if (!sourceLayer) {
+            return
         }
+
+        const targetLayer = viewerAnnotations.value.find(l => l.id === annotation.layer_id)
+        // An unknown target layer keeps the stored copy: moving the annotation
+        // nowhere would drop it out of the viewer.
+        if (!targetLayer) {
+            return
+        }
+
+        const annotationIndex = sourceLayer.annotations.findIndex(a => a.id === annotation.id)
+        if (targetLayer === sourceLayer) {
+            sourceLayer.annotations[annotationIndex] = annotation
+            return
+        }
+
+        sourceLayer.annotations.splice(annotationIndex, 1)
+        targetLayer.annotations.push(annotation)
+        // A layer is ordered by start time, which annIndexOf binary searches, and no
+        // caller re-sorts after a move.
+        sortAnnotations(targetLayer.annotations)
     }
 
     const deleteAnnotation = (annotation: Annotation) => {
@@ -578,20 +597,4 @@ export function clearAllViewerStores() {
         disposeClient(`tsviewer-${instanceId}`)
     })
     storeInstances.clear()
-}
-
-/**
- * @deprecated Use createViewerStore(instanceId) instead for multi-instance support.
- * This export is kept for backwards compatibility with existing code.
- * Returns the default singleton store instance.
- */
-export function useViewerStore(): ViewerStore {
-    if (!hasShownDeprecationWarning) {
-        hasShownDeprecationWarning = true
-        console.warn(
-            '[TSViewer] useViewerStore() is deprecated. ' +
-            'Use createViewerStore(instanceId) for multi-instance support.'
-        )
-    }
-    return createViewerStore('default')
 }

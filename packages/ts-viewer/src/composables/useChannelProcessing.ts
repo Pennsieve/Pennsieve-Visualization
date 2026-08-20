@@ -252,7 +252,9 @@ export const useChannelProcessing = (baseChannels: Ref<ChannelDetail[] | undefin
 
         return {
             montage: "CUSTOM_MONTAGE",
-            packageId: activeViewer.value?.content.id,
+            // The store holds an empty activeViewer until a package is activated, so
+            // content is optional here as it is in the NOT_MONTAGED branch above.
+            packageId: activeViewer.value?.content?.id,
             montageMap: montageMap
         }
     }

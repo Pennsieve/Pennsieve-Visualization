@@ -98,9 +98,11 @@ export function useHandleXhrError(err: unknown) {
         })
     }
     else {
-        error.json().then(errorJson => {
-          if (errorJson) {
-            const msg = errorJson.message
+        // A failed request can answer with a plain text or an empty body. The status
+        // stands in when the body carries no message.
+        error.json().catch(() => null).then(errorJson => {
+          const msg = errorJson?.message
+          if (msg) {
             emitter.emit('ajaxError', {
               detail: {
                 type: 'info',

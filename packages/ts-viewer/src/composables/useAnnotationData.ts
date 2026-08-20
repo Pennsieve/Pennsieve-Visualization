@@ -119,6 +119,9 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
             const channelIds = viewerChannels.value.map(channel => getChannelId(channel))
 
             for (const curRange of reqRange) {
+                let answered = 0
+                let failed = 0
+
                 for (const curLayer of viewerAnnotations.value) {
                     if (!curLayer.id) {
                         console.warn('Layer ID is undefined, skipping annotation request for layer:', curLayer)
@@ -152,14 +155,22 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
 
                         const data = await response.json() as AnnotationsResponse
                         await processAnnotationResponse(data, emit)
+                        answered++
                     } catch (err) {
                         useHandleXhrError(err)
+                        failed++
                     }
                 }
-                cachedAnnRange.value.push({
-                    start: Math.floor(curRange.start),
-                    end: Math.floor(curRange.end)
-                })
+
+                // A cached span is never requested again. Caching one whose layers
+                // failed, or that had no layer to request, would leave its annotations
+                // permanently missing.
+                if (answered > 0 && failed === 0) {
+                    cachedAnnRange.value.push({
+                        start: Math.floor(curRange.start),
+                        end: Math.floor(curRange.end)
+                    })
+                }
             }
 
             // Sort cached ranges

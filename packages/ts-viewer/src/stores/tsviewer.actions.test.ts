@@ -459,8 +459,7 @@ describe('updateAnnotation', () => {
         expect(store.viewerAnnotations[0].annotations[0].start).toBe(0)
     })
 
-    it('drops an update that moves the annotation to another layer', () => {
-        // pins current behavior; see report
+    it('moves the annotation to the layer the update names', () => {
         const store = freshStore()
         store.setAnnotations([
             layer(1, { annotations: [annotation('a1', 1)] }),
@@ -469,9 +468,23 @@ describe('updateAnnotation', () => {
 
         store.updateAnnotation(annotation('a1', 2))
 
-        expect(store.viewerAnnotations[0].annotations.map(a => a.id)).toEqual(['a1'])
-        expect(store.viewerAnnotations[0].annotations[0].layer_id).toBe(1)
-        expect(store.viewerAnnotations[1].annotations).toEqual([])
+        expect(store.viewerAnnotations[0].annotations).toEqual([])
+        expect(store.viewerAnnotations[1].annotations.map(a => a.id)).toEqual(['a1'])
+        expect(store.viewerAnnotations[1].annotations[0].layer_id).toBe(2)
+    })
+
+    it('orders the target layer by start time after a move into it', () => {
+        const store = freshStore()
+        store.setAnnotations([
+            layer(1, { annotations: [annotation('a1', 1, { start: 500 })] }),
+            layer(2, {
+                annotations: [annotation('b1', 2, { start: 100 }), annotation('b2', 2, { start: 900 })]
+            })
+        ])
+
+        store.updateAnnotation(annotation('a1', 2, { start: 500 }))
+
+        expect(store.viewerAnnotations[1].annotations.map(a => a.id)).toEqual(['b1', 'a1', 'b2'])
     })
 })
 
@@ -910,18 +923,5 @@ describe('instance id defaults', () => {
         mod.createViewerStore('named')
 
         expect(warn).not.toHaveBeenCalled()
-    })
-
-    it('returns the default instance from the deprecated hook, warning once', async () => {
-        const mod = await freshModule()
-
-        const deprecated = mod.useViewerStore()
-
-        expect(deprecated).toBe(mod.createViewerStore('default'))
-        const messages = warn.mock.calls.map(call => String(call[0]))
-        expect(messages.filter(message => message.includes('deprecated'))).toHaveLength(1)
-
-        mod.useViewerStore()
-        expect(messages.filter(message => message.includes('deprecated'))).toHaveLength(1)
     })
 })

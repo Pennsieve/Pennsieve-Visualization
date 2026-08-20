@@ -73,6 +73,13 @@ const layer = (id: number, annotations: Annotation[] = []): AnnotationLayer => (
     selected: id === 1
 })
 
+/** Resolves with the rejection reason, which is the raw Response for a failed request. */
+const rejectionOf = async (pending: Promise<unknown>): Promise<unknown> =>
+    pending.then(
+        () => { throw new Error('expected the call to reject') },
+        (reason: unknown) => reason
+    )
+
 const freshStore = (): ViewerStore => {
     const store = createViewerStore(`ts-annotation-${instanceSeq++}`)
     store.setViewerConfig({ apiUrl: API_URL })
@@ -392,25 +399,48 @@ describe('addAnnotation', () => {
         expect(requests).toHaveLength(0)
     })
 
-    it('throws the server status and adds nothing to the layer when the create fails', async () => {
+    it('rejects with the failed response and adds nothing to the layer when the create fails', async () => {
         const store = freshStore()
         respond = () => new Response('layer is read only', { status: 403 })
 
         const { addAnnotation } = useTsAnnotation(store)
-        await expect(addAnnotation({ label: 'Denied', start: 0, duration: 10, layer_id: 1 }))
-            .rejects.toThrow('HTTP 403: layer is read only')
+        const failure = await rejectionOf(
+            addAnnotation({ label: 'Denied', start: 0, duration: 10, layer_id: 1 })
+        ) as Response
+
+        expect(failure.status).toBe(403)
         expect(store.viewerAnnotations[0].annotations).toHaveLength(0)
+        await vi.waitFor(() => {
+            expect(ajaxErrors.map(message => message.detail?.msg))
+                .toEqual(['Request failed with status 403'])
+        })
     })
 
-    it('reports a rejected create to the console and raises no toast', async () => {
-        // pins current behavior; see report
+    it('raises the message the server sent when the create is rejected', async () => {
+        const store = freshStore()
+        respond = () => jsonResponse({ message: 'annotation overlaps another' }, 409)
+
+        const { addAnnotation } = useTsAnnotation(store)
+        await rejectionOf(addAnnotation({ label: 'Denied', start: 0, duration: 10, layer_id: 1 }))
+
+        await vi.waitFor(() => {
+            expect(ajaxErrors).toHaveLength(1)
+        })
+        expect(ajaxErrors[0].detail).toEqual({ type: 'info', msg: 'annotation overlaps another' })
+    })
+
+    it('raises a session expired message when the create is unauthorized', async () => {
         const store = freshStore()
         respond = () => new Response('nope', { status: 401 })
 
         const { addAnnotation } = useTsAnnotation(store)
-        await expect(addAnnotation({ label: 'Denied', start: 0, duration: 10, layer_id: 1 }))
-            .rejects.toThrow(/HTTP 401/)
-        expect(ajaxErrors).toEqual([])
+        const failure = await rejectionOf(
+            addAnnotation({ label: 'Denied', start: 0, duration: 10, layer_id: 1 })
+        ) as Response
+
+        expect(failure.status).toBe(401)
+        expect(ajaxErrors.map(message => message.detail?.msg))
+            .toEqual(['Session expired. Sign in again to continue.'])
         expect(toasts).toEqual([])
         expect(console.error).toHaveBeenCalled()
     })
@@ -530,15 +560,20 @@ describe('updateAnnotation', () => {
         expect(requests).toHaveLength(0)
     })
 
-    it('leaves the stored annotation untouched when the update fails', async () => {
+    it('leaves the stored annotation untouched and raises a message when the update fails', async () => {
         const store = freshStore()
         store.setAnnotations([layer(1, [stored()])])
         respond = () => new Response('gone', { status: 404 })
 
         const { updateAnnotation } = useTsAnnotation(store)
-        await expect(updateAnnotation({ ...stored(), label: 'New' }))
-            .rejects.toThrow('HTTP 404: gone')
+        const failure = await rejectionOf(updateAnnotation({ ...stored(), label: 'New' })) as Response
+
+        expect(failure.status).toBe(404)
         expect(store.viewerAnnotations[0].annotations[0].label).toBe('Old')
+        await vi.waitFor(() => {
+            expect(ajaxErrors.map(message => message.detail?.msg))
+                .toEqual(['Request failed with status 404'])
+        })
     })
 })
 
@@ -608,15 +643,22 @@ describe('removeAnnotation', () => {
         expect(requests).toHaveLength(0)
     })
 
-    it('keeps the annotation in the store when the delete fails', async () => {
+    it('keeps the annotation in the store and raises a message when the delete fails', async () => {
         const store = freshStore()
         store.setAnnotations([layer(1, [{ id: 7, start: 100, duration: 10, layer_id: 1 }])])
         respond = () => new Response('boom', { status: 500 })
 
         const { removeAnnotation } = useTsAnnotation(store)
-        await expect(removeAnnotation({ id: 7, start: 100, duration: 10, layer_id: 1 }))
-            .rejects.toThrow('HTTP 500: boom')
+        const failure = await rejectionOf(
+            removeAnnotation({ id: 7, start: 100, duration: 10, layer_id: 1 })
+        ) as Response
+
+        expect(failure.status).toBe(500)
         expect(store.viewerAnnotations[0].annotations).toHaveLength(1)
+        await vi.waitFor(() => {
+            expect(ajaxErrors.map(message => message.detail?.msg))
+                .toEqual(['Request failed with status 500'])
+        })
     })
 })
 
