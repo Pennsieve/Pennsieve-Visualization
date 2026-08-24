@@ -74,7 +74,17 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
         error: new Set()
     }
 
+    // The catalog is emitted once per connection, but subscribers arrive on
+    // their own schedule: the viewer's canvases are async components, so one
+    // can mount after open() has already answered. Latching the last catalog
+    // and replaying it on subscribe keeps a late subscriber from waiting
+    // forever for an event that has already happened.
+    let lastChannelDetails: ChannelDetail[] | null = null
+
     const emit = <K extends keyof TransportEvents>(event: K, payload: TransportEvents[K]): void => {
+        if (event === 'channelDetails') {
+            lastChannelDetails = payload as ChannelDetail[]
+        }
         for (const handler of listeners[event]) {
             handler(payload)
         }
@@ -85,6 +95,18 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
         handler: (payload: TransportEvents[K]) => void
     ): (() => void) => {
         listeners[event].add(handler)
+
+        if (event === 'channelDetails' && lastChannelDetails) {
+            const latched = lastChannelDetails
+            // Delivered asynchronously so subscribing never runs a handler
+            // inside the caller's own registration.
+            queueMicrotask(() => {
+                if (listeners[event].has(handler) && lastChannelDetails === latched) {
+                    (handler as (payload: ChannelDetail[]) => void)(latched)
+                }
+            })
+        }
+
         return () => {
             listeners[event].delete(handler)
         }
@@ -438,6 +460,8 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
      * remounts, and disposal belongs to `clearViewerStore`.
      */
     const close = async (): Promise<void> => {
+        // The catalog belongs to the connection that produced it.
+        lastChannelDetails = null
         abortInflight(entry ?? undefined)
         if (entry) {
             entry.filterRegistry.clear()

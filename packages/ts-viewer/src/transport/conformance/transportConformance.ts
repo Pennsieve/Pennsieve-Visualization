@@ -73,6 +73,23 @@ export function runTransportConformance(
             }
         })
 
+        it('replays the catalog to a subscriber that arrives after open', async () => {
+            const h = await makeHarness()
+            try {
+                await h.transport.open(h.openOptions)
+                // The viewer's canvases are async components, so one can mount
+                // after open() has already answered. A subscriber that misses
+                // the emission still has to learn the channel list.
+                const late: ChannelDetail[][] = []
+                h.transport.on('channelDetails', (d) => late.push(d))
+                await waitFor(() => late.length >= 1, 'replayed channelDetails')
+                const ids = late[0].map((d) => d.id)
+                for (const ch of h.channels) expect(ids).toContain(ch.id)
+            } finally {
+                await h.dispose()
+            }
+        })
+
         it('rejects requestPage before open with false and no emissions', async () => {
             const h = await makeHarness()
             try {

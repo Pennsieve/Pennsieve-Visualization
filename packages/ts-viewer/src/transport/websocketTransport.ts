@@ -240,7 +240,17 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
         error: new Set(),
     }
 
+    // The catalog is emitted once per connection, but subscribers arrive on
+    // their own schedule: the viewer's canvases are async components, so one
+    // can mount after open() has already answered. Latching the last catalog
+    // and replaying it on subscribe keeps a late subscriber from waiting
+    // forever for an event that has already happened.
+    let lastChannelDetails: ChannelDetail[] | null = null
+
     function emit<K extends keyof TransportEvents>(event: K, payload: TransportEvents[K]): void {
+        if (event === 'channelDetails') {
+            lastChannelDetails = payload as ChannelDetail[]
+        }
         for (const handler of handlers[event]) {
             handler(payload)
         }
@@ -251,6 +261,18 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
         handler: (payload: TransportEvents[K]) => void,
     ): () => void {
         handlers[event].add(handler)
+
+        if (event === 'channelDetails' && lastChannelDetails) {
+            const latched = lastChannelDetails
+            // Delivered asynchronously so subscribing never runs a handler
+            // inside the caller's own registration.
+            queueMicrotask(() => {
+                if (handlers[event].has(handler) && lastChannelDetails === latched) {
+                    (handler as (payload: ChannelDetail[]) => void)(latched)
+                }
+            })
+        }
+
         return () => {
             handlers[event].delete(handler)
         }
@@ -277,6 +299,9 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
     }
 
     const close = async (): Promise<void> => {
+        // The catalog belongs to the connection that produced it.
+        lastChannelDetails = null
+
         if (websocket) {
             const ws = websocket
             websocket = null
