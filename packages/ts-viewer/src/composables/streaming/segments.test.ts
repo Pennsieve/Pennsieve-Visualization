@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { EventBatch, Segment } from '@pennsieve/timeseries-zarr-reader'
-import { buildContinuousSegm, buildGapSegm, buildNeuralSegm } from './segments.js'
+import { buildContinuousSegm, buildGapSegm, buildNeuralSegm } from './segments'
 
 const CONTINUOUS_KEYS = [
     'chId', 'lastUsed', 'unit', 'samplePeriod', 'requestedSamplePeriod', 'pageStart',

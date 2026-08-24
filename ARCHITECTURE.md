@@ -27,9 +27,9 @@ The **store** is the internal state machine. The **controls composable** is the 
 
 **`@pennsieve-viz/tsviewer`** is the canonical example. See:
 
-- Store factory: `packages/ts-viewer/src/stores/tsviewer.js`
-- Controls composable: `packages/ts-viewer/src/composables/useViewerControls.js`
-- Package exports: `packages/ts-viewer/src/index.js`
+- Store factory: `packages/ts-viewer/src/stores/tsviewer.ts`
+- Controls composable: `packages/ts-viewer/src/composables/useViewerControls.ts`
+- Package exports: `packages/ts-viewer/src/index.ts`
 
 ## How Each Package Follows the Pattern
 
