@@ -274,7 +274,7 @@ interface ViewerCanvasHandle {
   getPreviousAnnotation: () => number
   setFilters: (payload: FilterPayload) => void
   setActiveTool: (tool: string) => void
-  renderAll: (delay?: number, requestLeadingEdge?: boolean) => void
+  renderAll: () => void
   renderAnnotationCanvas: () => void
   initViewerCanvas: () => void
 }

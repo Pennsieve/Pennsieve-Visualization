@@ -40,7 +40,7 @@ export interface CanvasToolsOptions {
     interactionCanvas: () => HTMLCanvasElement | null
     annotationCanvas: () => AnnotationCanvasTools | null
     viewport: () => CanvasToolsViewport
-    renderAll: (delay?: number, requestLeadingEdge?: boolean) => void
+    renderAll: () => void
     /** Reports a pan. The host owns the viewport start. */
     setStart: (start: number) => void
     addAnnotation: (
