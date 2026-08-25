@@ -88,100 +88,50 @@ export const getLayer = (annotation: Annotation | null | undefined, viewerAnnota
     return viewerAnnotations.find(l => l.id === layerId) ?? {}
 }
 
+/** The time an index is searched by: the annotation's start, or its end. */
+const searchKey = (annotation: Annotation, checkEnd: boolean): number =>
+    checkEnd ? annotation.start + annotation.duration : annotation.start
+
 /**
- * Binary search to find annotation index by time value
+ * Locates `val` among annotations ordered by start time (or by end time when
+ * `checkEnd`).
+ *
+ * On an exact hit, returns the first matching index when `first` is set and the
+ * last matching index otherwise, so a run of annotations sharing a time can be
+ * walked from either end. With no exact hit, returns the last index whose time
+ * is below `val`, which is the annotation immediately preceding it. Returns -1
+ * when nothing precedes `val`, including for an empty array: callers must treat
+ * a negative result as "no such annotation" rather than as index 0.
+ *
+ * `startAtIndex` bounds the search from below; the result never precedes it.
  */
 export const annIndexOf = (annArray: Annotation[], val: number, first: boolean, startAtIndex = 0, checkEnd = false): number => {
-    let index
-    if (checkEnd) {
-        index = indexOfEnd(annArray, val, startAtIndex, annArray.length - 1, first)
-    } else {
-        index = indexOfStart(annArray, val, startAtIndex, annArray.length - 1, first)
-    }
+    let low = Math.max(0, startAtIndex)
+    let high = annArray.length - 1
+    let match = -1
+    let preceding = -1
 
-    if (index === -1) {
-        index = 0
-    } else if (index < 0) {
-        index = -index - 2
-    }
-    return index
-}
+    while (low <= high) {
+        const mid = (low + high) >> 1
+        const key = searchKey(annArray[mid], checkEnd)
 
-/**
- * Binary search helper for annotation start times
- */
-const indexOfStart = (annArray: Annotation[], val: number, min: number, max: number, firstIndex: boolean): number => {
-    if (max < min) {
-        let pred = max >= 0 ? max : -max - 2
-        if (pred === -1) return pred
-
-        const predVal = annArray[pred].start
-        while (pred >= 0 && annArray[pred].start === predVal) {
-            pred--
-        }
-        return -pred - 2
-    }
-
-    const mid = parseInt(((min + max) / 2) as unknown as string)
-
-    if (annArray[mid].start > val) {
-        return indexOfStart(annArray, val, min, mid - 1, firstIndex)
-    } else if (annArray[mid].start < val) {
-        return indexOfStart(annArray, val, mid + 1, max, firstIndex)
-    } else {
-        let index = mid
-        if (firstIndex) {
-            while (index >= 0 && annArray[index].start === val) {
-                index--
+        if (key === val) {
+            match = mid
+            // Keep going toward the end of the run the caller asked for.
+            if (first) {
+                high = mid - 1
+            } else {
+                low = mid + 1
             }
-            index++
+        } else if (key < val) {
+            preceding = mid
+            low = mid + 1
         } else {
-            while (index < annArray.length && annArray[index].start === val) {
-                index++
-            }
-            index--
+            high = mid - 1
         }
-        return index
-    }
-}
-
-/**
- * Binary search helper for annotation end times
- */
-const indexOfEnd = (annArray: Annotation[], val: number, min: number, max: number, firstIndex: boolean): number => {
-    if (max < min) {
-        let pred = max >= 0 ? max : -max - 2
-        if (pred === -1) return pred
-
-        const predVal = annArray[pred].start + annArray[pred].duration
-        while (pred >= 0 && (annArray[pred].start + annArray[pred].duration) === predVal) {
-            pred--
-        }
-        return -pred - 2
     }
 
-    const mid = parseInt(((min + max) / 2) as unknown as string)
-    const midEnd = annArray[mid].start + annArray[mid].duration
-
-    if (midEnd > val) {
-        return indexOfEnd(annArray, val, min, mid - 1, firstIndex)
-    } else if (midEnd < val) {
-        return indexOfEnd(annArray, val, mid + 1, max, firstIndex)
-    } else {
-        let index = mid
-        if (firstIndex) {
-            while (index >= 0 && (annArray[index].start + annArray[index].duration) === val) {
-                index--
-            }
-            index++
-        } else {
-            while (index < annArray.length && (annArray[index].start + annArray[index].duration) === val) {
-                index++
-            }
-            index--
-        }
-        return index
-    }
+    return match >= 0 ? match : preceding
 }
 
 /**

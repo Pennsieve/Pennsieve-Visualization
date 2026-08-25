@@ -146,6 +146,42 @@ describe('TSViewer when the package is activated before it mounts', () => {
         expect(store.viewerChannels.length).toBe(2)
     })
 
+    it('keeps one connection when the same package is activated again', async () => {
+        const pinia = createPinia()
+        setActivePinia(pinia)
+        const store = createViewerStore('activation-order-repeat')
+        const activate = () => store.setActiveViewer({
+            channels: CHANNELS.map((channel) => ({ ...channel })),
+            content: {
+                id: 'pkg-1',
+                viewerAssetId: null,
+                idType: 'package',
+                assetType: 'timeseries-zarr',
+                url: 'https://bundle.example/',
+                onUrlExpired: null
+            }
+        })
+
+        activate()
+        wrapper = mount(TSViewer, {
+            props: { instanceId: 'activation-order-repeat' },
+            global: { plugins: [pinia] },
+            attachTo: document.body
+        })
+        await vi.waitFor(() => {
+            expect(harness.openCalls).toBe(1)
+        }, { timeout: 3000 })
+
+        // A host that re-activates the same package, on a prop change or a route
+        // update, must not tear down the loaded catalog and cached segments.
+        activate()
+        activate()
+        await flushPromises()
+        await new Promise((resolve) => setTimeout(resolve, 50))
+
+        expect(harness.openCalls).toBe(1)
+    })
+
     it('opens the transport before the plot canvas has subscribed', async () => {
         const pinia = createPinia()
         setActivePinia(pinia)

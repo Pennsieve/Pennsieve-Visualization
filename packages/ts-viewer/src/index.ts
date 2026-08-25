@@ -5,8 +5,7 @@ import TSViewer from './components/TSViewer/TSViewer.vue';
 import {
   createViewerStore,
   clearViewerStore,
-  clearAllViewerStores,
-  useViewerStore  // Deprecated - kept for backwards compatibility
+  clearAllViewerStores
 } from './stores/tsviewer';
 import { useViewerControls } from './composables/useViewerControls';
 import {
@@ -21,9 +20,7 @@ export {
   createViewerStore,
   clearViewerStore,
   clearAllViewerStores,
-  useViewerControls,
-  // Deprecated - use createViewerStore instead
-  useViewerStore
+  useViewerControls
 };
 
 // Viewer-asset vocabulary, so the host app matches on the same literals this viewer does

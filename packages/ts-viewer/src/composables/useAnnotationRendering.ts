@@ -77,8 +77,11 @@ export function useAnnotationRendering(storeInstance: ViewerStore | null = null)
                 for (const channelId of curAnn.channelIds!) {
                     let channelOffset = null
                     for (const curChannelView of channelConfig) {
-                        if (curChannelView.id === channelId && curChannelView.visible) {
-                            channelOffset = (curChannelView.rowBaseline ?? 0) | 0
+                        // A channel carries a null baseline until the renderer lays it
+                        // out; reading that as 0 draws the annotation at the canvas top.
+                        if (curChannelView.id === channelId && curChannelView.visible
+                            && typeof curChannelView.rowBaseline === 'number') {
+                            channelOffset = curChannelView.rowBaseline | 0
                             if (channelOffset < curAnn.minOffset) curAnn.minOffset = channelOffset
                             if (channelOffset > curAnn.maxOffset) curAnn.maxOffset = channelOffset
                             curAnn.allOffsets.push(channelOffset)
@@ -307,7 +310,9 @@ export function useAnnotationRendering(storeInstance: ViewerStore | null = null)
         // Populate render array from visible layers
         for (const curLayer of viewerAnnotations.value) {
             if (curLayer.visible && curLayer.annotations?.length > 0) {
-                // Instead of relying on annIndexOf which might be buggy, use simple filtering
+                // A scan, not a binary search: an annotation starting before the
+                // viewport can still overlap it, so start order alone cannot
+                // bound the search.
                 const annotationsInViewport = curLayer.annotations.filter(ann => {
 
                     const annStart = ann.start

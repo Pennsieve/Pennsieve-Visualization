@@ -30,8 +30,8 @@ export interface ChannelDetail {
  * `channelType` must be the uppercase literals 'CONTINUOUS' / 'UNIT': they flow
  * through `useTimeSeriesData.initChannels` (`type: curC.channelType`) into
  * `useCanvasRenderer.getPointCoords`, which switches on exactly those strings and
- * plots nothing for anything else. (Do not trust `validateChannelConfig`, which
- * also allows 'Neural' -- it has no call sites and the renderer rejects it.)
+ * plots nothing for anything else. 'Neural' names a segment block type elsewhere in
+ * the viewer and is not a valid `channelType`.
  *
  * Invariant inherited from the reader: a unit channel reports `endUs === startUs`,
  * so its `end === start` here. A bundle containing only unit channels therefore

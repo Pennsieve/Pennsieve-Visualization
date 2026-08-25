@@ -834,19 +834,28 @@ const initCanvasRenderer = () => {
 // Lifecycle hooks
 // A package switch that crosses asset types swaps the transport; the id is in the
 // key so re-activating a different package on the same backend reconnects too.
-watch(
-  () => [activeViewer.value?.content?.id, activeViewer.value?.content?.assetType] as const,
-  ([id]) => {
-    const content = activeViewer.value?.content
-    if (id && content) {
-      void openTransportFor(content)
-    }
+/**
+ * Identifies the connection the active viewer needs. A string, not an object or
+ * an array: a fresh array compares unequal on every evaluation, which would
+ * reopen the transport each time the active viewer is reassigned with the same
+ * package, discarding the loaded catalog and every cached segment.
+ */
+const transportKey = computed(() => {
+  const content = activeViewer.value?.content
+  return content?.id ? `${content.assetType ?? ''}|${content.id}` : null
+})
+
+watch(transportKey, (key) => {
+  const content = activeViewer.value?.content
+  if (key && content) {
+    void openTransportFor(content)
   }
-)
+})
 
 onMounted(() => {
-  // Opened here rather than in setup: children mount first, so their transport
-  // watchers are already registered when the catalog arrives during open().
+  // Opened here rather than in setup so the tree exists first. Subscribers can
+  // still arrive after the catalog is emitted, because the canvases are async
+  // components; the transport replays the catalog to a late subscriber.
   const content = activeViewer.value?.content
   if (content?.id && !transport.value) {
     void openTransportFor(content)
