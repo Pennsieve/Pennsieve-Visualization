@@ -52,9 +52,7 @@ export default defineConfig({
     },
     rollupOptions: {
       // Regex externals so deep imports (element-plus/es/components/*, the
-      // zarr reader's wasm chunks) stay external too. tiny-emitter stays
-      // bundled: it ships no exports map, so an externalized subpath import
-      // breaks node ESM consumers.
+      // zarr reader's wasm chunks) stay external too.
       external: [
         /^vue$/,
         /^pinia($|\/)/,

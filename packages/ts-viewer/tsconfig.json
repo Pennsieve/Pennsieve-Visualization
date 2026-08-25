@@ -5,7 +5,9 @@
     "baseUrl": ".",
     "outDir": "./dist",
     "declaration": true,
-    "declarationMap": true,
+    // Declaration maps point at sources this package does not publish, so they
+    // would only give consumers broken jump-to-definition targets.
+    "declarationMap": false,
     "noEmit": false,
     "paths": {
       "@/*": ["./src/*"]

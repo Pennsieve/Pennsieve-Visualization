@@ -28,13 +28,14 @@
   },
   "dependencies": {
     "@pennsieve/timeseries-zarr-reader": "0.4.0",
-    "protobufjs": "^7.6.3",
-    "tiny-emitter": "2.1.0"
+    "protobufjs": "^7.6.3"
   },
   "devDependencies": {
     "@aws-amplify/auth": "^6.13.0",
     "@vitejs/plugin-vue": "^5.2.4",
+    "@vue/test-utils": "^2.4.6",
     "element-plus": "^2.10.2",
+    "happy-dom": "^20.11.2",
     "pinia": "^3.0.3",
     "sass": "^1.88.0",
     "unplugin-auto-import": "19.3.0",

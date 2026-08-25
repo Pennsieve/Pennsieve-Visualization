@@ -1,8 +1,8 @@
 // @/composables/streaming/filters.ts
 //
 // Translation between the legacy filter wire messages the viewer builds
-// (TSViewerCanvas.vue setFilters, TSPlotCanvas.vue clear-channels callback) and
-// the reader's FilterSpec.
+// (@/filters/filterState buildFilterMessage, TSPlotCanvas.vue clear-channels callback)
+// and the reader's FilterSpec.
 
 import type { FilterSpec } from '@pennsieve/timeseries-zarr-reader'
 

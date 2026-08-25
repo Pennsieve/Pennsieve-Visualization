@@ -1,6 +1,6 @@
 // request_composable.ts
 
-import EventBus from '@/utils/event-bus';
+import { useViewerEmitter } from '@/events/emitter';
 
 const _isString = (x: unknown): x is string => Object.prototype.toString.call(x) === '[object String]'
 
@@ -57,6 +57,9 @@ export function useSendXhr(url: string, opts?: XhrOptions): Promise<unknown> {
 }
 
 export function useHandleXhrError(err: unknown) {
+    // No component is current inside an async catch block, so this resolves to
+    // the unscoped emitter and the message reaches every mounted viewer.
+    const emitter = useViewerEmitter()
     const error = err as {
         status?: number
         body?: ReadableStream<Uint8Array>
@@ -77,7 +80,7 @@ export function useHandleXhrError(err: unknown) {
             } catch {
                 // Not JSON; show the raw body
             }
-            EventBus.$emit('ajaxError', {
+            emitter.emit('ajaxError', {
                 detail: {
                     type: 'error',
                     msg: errorMsg
@@ -87,7 +90,7 @@ export function useHandleXhrError(err: unknown) {
     }
     else if (status === 401) {
         console.error('Request failed with status 401')
-        EventBus.$emit('ajaxError', {
+        emitter.emit('ajaxError', {
             detail: {
                 type: 'error',
                 msg: 'Session expired. Sign in again to continue.'
@@ -98,14 +101,14 @@ export function useHandleXhrError(err: unknown) {
         error.json().then(errorJson => {
           if (errorJson) {
             const msg = errorJson.message
-            EventBus.$emit('ajaxError', {
+            emitter.emit('ajaxError', {
               detail: {
                 type: 'info',
                 msg: msg,
               }
             })
           } else {
-            EventBus.$emit('ajaxError', {
+            emitter.emit('ajaxError', {
               detail: {
                 type: 'error',
                 msg: `Request failed with status ${status}`

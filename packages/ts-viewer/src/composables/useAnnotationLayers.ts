@@ -3,7 +3,7 @@ import { ref, inject } from 'vue'
 import { createViewerStore, type ViewerStore } from '../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
-import EventBus from '@/utils/event-bus'
+import { useViewerEmitter } from '@/events/emitter'
 import { hexToRgbA } from '@/utils/annotationUtils'
 import type { AnnotationLayer } from '@/utils/annotationUtils'
 
@@ -44,6 +44,10 @@ type LayersEmit = (event: 'annLayersInitialized' | 'closeAnnotationLayerWindow')
 export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
     // Use provided store, inject from parent, or fall back to default
     const viewerStore = storeInstance || inject<ViewerStore | null>('viewerStore', null) || createViewerStore('default')
+
+    // Resolved here, while a component is still current: the emits below run in
+    // async functions, where inject cannot reach the owning viewer.
+    const emitter = useViewerEmitter()
 
     const annLayerInfo = ref<LayerResult[] | undefined>([])
     const defaultColors = ref([
@@ -126,7 +130,7 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
             viewerStore.createLayer(layer)
             viewerStore.setActiveAnnotationLayer(layer.id)
 
-            EventBus.$emit('toast', {
+            emitter.emit('toast', {
                 detail: {
                     msg: `'${layer.name}' Layer Created`
                 }
@@ -183,7 +187,7 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
             // removeLayer call named an action that has never existed.
             viewerStore.deleteLayer({ id: layerId })
 
-            EventBus.$emit('toast', {
+            emitter.emit('toast', {
                 detail: {
                     msg: 'Layer deleted successfully'
                 }

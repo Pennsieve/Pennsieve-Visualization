@@ -23,10 +23,26 @@ jobs:
       - run: pnpm --filter @pennsieve-viz/tsviewer test
       - name: tsviewer dist stays small and typed
         run: |
-          test -f packages/ts-viewer/dist/index.d.ts
-          SIZE=$(du -sk packages/ts-viewer/dist | cut -f1)
-          echo "tsviewer dist: ${SIZE} KB"
-          test "$SIZE" -lt 1500
+          cd packages/ts-viewer
+          test -f dist/index.d.ts
+
+          # Bytes, not `du` blocks: dist holds one small declaration per source
+          # file, so block rounding reported nearly 50 percent more than the
+          # content actually weighs.
+          bytes() { find dist -type f "$@" -exec cat {} + | wc -c; }
+
+          # What a browser downloads. This is the gate that matters: it catches a
+          # dependency slipping back into the bundle, which is what put dist at
+          # 4.4 MB before the externals were fixed.
+          PAYLOAD=$(bytes \( -name '*.js' -o -name '*.cjs' -o -name '*.css' \))
+          echo "tsviewer runtime payload: $((PAYLOAD / 1024)) KB"
+          test "$PAYLOAD" -lt 614400
+
+          # Declarations ship too, and grow with the API surface rather than with
+          # what is bundled, so they get their own looser ceiling.
+          TOTAL=$(bytes)
+          echo "tsviewer dist total: $((TOTAL / 1024)) KB"
+          test "$TOTAL" -lt 1572864
       - uses: actions/upload-artifact@v4
         with:
           name: tsviewer-dist
