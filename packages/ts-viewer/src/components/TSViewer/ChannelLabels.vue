@@ -2,29 +2,30 @@
   <div
     id="channelLabels"
     ref="channelLabels"
+    :style="columnStyle"
   >
     <div
-      v-for="item in channels"
+      v-for="(item, index) in channels"
       :key="item.displayName"
       class="chLabelWrap"
+      :style="rowStyle"
       :data-id="item.id"
       @tap="onTap"
     >
-      <div :class="[item.selected? 'labelDiv selected': 'labelDiv' ]" >
-        {{ item.displayName }}
-      </div>
-      <div
-        class="chLabelIndWrap"
-        :hidden="hideLabelInfo"
-        :class="[ item.selected? 'selected': '']"
-      >
-        <div
-          class="chLabelInd"
-          :hidden="hideLabelInfo"
-        >
-          {{ _computeLabelInfo(item, globalZoomMult, item.rowScale) }}
+      <template v-if="labelShown(index)">
+        <div :class="[item.selected? 'labelDiv selected': 'labelDiv' ]" >
+          {{ item.displayName }}
         </div>
-      </div>
+        <div
+          v-if="!hideLabelInfo"
+          class="chLabelIndWrap"
+          :class="[ item.selected? 'selected': '']"
+        >
+          <div class="chLabelInd">
+            {{ _computeLabelInfo(item, globalZoomMult, item.rowScale) }}
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -57,9 +58,53 @@ const emit = defineEmits<{
 // Template refs
 const channelLabels = ref<HTMLDivElement | null>(null)
 
+/**
+ * Shortest row, in CSS pixels, that holds a channel name without touching its
+ * neighbors. A denser column labels one row in every `labelStride`.
+ */
+const MIN_LABEL_ROW_HEIGHT = 14
+
+/**
+ * Height of one channel row, in CSS pixels. Matches the spacing the plot canvas
+ * gives a row, so a name sits on its own trace. Not finite until the plot area
+ * has been measured.
+ */
+const rowHeight = computed(() => props.cHeight / props.channels.length)
+
+const rowsAreMeasured = computed(() => Number.isFinite(rowHeight.value) && rowHeight.value > 0)
+
+/**
+ * Pins the column to the plot height. Without it the column is as tall as its own
+ * rows, which passes the bottom of the plot once the channel count is high.
+ */
+const columnStyle = computed(() => {
+  if (!rowsAreMeasured.value) {
+    return {}
+  }
+  return { height: `${props.cHeight}px` }
+})
+
+const rowStyle = computed(() => {
+  if (!rowsAreMeasured.value) {
+    return {}
+  }
+  return { height: `${rowHeight.value}px` }
+})
+
+/** Distance between labeled rows, in rows. */
+const labelStride = computed(() => {
+  if (!rowsAreMeasured.value) {
+    return 1
+  }
+  return Math.max(1, Math.ceil(MIN_LABEL_ROW_HEIGHT / rowHeight.value))
+})
+
+/** Whether the row at this index carries a name. */
+const labelShown = (index: number) => index % labelStride.value === 0
+
 const hideLabelInfo = computed(() => {
   let hide = false
-  if (props.cHeight / props.channels.length < 30) {
+  if (rowHeight.value < 30) {
     hide = true
   }
   return hide
@@ -90,15 +135,15 @@ defineExpose({
 #channelLabels {
   display: flex;
   flex-direction: column;
-  justify-content: space-around;
   line-height: normal;
-  margin-bottom: 32px;
   min-width: 75px;
 }
 
 .chLabelWrap {
   display: flex;
+  flex: none;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
   cursor: pointer;
 }

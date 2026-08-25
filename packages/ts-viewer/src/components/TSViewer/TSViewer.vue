@@ -287,6 +287,8 @@ interface ChannelLabelsHandle {
 
 // Template refs
 const ts_viewer = ref<HTMLDivElement | null>(null)
+/** Watches the root's box so the plot area follows the space the host gives it. */
+let resizeObserver: ResizeObserver | null = null
 const scrubber = ref<ScrubberHandle | null>(null)
 const channelLabels = ref<ChannelLabelsHandle | null>(null)
 const viewerCanvas = ref<ViewerCanvasHandle | null>(null)
@@ -373,25 +375,23 @@ const maxDuration = computed(() => {
 })
 
 // Methods that need to be defined early (used in watchers)
-const onResize = async () => {
-  if (!ts_viewer.value) {
-    return
-  }
-
-  const element = document.getElementById("ts_viewer")
+/**
+ * Sizes the plot area from the box the host gives the viewer. The height comes from the
+ * rendered root rather than from the window, so a viewer in a panel is sized by the panel.
+ */
+const measureLayout = () => {
+  const element = ts_viewer.value
   if (!element) {
     return
   }
 
-  const style = window.getComputedStyle(element, null);
-  const hhh = parseInt(style.getPropertyValue('height'))
+  const style = window.getComputedStyle(element, null)
+  const rootHeight = parseInt(style.getPropertyValue('height'))
 
   const toolbarOffset = props.isPreview ? 0 : 100
 
-  window_height.value = hhh - toolbarOffset
-
-  await nextTick()
-  window_width.value = ts_viewer.value.offsetWidth
+  window_height.value = rootHeight - toolbarOffset
+  window_width.value = element.offsetWidth
 
   // ChannelLabels owns the label column's root element, so the width is read from the
   // element it exposes rather than from a ref in this template.
@@ -403,6 +403,11 @@ const onResize = async () => {
   labelWidth.value = labelDiv.clientWidth
   cWidth.value = (window_width.value - labelDiv.clientWidth - 16)
   cHeight.value = (window_height.value - 40)
+}
+
+const onResize = async () => {
+  await nextTick()
+  measureLayout()
 }
 
 /**
@@ -869,29 +874,20 @@ onMounted(() => {
 
   initChannels()
 
-  const element = document.getElementById("ts_viewer")
-  if (!element) {
-    console.warn('ts_viewer element not found')
-    return
+  measureLayout()
+
+  // A host can resize the viewer without the window resizing: a side panel opens, a pane
+  // is dragged wider, a flex row reflows. Observing the root catches all of them.
+  const element = ts_viewer.value
+  if (element && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      void onResize()
+    })
+    resizeObserver.observe(element)
+  } else {
+    window.addEventListener('resize', onResize)
   }
 
-  const style = window.getComputedStyle(element, null)
-  const hhh = parseInt(style.getPropertyValue('height'))
-
-  const toolbarOffset = props.isPreview ? 0 : 100
-
-  window_height.value = hhh - toolbarOffset
-  if (ts_viewer.value) {
-    window_width.value = ts_viewer.value.offsetWidth
-  }
-  window.addEventListener('resize', onResize)
-
-  const labelDiv = channelLabels.value?.el
-  if (labelDiv) {
-    labelWidth.value = labelDiv.clientWidth
-    cWidth.value = (window_width.value - labelDiv.clientWidth - 5 - 10)
-    cHeight.value = (window_height.value - 88)
-  }
   duration.value = constants.INITDURATION
 
   initCanvasRenderer()
@@ -899,6 +895,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
   window.removeEventListener('resize', onResize)
   const openTransport = transport.value
   transport.value = null
@@ -939,5 +937,8 @@ defineExpose({
   display: flex;
   background-color: white;
   flex: 1;
+  // This row keeps the height the column gives it. A taller child would push the
+  // toolbar out of view instead of fitting inside the viewer.
+  min-height: 0;
 }
 </style>

@@ -234,17 +234,15 @@ describe('TSViewer mounted against a recorded transport', () => {
      * Pushes the channel-details reply the legacy server sends after connect, then waits
      * for the request pipeline to settle.
      *
-     * Two page requests for the first viewport page are expected, not one: channel
-     * initialization issues the first, and the channel-count watcher then resizes the
-     * canvas 20 ms later, which changes rsPeriod, invalidates the cache, clears the
-     * pending-page map, and re-requests the same page.
-     * pins current behavior; revisit in the refactor
+     * One page request covers the first viewport. The channel-count watcher re-measures
+     * the plot area 20 ms later and reads the same numbers, so the sample period holds
+     * and the page is not requested again.
      */
     async function initializeChannels(): Promise<void> {
         const details = CHANNEL_DETAILS.map(({ id, name }) => ({ id, name }))
         harness.channelDetailsHandlers.forEach((handler) => handler(details))
         await vi.waitFor(() => {
-            expect(pageRequestsFor(TS_START).length).toBeGreaterThanOrEqual(2)
+            expect(pageRequestsFor(TS_START).length).toBeGreaterThanOrEqual(1)
         }, { timeout: 3000 })
     }
 

@@ -91,7 +91,7 @@ const hello = 'world';
       </p>
       <div
         class="component-container bg-tertiary"
-        style="height: 500px"
+        style="height: 700px"
       >
         <TSViewer :instance-id="TS_INSTANCE" />
       </div>
