@@ -125,7 +125,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import IconPreviousPage from "../icons/IconPreviousPage.vue"
 import IconNextAnnotationLeftFacing from "../icons/IconNextAnnotationLeftFacing.vue"
@@ -137,54 +137,42 @@ import IconControllerPause from "@/components/icons/IconControllerPause.vue"
 import { durationStepFor, durationPrecisionFor } from '@/utils/durationStep'
 
 // Props
-const props = defineProps({
-  maxDuration: {
-    type: Number,
-    required: true
-  },
-  duration: {
-    type: Number,
-    required: true
-  },
-  start: {
-    type: Number,
-    required: true
-  },
-  globalZoomMult: {
-    type: Number,
-    required: true,
-  }
-})
+const props = defineProps<{
+  maxDuration: number
+  duration: number
+  start: number
+  globalZoomMult: number
+}>()
 
 const zoomMult = computed({
   get() {
     return  (96 * window.devicePixelRatio) / (props.globalZoomMult * 25.4)
   },
-  set(newValue) {
+  set(newValue: number) {
     emit('update:globalZoomMult', (96 * window.devicePixelRatio) / (newValue * 25.4))
   },
 });
 
 // Emits
-const emit = defineEmits([
-  'pageBack',
-  'pageForward',
-  'incrementZoom',
-  'decrementZoom',
-  'updateDuration',
-  'nextAnnotation',
-  'previousAnnotation',
-  'setStart',
-  'update:globalZoomMult'
-])
+const emit = defineEmits<{
+  (e: 'pageBack'): void
+  (e: 'pageForward'): void
+  (e: 'incrementZoom'): void
+  (e: 'decrementZoom'): void
+  (e: 'updateDuration', duration: number): void
+  (e: 'nextAnnotation'): void
+  (e: 'previousAnnotation'): void
+  (e: 'setStart', start: number): void
+  (e: 'update:globalZoomMult', value: number): void
+}>()
 
 
 // Reactive data
 const showTimeZoom = ref(true)
 const showPlaybackSpeed = ref(true)
 const isPlaying = ref(false)
-const selectedPlaySpeed = ref(null)
-const intervalTimer = ref(null)
+const selectedPlaySpeed = ref<number | null>(null)
+const intervalTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const intervalPeriod = ref(150)
 const intervalPage = ref(1000000)
 
@@ -222,13 +210,13 @@ const durationInSeconds = computed({
   get() {
     return props.duration / 1e6
   },
-  set(newValue) {
+  set(newValue: number | undefined) {
     // Clearing the field reports an empty value. Hold the current window rather than
     // sending NaN to the renderer.
     if (!Number.isFinite(newValue)) {
       return
     }
-    emit('updateDuration', Math.max(0.01, newValue))
+    emit('updateDuration', Math.max(0.01, newValue!))
   }
 })
 
@@ -283,7 +271,7 @@ const previousAnnotation = () => {
 const startPlay = () => {
   isPlaying.value = true
   const intervalTimerFnc = () => {
-    emit('setStart', props.start + (intervalPage.value * selectedPlaySpeed.value))
+    emit('setStart', props.start + (intervalPage.value * selectedPlaySpeed.value!))
     intervalTimer.value = setTimeout(intervalTimerFnc, intervalPeriod.value)
   }
   intervalTimer.value = setTimeout(intervalTimerFnc, intervalPeriod.value)
@@ -292,7 +280,7 @@ const startPlay = () => {
 const stopPlay = () => {
   isPlaying.value = false
   intervalPeriod.value = 150
-  clearInterval(intervalTimer.value)
+  clearInterval(intervalTimer.value!)
 }
 
 // Lifecycle

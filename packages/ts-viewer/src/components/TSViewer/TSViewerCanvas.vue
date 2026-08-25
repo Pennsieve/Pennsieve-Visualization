@@ -87,7 +87,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {
   ref,
   reactive,
@@ -102,39 +102,71 @@ import { storeToRefs } from 'pinia'
 
 import TSPlotCanvas from "@/components/TSViewer/TSPlotCanvas.vue"
 import { createViewerStore } from "../../stores/tsviewer"
+import type { ActiveViewer } from "../../stores/tsviewer"
+import type { RendererConstants } from '@/composables/useCanvasRenderer'
+import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
 
 // Import TimeseriesAnnotationCanvas properly
 const TimeseriesAnnotationCanvas = defineAsyncComponent(() =>
   import('@/components/TSViewer/TSAnnotationCanvas.vue')
 )
 
+/** Keys of the viewer constants object this component and the canvases it hosts read. */
+interface ViewerCanvasConstants extends RendererConstants {
+  CURSOROFFSET: number
+  XGRIDSPACING: number
+  NRPXPERLABEL: number
+  PAGESIZEDIVIDER: number
+  ANNOTATIONLABELHEIGHT: number
+  PREFETCHPAGES: number
+  LIMITANNFETCH: number
+}
+
+/** Payload of the filter modal's setFilters event, forwarded by TSViewer.setTimeseriesFilters. */
+interface FilterPayload {
+  filterType: string
+  selChannels: string[]
+  input0?: number | string
+  input1?: number | string
+  notchFreq?: number
+}
+
+/** Layer-creation payload; matches the NewLayer shape TSAnnotationCanvas exposes. */
+interface NewAnnotationLayer {
+  name: string
+  color: string
+  description?: string
+}
+
+interface Props {
+  windowHeight?: number
+  windowWidth?: number
+  duration: number
+  start: number
+  cHeight: number
+  cWidth: number
+  globalZoomMult: number
+  constants: ViewerCanvasConstants
+  tsStart: number | null
+  tsEnd: number | null
+  cursorLoc: number
+  activeViewer: ActiveViewer
+}
+
 // Define props
-const props = defineProps({
-  windowHeight: Number,
-  windowWidth: Number,
-  duration: Number,
-  start: Number,
-  cHeight: Number,
-  cWidth: Number,
-  globalZoomMult: Number,
-  constants: Object,
-  tsStart: Number,
-  tsEnd: Number,
-  cursorLoc: Number,
-  activeViewer: { type: Object, required: true },
-})
+const props = defineProps<Props>()
 
 // Define emits
-const emit = defineEmits([
-  'setDuration',
-  'setGlobalZoom',
-  'setStart',
-  'addAnnotation',
-  'updateAnnotation',
-  'closeAnnotationLayerWindow',
-  'channelsInitialized',
-  'annLayersInitialized'
-])
+const emit = defineEmits<{
+  (e: 'setDuration', value: number): void
+  (e: 'setGlobalZoom', value: number): void
+  (e: 'setStart', value: number): void
+  (e: 'addAnnotation', startTime: number, duration: number, allChannels: boolean, label: string, description: string, layer: AnnotationLayer): void
+  (e: 'updateAnnotation', annotation: Annotation): void
+  (e: 'closeAnnotationLayerWindow'): void
+  (e: 'channelsInitialized'): void
+  (e: 'annLayersInitialized'): void
+}>()
 
 // Store setup - inject from parent TSViewer component
 // Falls back to default store for backwards compatibility
@@ -142,12 +174,12 @@ const viewerStore = inject('viewerStore', () => createViewerStore('default'), tr
 const { viewerChannels, viewerAnnotations, viewerActiveTool, viewerSelectedChannels } = storeToRefs(viewerStore)
 
 // Template refs
-const plotCanvas = ref(null)
-const axisArea = ref(null)
-const annArea = ref(null)
-const cursorArea = ref(null)
-const annCanvas = ref(null)
-const iArea = ref(null)
+const plotCanvas = ref<InstanceType<typeof TSPlotCanvas> | null>(null)
+const axisArea = ref<HTMLCanvasElement | null>(null)
+const annArea = ref<HTMLCanvasElement | null>(null)
+const cursorArea = ref<HTMLCanvasElement | null>(null)
+const annCanvas = ref<InstanceType<typeof TimeseriesAnnotationCanvas> | null>(null)
+const iArea = ref<HTMLCanvasElement | null>(null)
 
 // Reactive data
 const summary = reactive({})
@@ -165,7 +197,7 @@ const defaultLabels = ref(['Event', 'Artifact', 'Seizure', 'Mark', 'Stim On', 'S
 const labelSelect = ref(0)
 
 // Render function refs
-const renderFnc = ref(null)
+const renderFnc = ref<((...args: unknown[]) => unknown) | null>(null)
 const renderThrottle = ref(0)
 const requestLeadingEdge = ref(true)
 
@@ -191,7 +223,7 @@ const ensureActiveAnnotationLayer = () => {
 }
 
 // ViewerActiveTool functionality - dynamically invoke tool methods
-const setActiveTool = (activeTool) => {
+const setActiveTool = (activeTool: string) => {
   if (activeTool) {
     // Set first character of tool to be capitalized so the method is camel case
     const methodName = 'set' + activeTool.charAt(0).toUpperCase() + activeTool.slice(1)
@@ -205,7 +237,7 @@ const setActiveTool = (activeTool) => {
 }
 
 // Map of dynamic methods that can be called by setActiveTool
-const methodMap = {
+const methodMap: Record<string, () => void> = {
   setPan: () => {},
   setPointer: () => {},
   setAnnotate: () => {
@@ -213,6 +245,11 @@ const methodMap = {
     ensureActiveAnnotationLayer()
   }
 }
+
+// Template-scope alias for the tsEnd prop: TSAnnotationCanvas declares its tsEnd prop as
+// number | undefined, so the null this prop can hold before the time range is known is
+// passed through under a non-null assertion. The value itself is unchanged.
+const tsEnd = computed(() => props.tsEnd!)
 
 // Computed properties
 const nrVisibleChannels = computed(() => {
@@ -295,21 +332,21 @@ watch(pointerMode, () => {
   switch (pointerMode.value) {
     case 'cursor_hover':
       iAreaEl.removeAttribute('point')
-      iAreaEl.setAttribute('cursor_hover', true)
+      iAreaEl.setAttribute('cursor_hover', 'true')
       break
     case 'annResize-left':
     case 'annResize-right':
-      iAreaEl.setAttribute('col_resize', true)
+      iAreaEl.setAttribute('col_resize', 'true')
       break
     case 'annSelect':
-      iAreaEl.setAttribute('active', true)
+      iAreaEl.setAttribute('active', 'true')
       break
     case 'pan':
     case 'pan':
       break
     case 'pointer':
     case 'annotate':
-      iAreaEl.setAttribute('point', true)
+      iAreaEl.setAttribute('point', 'true')
       break
     default:
       iAreaEl.removeAttribute('point')
@@ -327,23 +364,23 @@ const resetFocusedAnnotation = () => {
   annCanvas.value?.resetFocusedAnnotation()
 }
 
-const createAnnotationLayer = (newLayer) => {
+const createAnnotationLayer = (newLayer: NewAnnotationLayer) => {
   annCanvas.value?.createAnnotationLayer(newLayer)
 }
 
-const getNextAnnotation = () => {
+const getNextAnnotation = (): number => {
   let cursorOffset = (props.cursorLoc * props.cWidth - props.constants['CURSOROFFSET']) * rsPeriod.value
   let nextAnn = annCanvas.value?.findNextAnnotation(props.start + cursorOffset)
-  return nextAnn.start - cursorOffset
+  return nextAnn!.start - cursorOffset
 }
 
-const getPreviousAnnotation = () => {
+const getPreviousAnnotation = (): number => {
   let cursorOffset = (props.cursorLoc * props.cWidth - props.constants['CURSOROFFSET']) * rsPeriod.value
   let nextAnn = annCanvas.value?.findPreviousAnnotation(props.start + cursorOffset)
-  return nextAnn.start - cursorOffset
+  return nextAnn!.start - cursorOffset
 }
 
-const onUpdateAnnotation = (annotation) => {
+const onUpdateAnnotation = (annotation: Annotation) => {
   emit('updateAnnotation', annotation)
 }
 
@@ -363,7 +400,7 @@ const onAnnLayersInitialized = () => {
   emit('annLayersInitialized')
 }
 
-const setGlobalZoom = (value) => {
+const setGlobalZoom = (value: number) => {
   emit('setGlobalZoom', value)
 }
 
@@ -371,7 +408,7 @@ const channelsInitialized = () => {
   emit('channelsInitialized')
 }
 
-const _onMouseWheel = (e) => {
+const _onMouseWheel = (e: WheelEvent) => {
   e.stopPropagation()
   e.preventDefault()
 
@@ -394,7 +431,7 @@ const _onMouseWheel = (e) => {
   }
 }
 
-const _onMouseUp = (e) => {
+const _onMouseUp = (e: MouseEvent) => {
   resizeClicked.value = false
   mouseDown.value = false
 
@@ -402,15 +439,15 @@ const _onMouseUp = (e) => {
     case 'pointer':
       clearICanvas()
       const append = e.metaKey
-      const yEnd = e.clientY - iArea.value.getBoundingClientRect().top
-      const yStart = startDragCoord.y - iArea.value.getBoundingClientRect().top
+      const yEnd = e.clientY - iArea.value!.getBoundingClientRect().top
+      const yStart = startDragCoord.y - iArea.value!.getBoundingClientRect().top
 
       const channels = viewerChannels.value.map(channel => {
         if (append === false) {
           channel.selected = false
         }
-        if ((channel.rowBaseline > yStart && channel.rowBaseline < yEnd) ||
-          (channel.rowBaseline < yStart && channel.rowBaseline > yEnd)) {
+        if ((channel.rowBaseline! > yStart && channel.rowBaseline! < yEnd) ||
+          (channel.rowBaseline! < yStart && channel.rowBaseline! > yEnd)) {
           channel.selected = true
         }
         return channel
@@ -430,8 +467,8 @@ const _onMouseUp = (e) => {
       // Ensure we have a selected layer before creating annotation
       ensureActiveAnnotationLayer()
 
-      let curLIndex = null
-      let selectedLayer = null
+      let curLIndex: number | null = null
+      let selectedLayer: AnnotationLayer | null = null
 
       // FIX: Find the selected layer more carefully
       for (let i = 0; i < viewerAnnotations.value.length; i++) {
@@ -458,7 +495,7 @@ const _onMouseUp = (e) => {
       const allChannels = selectedChannels.length === viewerChannels.value.length || selectedChannels.length === 0
 
       let duration = (e.clientX - startDragCoord.x) * rsPeriod.value
-      let startTime = startDragTimeStamp.value + ((startDragCoord.x - iArea.value.getBoundingClientRect().left) * rsPeriod.value)
+      let startTime = startDragTimeStamp.value + ((startDragCoord.x - iArea.value!.getBoundingClientRect().left) * rsPeriod.value)
 
       // Normalize negative durations (right-to-left drag)
       if (duration < 0) {
@@ -485,7 +522,7 @@ const _onMouseUp = (e) => {
           userId: null
         }
 
-        viewerStore.setActiveAnnotation(newAnn)
+        viewerStore.setActiveAnnotation(newAnn as unknown as Annotation)
         emit('addAnnotation', startTime, duration, allChannels, newAnn.label, newAnn.description, selectedLayer)
         break
       }
@@ -499,15 +536,15 @@ const _onMouseUp = (e) => {
 }
 
 const clearICanvas = () => {
-  const iCanvas = iArea.value
-  const ctx = iCanvas.getContext('2d')
+  const iCanvas = iArea.value!
+  const ctx = iCanvas.getContext('2d')!
   ctx.clearRect(0, 0, props.cWidth, props.cHeight)
 }
 
-const _onMouseDown = (evt) => {
+const _onMouseDown = (evt: MouseEvent) => {
   mouseDown.value = true
   startDragTimeStamp.value = props.start
-  const cCoord = iArea.value.getBoundingClientRect()
+  const cCoord = iArea.value!.getBoundingClientRect()
   startDragCoord.x = evt.clientX
   startDragCoord.y = evt.clientY
 
@@ -529,7 +566,7 @@ const _onMouseOut = () => {
   mouseDown.value = false
 }
 
-const _onMouseEnter = (e) => {
+const _onMouseEnter = (e: MouseEvent) => {
   if (e.buttons === 1) {
     mouseDown.value = true
   } else {
@@ -537,11 +574,11 @@ const _onMouseEnter = (e) => {
   }
 }
 
-const _onMouseMove = (e) => {
+const _onMouseMove = (e: MouseEvent) => {
   e.preventDefault()
   e.stopPropagation()
 
-  const cCoord = iArea.value.getBoundingClientRect()
+  const cCoord = iArea.value!.getBoundingClientRect()
   const mY = e.clientY - cCoord.top
   const mX = e.clientX - cCoord.left
 
@@ -589,7 +626,7 @@ const resize = () => {
   renderAll(25)
 }
 
-const updateRsPeriod = (w, d) => {
+const updateRsPeriod = (w: number, d: number) => {
   const oldRs = rsPeriod.value
   const newPeriod = d / w
   if (newPeriod !== oldRs) {
@@ -599,7 +636,7 @@ const updateRsPeriod = (w, d) => {
   }
 }
 
-const _cpCanvasScaler = (sz, pixelRatio, offset) => {
+const _cpCanvasScaler = (sz: number, pixelRatio: number, offset: number) => {
   return pixelRatio * (sz + offset)
 }
 
@@ -612,11 +649,11 @@ const renderAll = (delay = 0, requestLeadingEdgeParam = true) => {
   renderFnc.value()
 }
 
-const throttle = (func, wait, options = {}) => {
-  let context
-  let args
-  let result
-  let timeout = null
+const throttle = (func: (...args: unknown[]) => unknown, wait: number, options: { leading?: boolean; trailing?: boolean } = {}) => {
+  let context: any // TODO(ts-phase4)
+  let args: any // TODO(ts-phase4)
+  let result: unknown
+  let timeout: ReturnType<typeof setTimeout> | null = null
   let previous = 0
 
   const later = function() {
@@ -626,7 +663,7 @@ const throttle = (func, wait, options = {}) => {
     if (!timeout) context = args = null
   }
 
-  return function() {
+  return function(this: unknown) {
     const now = Date.now()
     if (!previous && options.leading === false) previous = now
     const remaining = wait - (now - previous)
@@ -662,8 +699,8 @@ const _renderAll = () => {
 }
 
 const _renderAxis = () => {
-  const pa = axisArea.value
-  const ctx = pa.getContext('2d')
+  const pa = axisArea.value!
+  const ctx = pa.getContext('2d')!
   ctx.setTransform(pixelRatio.value, 0, 0, pixelRatio.value, 0, 0)
 
   ctx.clearRect(0, 0, props.cWidth, props.cHeight)
@@ -695,7 +732,7 @@ const _renderAxis = () => {
 
   for (let i = 0; i < nrGridLines; i++) {
     let realX = props.start + xLoc1 + i * gridSpacing
-    if (realX > props.tsEnd) {
+    if (realX > props.tsEnd!) {
       break
     }
 
@@ -732,9 +769,9 @@ const _renderAxis = () => {
   }
 }
 
-const renderSelectBox = (curX, curY) => {
-  const iCanvas = iArea.value
-  const ctx = iCanvas.getContext('2d')
+const renderSelectBox = (curX: number, curY: number) => {
+  const iCanvas = iArea.value!
+  const ctx = iCanvas.getContext('2d')!
   ctx.setTransform(pixelRatio.value, 0, 0, pixelRatio.value, 0, 0)
 
   ctx.clearRect(0, 0, props.cWidth, props.cHeight)
@@ -752,8 +789,8 @@ const renderSelectBox = (curX, curY) => {
 }
 
 const _renderCursor = () => {
-  const pa = cursorArea.value
-  const ctx = pa.getContext('2d')
+  const pa = cursorArea.value!
+  const ctx = pa.getContext('2d')!
   ctx.setTransform(pixelRatio.value, 0, 0, pixelRatio.value, 0, 0)
   ctx.clearRect(0, 0, props.cWidth + props.constants['CURSOROFFSET'], props.cHeight)
 
@@ -779,15 +816,15 @@ const _renderCursor = () => {
   ctx.restore()
 }
 
-const renderAnnotationBox = (curX) => {
-  const iCanvas = iArea.value
-  const ctx = iCanvas.getContext('2d')
+const renderAnnotationBox = (curX: number) => {
+  const iCanvas = iArea.value!
+  const ctx = iCanvas.getContext('2d')!
   ctx.setTransform(pixelRatio.value, 0, 0, pixelRatio.value, 0, 0)
 
   const annotationHeight = props.constants['ANNOTATIONLABELHEIGHT']
   const halfAnnotationHeight = (annotationHeight / 2) | 0
 
-  let curLIndex = null
+  let curLIndex: number | null = null
   for (let i = 0; i < viewerAnnotations.value.length; i++) {
     if (viewerAnnotations.value[i].selected) {
       curLIndex = i
@@ -813,7 +850,7 @@ const renderAnnotationBox = (curX) => {
     ctx.fillStyle = 'rgba(0,0,0,0.1)'
     ctx.fillRect(xStart, 0, dx, pHeight.value)
 
-    ctx.fillStyle = viewerAnnotations.value[curLIndex].color
+    ctx.fillStyle = viewerAnnotations.value[curLIndex].color!
     ctx.strokeStyle = ctx.fillStyle
 
     let lblStart = xStart - 1
@@ -840,7 +877,7 @@ const renderAnnotationBox = (curX) => {
     let maxOffset = 0
     const channelConfig = viewerChannels.value
 
-    ctx.fillStyle = viewerAnnotations.value[curLIndex].color
+    ctx.fillStyle = viewerAnnotations.value[curLIndex].color!
     ctx.strokeStyle = ctx.fillStyle
 
     let lblStart = xStart - 1
@@ -853,7 +890,7 @@ const renderAnnotationBox = (curX) => {
     for (let ch = 0; ch < channelConfig.length; ch++) {
       const curChannelView = channelConfig[ch]
       if (curChannelView.selected && curChannelView.visible) {
-        const channelOffset = curChannelView.rowBaseline | 0
+        const channelOffset = curChannelView.rowBaseline! | 0
         if (channelOffset < minOffset) {
           minOffset = channelOffset
         }
@@ -889,7 +926,8 @@ const initViewerCanvas = () => {
 }
 
 const getScreenPixelRatio = () => {
-  let ctx = iArea.value.getContext('2d')
+  // TODO(ts-phase4): the backing-store ratio fields are nonstandard and untyped.
+  let ctx = iArea.value!.getContext('2d') as any
   let dpr = window.devicePixelRatio || 1
   let bsr = ctx.webkitBackingStorePixelRatio ||
     ctx.mozBackingStorePixelRatio ||
@@ -900,7 +938,7 @@ const getScreenPixelRatio = () => {
   return dpr / bsr
 }
 
-const getUTCTimeString = (d) => {
+const getUTCTimeString = (d: Date) => {
   return (
     ('0' + d.getUTCHours()).slice(-2) + ':' +
     ('0' + d.getUTCMinutes()).slice(-2) + ':' +
@@ -908,10 +946,10 @@ const getUTCTimeString = (d) => {
   )
 }
 
-const setFilters = (payload) => {
-  let input0 = parseFloat(payload.input0)
-  let input1 = parseFloat(payload.input1)
-  let message = {}
+const setFilters = (payload: FilterPayload) => {
+  let input0 = parseFloat(payload.input0 as string)
+  let input1 = parseFloat(payload.input1 as string)
+  let message: any = {} // TODO(ts-phase4): build LegacyFilterMessage variants directly
 
   switch (payload.filterType) {
     case 'clear':

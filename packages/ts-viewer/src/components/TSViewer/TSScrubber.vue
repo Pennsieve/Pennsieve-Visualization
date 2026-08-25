@@ -31,39 +31,52 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick, inject } from 'vue'
 import { createViewerStore } from '../../stores/tsviewer'
+import type { ActiveViewer, ViewerChannel } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import { getClient } from "@/composables/streaming/clientRegistry"
 import { isZarrAssetType } from "@/composables/streaming/assetTypes"
 
+/** Keys of the viewer constants object the scrubber reads. */
+interface ScrubberConstants {
+  SEGMENTSPAN: number
+  MAXRECURSION: number
+}
+
+interface Props {
+  /** Recording start in microseconds; null until the channel list is known. */
+  ts_start: number | null
+  /** Recording end in microseconds; null until the channel list is known. */
+  ts_end: number | null
+  cWidth: number
+  constants: ScrubberConstants
+  start: number
+  duration: number
+  cursorLoc: number
+  labelWidth: number
+  activeViewer: ActiveViewer
+}
+
 // Props
-const props = defineProps({
-  ts_start: Number,
-  ts_end: Number,
-  cWidth: Number,
-  constants: Object,
-  start: Number,
-  duration: Number,
-  cursorLoc: Number,
-  labelWidth: Number,
-  activeViewer: Object
-})
+const props = defineProps<Props>()
 
 // Emits
-const emit = defineEmits(['setStart'])
+const emit = defineEmits<{
+  (e: 'setStart', value: number): void
+}>()
 
 // Store - inject from parent TSViewer component
 // Falls back to default store for backwards compatibility
 const viewerStore = inject('viewerStore', () => createViewerStore('default'), true)
 
 // Template refs
-const canvasWrap = ref(null)
-const segmentsCanvas = ref(null)
-const annotationCanvas = ref(null)
-const iCanvas = ref(null)
+const canvasWrap = ref<HTMLDivElement | null>(null)
+const segmentsCanvas = ref<HTMLCanvasElement | null>(null)
+const annotationCanvas = ref<HTMLCanvasElement | null>(null)
+const iCanvas = ref<HTMLCanvasElement | null>(null)
 
 // Reactive data
 const pixelRatio = ref(1)
@@ -72,10 +85,11 @@ const viewportHeight = ref(30)
 const mouseDown = ref(false)
 const hoverTxt = ref('')
 const pointerMode = ref('point')
-const patternCnvs = ref(null)
-const annotations = ref([])
-const segmentSpans = ref([])
-const segments = ref([])
+const patternCnvs = ref<HTMLCanvasElement | null>(null)
+// TODO(ts-phase4): holds the annotation-window response, an object keyed by layer id.
+const annotations = ref<any>([])
+const segmentSpans = ref<number[]>([])
+const segments = ref<number[]>([])
 const isInitializing = ref(false)
 // Additional mouse tracking data
 const clickX = ref(0)
@@ -121,7 +135,7 @@ const scrubberCWidth = computed(() => {
 })
 
 const period = computed(() => {
-  return Math.floor((props.ts_end - props.ts_start) / props.cWidth)
+  return Math.floor((props.ts_end! - props.ts_start!) / props.cWidth)
 })
 
 // Watchers
@@ -225,12 +239,13 @@ const clearCanvases = () => {
     })
   })
 }
-const _cpCanvasScaler = (sz, pixelRatio, offset) => {
+const _cpCanvasScaler = (sz: number, pixelRatio: number, offset: number) => {
   return pixelRatio * (sz + offset)
 }
 
 const getScreenPixelRatio = () => {
-  const ctx = iCanvas.value.getContext('2d')
+  // TODO(ts-phase4): the backing-store ratio fields are nonstandard and untyped.
+  const ctx = iCanvas.value!.getContext('2d') as any
   const dpr = window.devicePixelRatio || 1
   const bsr = ctx.webkitBackingStorePixelRatio ||
     ctx.mozBackingStorePixelRatio ||
@@ -241,7 +256,8 @@ const getScreenPixelRatio = () => {
   return dpr / bsr
 }
 
-const getUTCTimeString = (d) => {
+// TODO(ts-phase4): the parameter starts as microseconds and is reassigned to a Date.
+const getUTCTimeString = (d: any) => {
   if (d > 0) {
     d = d / 1000
     d = new Date(d)
@@ -250,7 +266,8 @@ const getUTCTimeString = (d) => {
   }
 }
 
-const getUTCDateString = (d, s, c) => {
+// TODO(ts-phase4): the parameter starts as microseconds and is reassigned to a Date.
+const getUTCDateString = (d: any, s: string, c?: unknown) => {
   if (s !== '') {
     return s
   } else if (d > 0) {
@@ -260,9 +277,9 @@ const getUTCDateString = (d, s, c) => {
 }
 
 // Mouse Interactions
-const _onMouseMove = (e) => {
+const _onMouseMove = (e: MouseEvent) => {
   if (!mouseDown.value) {
-    const cCoord = iCanvas.value.getBoundingClientRect()
+    const cCoord = iCanvas.value!.getBoundingClientRect()
     const cHoverOffset = e.clientX - cCoord.left
     const cEnd = cStart.value + cDuration.value
     const oldMode = pointerMode.value
@@ -270,16 +287,16 @@ const _onMouseMove = (e) => {
 
     if (inResizeArea) {
       pointerMode.value = 'drag'
-      iCanvas.value.setAttribute('dragme', true)
-      iCanvas.value.removeAttribute('resizeme')
+      iCanvas.value!.setAttribute('dragme', 'true')
+      iCanvas.value!.removeAttribute('resizeme')
     } else {
       pointerMode.value = 'point'
-      iCanvas.value.removeAttribute('dragme')
-      iCanvas.value.removeAttribute('resizeme')
+      iCanvas.value!.removeAttribute('dragme')
+      iCanvas.value!.removeAttribute('resizeme')
     }
 
     // Update hoverTxt
-    const realStart = ((cHoverOffset) / props.cWidth) * (props.ts_end - props.ts_start) + props.ts_start
+    const realStart = ((cHoverOffset) / props.cWidth) * (props.ts_end! - props.ts_start!) + props.ts_start!
     const d = new Date(realStart / 1000).toUTCString()
     hoverTxt.value = d.substring(0, d.length - 3)
 
@@ -289,10 +306,10 @@ const _onMouseMove = (e) => {
   } else {
     // is Dragging
     const _dx = e.clientX - clickX.value
-    const realStart = ((_dx) / props.cWidth) * (props.ts_end - props.ts_start)
+    const realStart = ((_dx) / props.cWidth) * (props.ts_end! - props.ts_start!)
     const setStart = startDragTime.value + realStart
     emit('setStart', setStart)
-    const d = new Date((realStart + props.ts_start) / 1000)
+    const d = new Date((realStart + props.ts_start!) / 1000)
     hoverTxt.value = d.toUTCString()
   }
 }
@@ -301,16 +318,16 @@ const _onMouseUp = () => {
   mouseDown.value = false
 }
 
-const _onMouseDown = (e) => {
+const _onMouseDown = (e: MouseEvent) => {
   mouseDown.value = true
-  const cCoord = iCanvas.value.getBoundingClientRect()
+  const cCoord = iCanvas.value!.getBoundingClientRect()
   const cClickOffset = e.clientX - cCoord.left
   clickX.value = e.clientX
 
 
-  const realStart = (cClickOffset / scrubberCWidth.value) * (props.ts_end - props.ts_start)
-  emit('setStart', realStart + props.ts_start)
-  startDragTime.value = realStart + props.ts_start
+  const realStart = (cClickOffset / scrubberCWidth.value) * (props.ts_end! - props.ts_start!)
+  emit('setStart', realStart + props.ts_start!)
+  startDragTime.value = realStart + props.ts_start!
 }
 
 const _onMouseEnter = () => {
@@ -322,7 +339,7 @@ const _onMouseOut = () => {
 }
 
 // Annotation Functions
-const pageInGap = (startEpoch, pageSize) => {
+const pageInGap = (startEpoch: unknown, pageSize: unknown) => {
   // Implementation needed
 }
 
@@ -363,10 +380,10 @@ const initSegmentSpans = () => {
 const isZarrSource = () => isZarrAssetType(props.activeViewer?.content?.assetType)
 
 /** Legacy availability lookup: one REST call per channel per page of the recording. */
-const _requestSegmentSpanFromApi = async (channel, start, end) => {
+const _requestSegmentSpanFromApi = async (channel: string, start: number, end: number) => {
   const token = await useToken()
   const url = `${viewerStore.config.timeSeriesApi}/ts/retrieve/segments?session=${token}&channel=${channel}&start=${start}&end=${end}`
-  return await useSendXhr(url)
+  return await useSendXhr(url) as Array<[number, number]>
 }
 
 /**
@@ -380,7 +397,7 @@ const _requestSegmentSpanFromApi = async (channel, start, end) => {
  * `gapThresholdUs` is one cell of the scrubber's own 5000-cell bitmap: a gap narrower than a
  * cell cannot be drawn, so coalescing at that width matches what is actually rendered.
  */
-const _requestSegmentSpanFromBundle = async (channel, channelIdx, start, end) => {
+const _requestSegmentSpanFromBundle = async (channel: string, channelIdx: number, start: number, end: number) => {
   const entry = getClient(viewerStore.$id)
   if (!entry) {
     console.warn('TSScrubber: streaming client not ready, skipping segment spans')
@@ -399,7 +416,7 @@ const _requestSegmentSpanFromBundle = async (channel, channelIdx, start, end) =>
     bundleChannel = channel.slice(0, -(label.length + 1))
   }
 
-  const span = props.ts_end - props.ts_start
+  const span = props.ts_end! - props.ts_start!
   const gapThresholdUs = Math.max(1, Math.floor(span / 5000))
 
   return await entry.client.dataSpans({
@@ -410,7 +427,7 @@ const _requestSegmentSpanFromBundle = async (channel, channelIdx, start, end) =>
   })
 }
 
-const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
+const _requestSegmentSpan = async (channel: string, channelIdx: number, start: number, end: number, ix: number) => {
   const max_recursion = props.constants['MAXRECURSION']
 
   // Validate inputs before making API call
@@ -441,7 +458,7 @@ const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
     }
 
     // Parse response into vector
-    let vector = new Array(resp.length * 2)
+    let vector: number[] = new Array(resp.length * 2)
     let i = 0
     for (let j = 0; j < resp.length; j++) {
       vector[i] = resp[j][0]
@@ -449,8 +466,8 @@ const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
       i = i + 2
 
       // append to global
-      const pxStart = Math.floor(((resp[j][0] - props.ts_start) / (props.ts_end - props.ts_start)) * 5000)
-      const pxEnd = Math.ceil(((resp[j][1] - props.ts_start) / (props.ts_end - props.ts_start)) * 5000)
+      const pxStart = Math.floor(((resp[j][0] - props.ts_start!) / (props.ts_end! - props.ts_start!)) * 5000)
+      const pxEnd = Math.ceil(((resp[j][1] - props.ts_start!) / (props.ts_end! - props.ts_start!)) * 5000)
       segments.value.fill(1, pxStart, pxEnd)
     }
 
@@ -481,7 +498,7 @@ const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
 
     // remove first value if there is overlap with previous request
     let firstValue = vector[0]
-    let chConfig = viewerStore.viewerChannels[channelIdx]
+    let chConfig = viewerStore.viewerChannels[channelIdx] as ViewerChannel & { dataSegments: number[] }
 
     // Double-check that the channel still exists and matches
     if (!chConfig || chConfig.id !== channel) {
@@ -501,7 +518,7 @@ const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
 
     // If we did not request all segment-spans yet, get next segment or bail when recursion limit.
     let span = end - start
-    if ((start + span) < props.ts_end && ix < max_recursion) {
+    if ((start + span) < props.ts_end! && ix < max_recursion) {
       _requestSegmentSpan(channel, channelIdx, end, (end + span), ix + 1)
     } else {
       renderSegments()
@@ -514,7 +531,7 @@ const _requestSegmentSpan = async (channel, channelIdx, start, end, ix) => {
 
 const getAnnotations = async () => {
   // Store the viewer ID at the start to check consistency later
-  const currentViewerId = props.activeViewer?.content.id
+  const currentViewerId = props.activeViewer?.content!.id
 
   // Validate that we have the required data before making API call
   if (!currentViewerId) {
@@ -543,13 +560,13 @@ const getAnnotations = async () => {
     let url = baseUrl + `?api_key=${token}&aggregation=count&start=${props.ts_start}&end=${props.ts_end}&period=${period.value}&mergePeriods=true`
 
     for (let i in layerIds) {
-      url = url + `&layerIds=${layerIds[i]}`
+      url = url + `&layerIds=${layerIds[i as unknown as number]}`
     }
 
     const resp = await useSendXhr(url)
 
     // Double-check that we're still on the same viewer (async operations can be overtaken)
-    if (props.activeViewer?.content.id === currentViewerId) {
+    if (props.activeViewer?.content!.id === currentViewerId) {
       annotations.value = resp
       render()
     }
@@ -583,8 +600,8 @@ const renderViewPort = () => {
     ctx.setTransform(pixelRatio.value, 0, 0, pixelRatio.value, 0, 0)
     ctx.clearRect(0, 0, props.cWidth, viewportHeight.value)
 
-    cStart.value = (((props.start - props.ts_start) / (props.ts_end - props.ts_start)) * props.cWidth + 0.5) | 0
-    cDuration.value = (((props.duration) / (props.ts_end - props.ts_start)) * props.cWidth + 0.5) | 0
+    cStart.value = (((props.start - props.ts_start!) / (props.ts_end! - props.ts_start!)) * props.cWidth + 0.5) | 0
+    cDuration.value = (((props.duration) / (props.ts_end! - props.ts_start!)) * props.cWidth + 0.5) | 0
 
     // Viewport
     ctx.fillStyle = 'rgb(80,80,80)'
@@ -620,7 +637,7 @@ const renderSegments = () => {
       return
     }
     ctx.setTransform(pixelRatio.value, 0, 0, pixelRatio.value, 0, 0)
-    ctx.fillStyle = ctx.createPattern(patternCnvs.value, 'repeat')
+    ctx.fillStyle = ctx.createPattern(patternCnvs.value!, 'repeat')!
     ctx.clearRect(0, 0, props.cWidth, viewportHeight.value)
 
     for (let i = 1; i < segmentSpans.value.length; i += 2) {
@@ -646,8 +663,8 @@ const renderTimelimeLine = () => {
   ctx.setTransform(pixelRatio.value, 0, 0, pixelRatio.value, 0, 0)
 
   ctx.clearRect(0, 0, props.cWidth, scrubberHeight.value)
-  const xStart = props.ts_start
-  const xEnd = props.ts_end
+  const xStart = props.ts_start!
+  const xEnd = props.ts_end!
 
   const annotationLayers = annotations.value
   let annotationIndex = 0
@@ -663,7 +680,7 @@ const renderTimelimeLine = () => {
       for (let i = 0; i < annPanelLayers.length; i++) {
         if (annPanelLayers[i].id === parseInt(annotation)) {
           annotationIndex = i
-          color = annPanelLayers[i].color
+          color = annPanelLayers[i].color!
           break
         }
       }
@@ -673,7 +690,8 @@ const renderTimelimeLine = () => {
   }
 }
 
-const plotAnnotations = (ctx, xStart, xEnd, layerSpacing, layerHeight, annotations, rank, color) => {
+// TODO(ts-phase4): annotations rows come from the untyped annotation-window response.
+const plotAnnotations = (ctx: CanvasRenderingContext2D, xStart: number, xEnd: number, layerSpacing: number, layerHeight: number, annotations: any, rank: number, color: string) => {
   nextTick(() => {
     ctx.setTransform(pixelRatio.value, 0, 0, pixelRatio.value, 0, 0)
     ctx.fillStyle = color
@@ -694,7 +712,7 @@ const plotAnnotations = (ctx, xStart, xEnd, layerSpacing, layerHeight, annotatio
 
 const createPinstripeCanvas = () => {
   const patternCanvas = document.createElement('canvas')
-  const pctx = patternCanvas.getContext('2d', { antialias: true })
+  const pctx = patternCanvas.getContext('2d', { antialias: true } as CanvasRenderingContext2DSettings)!
   const colour = 'rgb(220,220,220)'
 
   const CANVAS_SIDE_LENGTH = 5
