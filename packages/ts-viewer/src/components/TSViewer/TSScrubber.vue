@@ -192,14 +192,24 @@ watch(() => viewerStore.viewerChannels, (newChannels, oldChannels) => {
   }
 }, { deep: true })
 
-// Watch for changes in viewer annotations (only if not currently initializing)
-watch(() => viewerStore.viewerAnnotations, (newAnnotations) => {
-  if (newAnnotations && !isInitializing.value) {
+// Annotation rendering stamps per-frame geometry (cStart, cEnd, allOffsets) onto
+// the store's annotation objects, so a deep watch refetches the annotation window
+// on every repaint. The fingerprint tracks only the fields that change when a
+// layer or an annotation is created, edited, or deleted.
+const annotationFingerprint = computed(() =>
+  viewerStore.viewerAnnotations.map(layer =>
+    `${layer.id}:${layer.visible}:${layer.color}:` +
+    (layer.annotations ?? []).map(a => `${a.id},${a.start},${a.duration}`).join(';')
+  ).join('|')
+)
+
+watch(annotationFingerprint, () => {
+  if (!isInitializing.value) {
     nextTick(() => {
       getAnnotations()
     })
   }
-}, { deep: true })
+})
 
 // Helper methods for state management
 const resetComponentState = () => {
