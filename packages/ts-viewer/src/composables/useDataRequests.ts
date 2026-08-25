@@ -77,19 +77,20 @@ export const useDataRequests = () => {
         viewData.start = start
         viewData.duration = duration
 
-        // Get IDS from viewData channels
-        const viewDataChIds = []
+        // Ids present before this pass. Entries pushed below are left out, so two show
+        // channels sharing an id still produce two view channels, as they did when this
+        // was a list built once and scanned per channel.
+        const viewDataChIds = new Set<string>()
         for (let i = 0; i < viewData.channels.length; i++) {
             const channelId = getChannelIdFn ? getChannelIdFn(viewData.channels[i]) : viewData.channels[i].id
-            viewDataChIds.push(channelId)
+            viewDataChIds.add(channelId)
         }
 
         // Get viewDataChannels
         for (let i = 0; i < showChannels.length; i++) {
             const curShowChannel = showChannels[i]
             const showChannelId = getChannelIdFn ? getChannelIdFn(curShowChannel) : curShowChannel.id
-            const idx = viewDataChIds.indexOf(showChannelId)
-            if (idx < 0) {
+            if (!viewDataChIds.has(showChannelId)) {
                 viewData.channels.push({
                     id: showChannelId,
                     mean: null,
@@ -119,10 +120,14 @@ export const useDataRequests = () => {
         prevStart.value = start
         prevDuration.value = duration
 
-        // Timestamp of first value in viewport
-        const viewDataChIds = []
+        // First index each id occupies in viewData.channels. First wins, matching the
+        // findIndex this replaces.
+        const viewDataIndexById = new Map<string, number>()
         for (let i = 0; i < viewData.channels.length; i++) {
-            viewDataChIds.push(viewData.channels[i])
+            const chId = getChannelIdFn ? getChannelIdFn(viewData.channels[i]) : viewData.channels[i].id
+            if (!viewDataIndexById.has(chId)) {
+                viewDataIndexById.set(chId, i)
+            }
         }
 
         // Iterate over channels and populate aSyncRequests
@@ -133,12 +138,9 @@ export const useDataRequests = () => {
             const curChanId = getChannelIdFn ? getChannelIdFn(curChan) : curChan.id
 
             // Get dataView - find the channel in viewData
-            const idx = viewDataChIds.findIndex(ch => {
-                const chId = getChannelIdFn ? getChannelIdFn(ch) : ch.id
-                return chId === curChanId
-            })
+            const idx = viewDataIndexById.get(curChanId)
 
-            if (idx === -1) {
+            if (idx === undefined) {
                 continue // Skip this channel if not found in viewData
             }
 
@@ -238,17 +240,17 @@ export const useDataRequests = () => {
                     // Check if requested range is already requested by other channel
                     let isAdded = false
                     if (isViewPage) {
-                        // Remove from pre-request
-                        for (let iA in aSyncPreRequests.value) {
-                            if (aSyncPreRequests.value[iA as unknown as number].start === curTime) {
-                                aSyncPreRequests.value.splice(iA as unknown as number, 1)
+                        // Remove from pre-request. Forward, so the earliest match goes.
+                        for (let iA = 0; iA < aSyncPreRequests.value.length; iA++) {
+                            if (aSyncPreRequests.value[iA].start === curTime) {
+                                aSyncPreRequests.value.splice(iA, 1)
                                 break
                             }
                         }
 
-                        for (let iA in aSyncRequests.value) {
-                            if (aSyncRequests.value[iA as unknown as number].start === curTime) {
-                                aSyncRequests.value[iA as unknown as number].channels.push(curChan)
+                        for (let iA = 0; iA < aSyncRequests.value.length; iA++) {
+                            if (aSyncRequests.value[iA].start === curTime) {
+                                aSyncRequests.value[iA].channels.push(curChan)
                                 isAdded = true
                             }
                         }
@@ -263,9 +265,9 @@ export const useDataRequests = () => {
                         }
                     } else {
                         if (updatePrefetchPages) {
-                            for (let iA in aSyncPreRequests.value) {
-                                if (aSyncPreRequests.value[iA as unknown as number].start === curTime) {
-                                    aSyncPreRequests.value[iA as unknown as number].channels.push(curChan)
+                            for (let iA = 0; iA < aSyncPreRequests.value.length; iA++) {
+                                if (aSyncPreRequests.value[iA].start === curTime) {
+                                    aSyncPreRequests.value[iA].channels.push(curChan)
                                     isAdded = true
                                 }
                             }

@@ -92,6 +92,15 @@ export const useCanvasRenderer = () => {
         // Compute channel views
         computeChannelViews(viewerChannels, viewport.pHeight, nrVisCh)
 
+        // Built per call, because computeChannelViews writes the row geometry these
+        // views are read for. First row wins, matching the find this replaces.
+        const channelViewById = new Map<string, RendererChannelView>()
+        for (const view of viewerChannels) {
+            if (!channelViewById.has(view.id)) {
+                channelViewById.set(view.id, view)
+            }
+        }
+
         ctx.save()
 
         for (let ch in viewData.channels) {
@@ -99,10 +108,7 @@ export const useCanvasRenderer = () => {
                 const curChannelData = viewData.channels[ch as unknown as number]
 
                 // Get channelview for current channel
-                let curChannelView: RendererChannelView | null | undefined = null
-                curChannelView = viewerChannels.find((elem) => {
-                    return elem.id === curChannelData.id
-                })
+                const curChannelView = channelViewById.get(curChannelData.id)
 
                 if (!curChannelView || !curChannelView.visible) {
                     continue

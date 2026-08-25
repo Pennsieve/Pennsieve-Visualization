@@ -27,7 +27,7 @@ import { computed, watch, onMounted, onUnmounted, reactive, ref, shallowRef, inj
 import type { Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { createViewerStore } from '../../stores/tsviewer'
-import type { ActiveViewer } from '../../stores/tsviewer'
+import type { ActiveViewer, ViewerChannel } from '../../stores/tsviewer'
 import { useViewerTransport } from "@/state/viewerTransportContext"
 import type {
   TimeseriesTransport,
@@ -294,10 +294,17 @@ const generateAndProcessRequests = async () => {
   // and the requests across two backends.
   const activeTransport = transport.value
 
+  // First row wins, matching the find this replaces. chData keeps the outer loop: its
+  // order is the order the request carries, and the reader matches yields by position.
+  const configById = new Map<string, ViewerChannel>()
+  for (const config of viewerChannels.value) {
+    if (!configById.has(config.id)) {
+      configById.set(config.id, config)
+    }
+  }
+
   const showChannels = chData.value.filter(channel => {
-    const channelConfig = viewerChannels.value.find(config =>
-      config.id === channel.id  // Direct id comparison (both are unique)
-    )
+    const channelConfig = configById.get(channel.id)
     return channelConfig && channelConfig.visible
   })
 
