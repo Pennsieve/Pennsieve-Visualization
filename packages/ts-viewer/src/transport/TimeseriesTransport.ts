@@ -76,6 +76,8 @@ export interface TransportCapabilities {
     readonly maxDurationUs: number | null
     /** Page span for a viewport duration, microseconds. */
     pageSizeFor(durationUs: number): number
+    /** Pages to read ahead of the viewport. Counted in whatever span pageSizeFor returns. */
+    readonly prefetchPages: number
     /** Wait after dumpBuffer before rebuilding requests, milliseconds. */
     readonly postDumpDelayMs: number
     /** Whether measureAmplitudes is available. */

@@ -78,6 +78,7 @@ function makeSpanRecorder(spansFor: (query: DataSpanQuery) => Array<[number, num
         capabilities: {
             maxDurationUs: null,
             pageSizeFor: () => 0,
+            prefetchPages: 0,
             postDumpDelayMs: 0,
             supportsAmplitudeSurvey: false
         },

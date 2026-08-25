@@ -571,6 +571,9 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
     const capabilities: TransportCapabilities = {
         maxDurationUs: null,
         pageSizeFor: adaptivePageSize,
+        // A page already spans the viewport, so two of them read a further two windows
+        // ahead.
+        prefetchPages: 2,
         postDumpDelayMs: 0,
         supportsAmplitudeSurvey: true
     }

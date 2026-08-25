@@ -90,11 +90,19 @@ const {
 const transport = useViewerTransport()
 
 // A Zarr bundle answers a wide window from its pyramid in a few reads, so its page span
-// grows with the viewport instead of splitting it into dozens of fixed 15-second
-// columns. The legacy streaming service keeps the fixed span it was built around. The
-// difference travels through the transport's capabilities.
+// covers the viewport instead of splitting it into fixed 15-second columns. The legacy
+// streaming service keeps the fixed span it was built around. The difference travels
+// through the transport's capabilities.
 const currentPageSize = () =>
   transport.value ? transport.value.capabilities.pageSizeFor(props.duration) : BASE_PAGE_SIZE
+
+// Read-ahead is counted in pages, so the two backends need different counts to reach a
+// comparable distance past the viewport. A count that is not a number would make the
+// walk's end time NaN and stop every request, so the viewer constant stands in.
+const currentPrefetchPages = () => {
+  const fromTransport = transport.value?.capabilities.prefetchPages
+  return Number.isFinite(fromTransport) ? fromTransport! : props.constants.PREFETCHPAGES
+}
 
 const sendFilterMessage = (message: LegacyFilterMessage) => {
   transport.value?.setFilter(message)
@@ -295,6 +303,8 @@ const generateAndProcessRequests = async () => {
 
   const currentRsPeriod = computedRsPeriod.value
   const pageSize = currentPageSize()
+  const prefetchPages = currentPrefetchPages()
+  const requestConstants = { ...props.constants, PREFETCHPAGES: prefetchPages }
 
   const buildRequests = () => generatePoints(
     showChannels,
@@ -302,7 +312,7 @@ const generateAndProcessRequests = async () => {
     props.duration,
     viewData,
     requestedPages.value,
-    props.constants,
+    requestConstants,
     currentRsPeriod,
     props.ts_end!,
     segmIndexOf,
@@ -333,10 +343,9 @@ const generateAndProcessRequests = async () => {
   }
 
   // A healthy pass never has more pages pending than the viewport plus the prefetch
-  // horizon, so the backlog cap scales with the page count instead of sitting at a
-  // fixed 15, which a wide window used to exceed just by existing.
+  // horizon, so the backlog cap scales with the page count.
   const viewportPages = Math.ceil(props.duration / pageSize) + 1
-  const maxPendingRequests = viewportPages + props.constants.PREFETCHPAGES + 5
+  const maxPendingRequests = viewportPages + prefetchPages + 5
   if (requestedPages.value.size > maxPendingRequests) {
     shouldDumpBuffer = true
     dumpReason = `Too many pending requests: ${requestedPages.value.size} > ${maxPendingRequests}`
