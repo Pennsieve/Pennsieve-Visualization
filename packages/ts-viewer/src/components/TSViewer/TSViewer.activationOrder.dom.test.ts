@@ -46,6 +46,7 @@ vi.mock('@/transport/createTransport', async () => {
             capabilities: {
                 maxDurationUs: null,
                 pageSizeFor: () => BASE_PAGE_SIZE,
+                prefetchPages: 5,
                 postDumpDelayMs: 0,
                 supportsAmplitudeSurvey: false
             },

@@ -92,6 +92,8 @@ export interface ParsedRequest {
     endTime: number
     pixelWidth: number
     raw: boolean
+    /** How early the reader admits this page's reads. */
+    priority?: 'viewport' | 'prefetch'
     virtualChannels: WireVirtualChannel[]
 }
 

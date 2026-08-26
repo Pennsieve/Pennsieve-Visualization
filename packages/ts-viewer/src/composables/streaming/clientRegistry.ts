@@ -92,7 +92,10 @@ export async function acquireClient(
         storeId,
         url: base,
         onUrlExpired: options.onUrlExpired ?? null,
-        client: new StreamingClient({ store }),
+        // A filter or a montage forces raw samples, so the reader's byte cap is spent
+        // over one page span. The cap rises with the span set in paging.ts, which keeps
+        // the widest filtered or montaged window that renders where it was before.
+        client: new StreamingClient({ store, maxRawBytes: 60_000_000 }),
         generation: nextGeneration++,
         filterRegistry: new Map(),
         inflight: new Set(),

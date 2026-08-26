@@ -158,7 +158,7 @@ const constants = {
   ANNOTATIONLABELHEIGHT: 20,  // Height of annotation label
   ROUNDDATAPIXELS: false,     // If true, canvas point will be rounded to integer pixels for faster render (faster)
   MINMAXPOLYGON: true,        // If true, then polygon is rendered thru minMax values, otherwise vertical lines (faster)
-  PREFETCHPAGES: 5,           // Number of pages to read ahead of view.
+  PREFETCHPAGES: 5,           // Pages read ahead of view when no transport reports its own.
   LIMITANNFETCH: 500,         // Maximum number of annotations that are fetched per request
   USEMEDIAN: false,           // Use Median instead of mean for centering channels
   CURSOROFFSET: 5,            // Offset of cursor canvas
@@ -274,7 +274,7 @@ interface ViewerCanvasHandle {
   getPreviousAnnotation: () => number
   setFilters: (payload: FilterPayload) => void
   setActiveTool: (tool: string) => void
-  renderAll: (delay?: number, requestLeadingEdge?: boolean) => void
+  renderAll: () => void
   renderAnnotationCanvas: () => void
   initViewerCanvas: () => void
 }

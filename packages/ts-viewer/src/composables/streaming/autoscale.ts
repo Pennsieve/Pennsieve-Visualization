@@ -160,12 +160,15 @@ export async function measureAmplitudes(
         startUs: number
         endUs: number
         pixelWidthUs: number
+        priority: 'background'
         signal?: AbortSignal
     } = {
         channels,
         startUs,
         endUs,
-        pixelWidthUs: Math.ceil((endUs - startUs) / SURVEY_COLUMNS)
+        pixelWidthUs: Math.ceil((endUs - startUs) / SURVEY_COLUMNS),
+        // A survey of the whole recording is never what the user is looking at.
+        priority: 'background'
     }
     if (signal) {
         query.signal = signal

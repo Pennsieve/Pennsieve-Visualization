@@ -94,6 +94,7 @@ import {
   watch,
   nextTick,
   onMounted,
+  onBeforeUnmount,
   defineAsyncComponent,
   inject
 } from 'vue'
@@ -106,8 +107,6 @@ import { buildFilterMessage, missingFilterInput, parseFilterInputs } from '@/fil
 import type { FilterPayload } from '@/filters/filterState'
 import { useCanvasTools } from '@/interaction/useCanvasTools'
 import type { AnnotationCanvasTools } from '@/interaction/useCanvasTools'
-import { createThrottle } from '@/utils/throttle'
-import type { Throttled } from '@/utils/throttle'
 import { createViewerStore } from "../../stores/tsviewer"
 import type { ActiveViewer } from "../../stores/tsviewer"
 import type { RendererConstants } from '@/composables/useCanvasRenderer'
@@ -191,10 +190,9 @@ const iArea = ref<HTMLCanvasElement | null>(null)
 const rsPeriod = ref(0)
 const pixelRatio = ref(1)
 
-// Throttled render, rebuilt when a caller asks for different throttle settings.
-let renderFnc: Throttled<[], void> | null = null
-let renderThrottle = 0
-let requestLeadingEdge = true
+// Cancels the render that is already scheduled, or null when none is. Per component
+// instance: a module-level handle would let one viewer swallow another's render.
+let cancelScheduledRender: (() => void) | null = null
 
 // Template-scope alias for the tsEnd prop: TSAnnotationCanvas declares its tsEnd prop as
 // number | undefined, so the null this prop can hold before the time range is known is
@@ -249,7 +247,7 @@ const {
     pixelRatio: pixelRatio.value,
     annotationLabelHeight: props.constants['ANNOTATIONLABELHEIGHT']
   }),
-  renderAll: (delay, requestLeadingEdgeParam) => renderAll(delay, requestLeadingEdgeParam),
+  renderAll: () => renderAll(),
   setStart: (start) => emit('setStart', start),
   addAnnotation: (startTime, duration, allChannels, label, description, layer) =>
     emit('addAnnotation', startTime, duration, allChannels, label, description, layer)
@@ -363,7 +361,7 @@ const onCloseAnnotationLayerWindow = () => {
 }
 
 const onAnnotationsReceived = () => {
-  renderAll(100)
+  renderAll()
 }
 
 const onAnnLayersInitialized = () => {
@@ -407,7 +405,7 @@ const _onMouseWheel = (e: WheelEvent) => {
 
 const resize = () => {
   updateRsPeriod(props.cWidth, props.duration)
-  renderAll(25)
+  renderAll()
 }
 
 const updateRsPeriod = (w: number, d: number) => {
@@ -421,13 +419,37 @@ const _cpCanvasScaler = (sz: number, pixelRatio: number, offset: number) => {
   return pixelRatio * (sz + offset)
 }
 
-const renderAll = (delay = 0, requestLeadingEdgeParam = true) => {
-  if (!renderFnc || delay !== renderThrottle || requestLeadingEdge !== requestLeadingEdgeParam) {
-    renderFnc = createThrottle(_renderAll, delay, { leading: requestLeadingEdgeParam })
-    renderThrottle = delay
-    requestLeadingEdge = requestLeadingEdgeParam
+const _runScheduledRender = () => {
+  // Cleared before the draw, so a render requested from inside it schedules a new
+  // frame and a throw cannot leave the component unable to schedule again.
+  cancelScheduledRender = null
+  _renderAll()
+}
+
+/**
+ * Draws the canvases on the next animation frame.
+ *
+ * Repeated calls before that frame collapse into one draw.
+ */
+const renderAll = () => {
+  if (cancelScheduledRender) {
+    return
   }
-  renderFnc()
+
+  // A hidden document runs no animation frames. The draw also plans the next page
+  // requests, so a timer takes over rather than let fetching stop with the tab.
+  const useFrame = typeof requestAnimationFrame === 'function' &&
+    typeof document !== 'undefined' &&
+    document.visibilityState !== 'hidden'
+
+  if (useFrame) {
+    const frame = requestAnimationFrame(_runScheduledRender)
+    cancelScheduledRender = () => cancelAnimationFrame(frame)
+    return
+  }
+
+  const timer = setTimeout(_runScheduledRender, 0)
+  cancelScheduledRender = () => clearTimeout(timer)
 }
 
 const renderAnnotationCanvas = () => {
@@ -436,16 +458,17 @@ const renderAnnotationCanvas = () => {
 }
 
 const _renderAll = () => {
-  nextTick(() => {
-    _renderAxis()
-    _renderCursor()
-    plotCanvas.value?.renderAll()
-    annCanvas.value?.render()
-  })
+  _renderAxis()
+  _renderCursor()
+  plotCanvas.value?.renderAll()
+  annCanvas.value?.render()
 }
 
 const _renderAxis = () => {
-  const pa = axisArea.value!
+  const pa = axisArea.value
+  if (!pa) {
+    return
+  }
   const ctx = pa.getContext('2d')!
   drawAxis(ctx, {
     viewport: {
@@ -464,7 +487,10 @@ const _renderAxis = () => {
 }
 
 const _renderCursor = () => {
-  const pa = cursorArea.value!
+  const pa = cursorArea.value
+  if (!pa) {
+    return
+  }
   const ctx = pa.getContext('2d')!
   drawCursor(ctx, {
     cursorLoc: props.cursorLoc,
@@ -534,6 +560,12 @@ const setFilters = (payload: FilterPayload) => {
 }
 
 // Lifecycle
+onBeforeUnmount(() => {
+  // Vue nulls the canvas refs on unmount, and a scheduled draw reads them.
+  cancelScheduledRender?.()
+  cancelScheduledRender = null
+})
+
 onMounted(() => {
   pixelRatio.value = getScreenPixelRatio()
   // This canvas is an async component, so the viewer can finish measuring itself before

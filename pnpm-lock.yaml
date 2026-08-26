@@ -235,8 +235,8 @@ importers:
   packages/ts-viewer:
     dependencies:
       '@pennsieve/timeseries-zarr-reader':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.5.0
+        version: 0.5.0
       protobufjs:
         specifier: ^7.6.3
         version: 7.6.5
@@ -1085,8 +1085,8 @@ packages:
     resolution: {integrity: sha512-dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg==}
     engines: {node: '>= 10.0.0'}
 
-  '@pennsieve/timeseries-zarr-reader@0.4.0':
-    resolution: {integrity: sha512-GUiFIBUCkennciLADTffQpVOx5eD4SlqC8E1fuNtFkw7BcNi7w7HlsRF4giWeBrJS0sKGWHVlrM/BD5r0GFodg==}
+  '@pennsieve/timeseries-zarr-reader@0.5.0':
+    resolution: {integrity: sha512-3HAR2p+E67O40HWgbGmu1maaoku90UUHGKDYkMC78vuAUjh+z8CsaKPIAWPz0fcTGDZnop/yyVckM0tlGh/bOg==}
     engines: {node: '>=20'}
 
   '@petamoriken/float16@3.9.3':
@@ -5305,8 +5305,8 @@ packages:
   zarrita@0.5.4:
     resolution: {integrity: sha512-i88iN2+HqIQ+uiCEWLfhjbYNXAJD7IrM4h3lFwFclfqEOOhxp10amRWtqmgN5jbuy3+h0LwdyLVVzk4y9rTLgg==}
 
-  zarrita@0.7.3:
-    resolution: {integrity: sha512-wChTQ1Ox75INoQCzKAfLWAfB70JJ4KjdW8Sz5x4ZWrFB4Dw+YZdnxHTL0xSdsrB9EmKSeK7fS1Y+I2ibhfGbkw==}
+  zarrita@0.7.4:
+    resolution: {integrity: sha512-NChufj86SceFj45z4CYjndmI98dphaG7hU8Wj0UGpMyT21o0V3HTY6zo87aSobYWts1tNFivSXzH2AR1AkaWjA==}
 
   zod-to-json-schema@3.25.1:
     resolution: {integrity: sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==}
@@ -6294,11 +6294,11 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.1
     optional: true
 
-  '@pennsieve/timeseries-zarr-reader@0.4.0':
+  '@pennsieve/timeseries-zarr-reader@0.5.0':
     dependencies:
       fili: 2.0.3
       p-limit: 7.3.1
-      zarrita: 0.7.3
+      zarrita: 0.7.4
 
   '@petamoriken/float16@3.9.3': {}
 
@@ -10910,7 +10910,7 @@ snapshots:
       '@zarrita/storage': 0.1.4
       numcodecs: 0.3.2
 
-  zarrita@0.7.3:
+  zarrita@0.7.4:
     dependencies:
       '@zarrita/storage': 0.2.0
       numcodecs: 0.3.2

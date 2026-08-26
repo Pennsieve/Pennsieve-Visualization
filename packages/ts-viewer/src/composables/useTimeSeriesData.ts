@@ -227,21 +227,42 @@ export const useTimeSeriesData = () => {
     }
 
     // Data callback (from original)
+    // Rows by the pair a response is matched on, nested so both halves compare by value
+    // the way the scan this replaces did. Rebuilt whenever initChannels, or a caller
+    // holding the exposed ref, puts a different array in place.
+    let rowsByServerId = new Map<string | undefined, Map<string | undefined, ChannelData>>()
+    let indexedRows: ChannelData[] | null = null
+
+    const rowFor = (serverId?: string, label?: string): ChannelData | undefined => {
+        if (indexedRows !== chData.value) {
+            rowsByServerId = new Map()
+            for (const row of chData.value) {
+                let byLabel = rowsByServerId.get(row.serverId)
+                if (!byLabel) {
+                    byLabel = new Map()
+                    rowsByServerId.set(row.serverId, byLabel)
+                }
+                // First row wins, matching the find this replaces.
+                if (!byLabel.has(row.label)) {
+                    byLabel.set(row.label, row)
+                }
+            }
+            indexedRows = chData.value
+        }
+        return rowsByServerId.get(serverId)?.get(label)
+    }
+
     const dataCallback = (obj: SegmentMessage) => {
         // During montage transitions, silently discard stale data from previous config
         if (isSwitchingMontage.value) {
             return
         }
 
-        let curChData: ChannelData | null | undefined = null
         const serverResponseId = obj.data.chId || obj.data.source
         const serverResponseName = obj.data.label || obj.data.name
 
         // Find an exact match first (serverId + label)
-        curChData = chData.value.find(channel =>
-            channel.serverId === serverResponseId &&
-            channel.label === serverResponseName
-        )
+        const curChData = rowFor(serverResponseId, serverResponseName)
 
         if (!curChData) {
             // Stale response from a previous channel config: discard silently
@@ -317,12 +338,21 @@ export const useTimeSeriesData = () => {
 
                 // Add data to cache
                 if (addData) {
-                    curSegments.push(obj.data as SegmentBlock)
-                    curSegments.sort((a, b) => {
-                        if (a.startTs < b.startTs) return -1
-                        if (a.startTs > b.startTs) return 1
-                        return 0
-                    })
+                    const block = obj.data as SegmentBlock
+                    // Past the last block with an equal startTs, where appending and
+                    // sorting left it. The dedupe walk above runs first, so its splice
+                    // cannot shift this position.
+                    let lo = 0
+                    let hi = curSegments.length
+                    while (lo < hi) {
+                        const mid = (lo + hi) >>> 1
+                        if (curSegments[mid].startTs <= block.startTs) {
+                            lo = mid + 1
+                        } else {
+                            hi = mid
+                        }
+                    }
+                    curSegments.splice(lo, 0, block)
                 }
                 break
 

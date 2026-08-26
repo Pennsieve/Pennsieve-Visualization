@@ -71,6 +71,20 @@ describe('dataCallback', () => {
         expect(ts.chData.value[0].segments.map(s => s.startTs)).toEqual([0, 5000000, PAGE])
     })
 
+    it('places a block carrying a cached startTs after the block already held', () => {
+        const ts = setup()
+        ts.dataCallback({
+            pageStart: 0, type: 'Continuous', nrResponses: 1,
+            data: block({ pageStart: 0, pageEnd: PAGE, startTs: PAGE })
+        })
+        ts.dataCallback({
+            pageStart: PAGE, type: 'Continuous', nrResponses: 1,
+            data: block({ pageStart: PAGE, pageEnd: 2 * PAGE, startTs: PAGE })
+        })
+
+        expect(ts.chData.value[0].segments.map(s => s.pageStart)).toEqual([0, PAGE])
+    })
+
     it('drops a duplicate block for a span already cached', () => {
         const ts = setup()
         ts.dataCallback({ pageStart: 0, type: 'Continuous', nrResponses: 1, data: block() })
@@ -159,6 +173,56 @@ describe('dataCallback', () => {
 
         expect(ts.chData.value[0].segments).toHaveLength(0)
         expect(Number.isNaN(ts.requestedPages.value.get(0)!.counter.get('ch-1')!)).toBe(true)
+    })
+})
+
+describe('dataCallback channel matching', () => {
+    it('routes to the row whose label matches when two rows share a server id', () => {
+        const ts = useTimeSeriesData()
+        ts.chData.value = [
+            { id: 'ch-1', serverId: 'srv-1', label: 'Fp1<->F7', segments: [], gaps: [], dataSegments: [] },
+            { id: 'ch-2', serverId: 'srv-1', label: 'Fp1<->F3', segments: [], gaps: [], dataSegments: [] }
+        ]
+
+        ts.dataCallback({
+            pageStart: 0, type: 'Continuous', nrResponses: 1,
+            data: block({ chId: 'srv-1', label: 'Fp1<->F3', name: 'Fp1<->F3' })
+        })
+
+        expect(ts.chData.value[0].segments).toHaveLength(0)
+        expect(ts.chData.value[1].segments).toHaveLength(1)
+    })
+
+    it('routes to the replacement rows after the channel set is rebuilt', () => {
+        const ts = setup()
+        ts.dataCallback({ pageStart: 0, type: 'Continuous', nrResponses: 1, data: block() })
+        expect(ts.chData.value[0].segments).toHaveLength(1)
+
+        // Same length, different channels: a montage switch replaces the array.
+        ts.chData.value = [
+            { id: 'ch-3', serverId: 'srv-3', label: 'CH3', segments: [], gaps: [], dataSegments: [] },
+            { id: 'ch-4', serverId: 'srv-4', label: 'CH4', segments: [], gaps: [], dataSegments: [] }
+        ]
+
+        ts.dataCallback({
+            pageStart: 0, type: 'Continuous', nrResponses: 1,
+            data: block({ chId: 'srv-4', label: 'CH4', name: 'CH4' })
+        })
+
+        expect(ts.chData.value[1].segments).toHaveLength(1)
+    })
+
+    it('keeps the first row when two rows carry the same server id and label', () => {
+        const ts = useTimeSeriesData()
+        ts.chData.value = [
+            { id: 'ch-1', serverId: 'srv-1', label: 'CH1', segments: [], gaps: [], dataSegments: [] },
+            { id: 'ch-2', serverId: 'srv-1', label: 'CH1', segments: [], gaps: [], dataSegments: [] }
+        ]
+
+        ts.dataCallback({ pageStart: 0, type: 'Continuous', nrResponses: 1, data: block() })
+
+        expect(ts.chData.value[0].segments).toHaveLength(1)
+        expect(ts.chData.value[1].segments).toHaveLength(0)
     })
 })
 

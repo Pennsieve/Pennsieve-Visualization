@@ -4,7 +4,7 @@
  * Usage:
  *   node scripts/serve-timeseries-zarr.mjs [rootDir] [port]
  *   node scripts/serve-timeseries-zarr.mjs 9095
- *   node scripts/serve-timeseries-zarr.mjs ../../ts-zarr-py/data/output/large_test.zarr 9095
+ *   node scripts/serve-timeseries-zarr.mjs ../../timeseries-zarr-py/data/output/large_test.zarr 9095
  *
  * Defaults: rootDir = test-data/sample-timeseries.zarr (relative to this repo), port = 9091.
  * A lone numeric argument is read as the port, so either argument may be given alone.

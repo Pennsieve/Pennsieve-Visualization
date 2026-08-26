@@ -37,9 +37,17 @@ export interface NeuralSegmentBlock extends SegmentBlockBase {
 
 export type SegmentBlock = ContinuousSegmentBlock | NeuralSegmentBlock
 
+/**
+ * A page that produced nothing for a trace because its read did not finish.
+ *
+ * Carries no sample rows, which is what tells the cache to drain the page's counter
+ * without recording the span as answered.
+ */
+export type GapNotice = Omit<ContinuousSegmentBlock, 'parsedData'>
+
 export interface SegmentEnvelope {
     pageStart: number
-    data: SegmentBlock
+    data: SegmentBlock | GapNotice
     type: 'Continuous' | 'Neural' | 'gap'
     nrResponses: number
 }
@@ -234,6 +242,18 @@ export function buildGapSegm(identity: TraceIdentity, req: PageRequest): Continu
         name: identity.label,
         label: identity.label
     }
+}
+
+/**
+ * Builds the notice that a trace produced nothing because its read failed or was
+ * cancelled.
+ *
+ * Unlike {@link buildGapSegm} this records no span, so the page is requested again
+ * rather than remembered as empty.
+ */
+export function buildGapNotice(identity: TraceIdentity, req: PageRequest): GapNotice {
+    const { parsedData: _parsedData, ...notice } = buildGapSegm(identity, req)
+    return notice
 }
 
 /**

@@ -726,6 +726,7 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
     const capabilities: TransportCapabilities = {
         maxDurationUs: MAX_DURATION_US,
         pageSizeFor: () => BASE_PAGE_SIZE,
+        prefetchPages: 5,
         postDumpDelayMs: 50,
         supportsAmplitudeSurvey: false,
     }

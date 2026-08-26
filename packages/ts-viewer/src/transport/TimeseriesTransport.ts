@@ -32,6 +32,11 @@ export interface PageRequest {
     pixelWidth: number
     /** true requests envelope decimation; false requests raw samples. */
     minMax: boolean
+    /**
+     * How early the backend should admit this page. Omitted means the viewport is
+     * waiting on it. A backend that does not order its reads ignores this.
+     */
+    priority?: 'viewport' | 'prefetch'
     channels: VirtualChannelRef[]
 }
 
@@ -76,6 +81,8 @@ export interface TransportCapabilities {
     readonly maxDurationUs: number | null
     /** Page span for a viewport duration, microseconds. */
     pageSizeFor(durationUs: number): number
+    /** Pages to read ahead of the viewport. Counted in whatever span pageSizeFor returns. */
+    readonly prefetchPages: number
     /** Wait after dumpBuffer before rebuilding requests, milliseconds. */
     readonly postDumpDelayMs: number
     /** Whether measureAmplitudes is available. */
