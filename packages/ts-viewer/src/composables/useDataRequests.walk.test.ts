@@ -123,6 +123,21 @@ describe('generatePoints', () => {
         expect(starts(result.asyncPreRequests)).toEqual([2 * PAGE, 3 * PAGE])
     })
 
+    it('requests the viewport page when only the page before it is cached', () => {
+        const { dr, segmIndexOf } = setup()
+        // A block for the page that ends exactly where the viewport's page begins.
+        const previous = block({ pageStart: 0, pageEnd: PAGE, startTs: 0 })
+        const ch = channel({ segments: [previous] })
+        const viewData = emptyViewData()
+
+        const result = dr.generatePoints(
+            [ch], PAGE, PAGE, viewData, new Map(), constants, 250, TS_END, segmIndexOf
+        )
+
+        expect(starts(result.asyncRequests)).toContain(PAGE)
+        expect(viewData.channels[0].blocks).not.toContain(previous)
+    })
+
     it('requests both pages when the viewport straddles a page boundary', () => {
         const { dr, segmIndexOf } = setup()
 

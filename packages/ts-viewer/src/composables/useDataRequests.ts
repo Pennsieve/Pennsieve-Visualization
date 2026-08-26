@@ -174,10 +174,12 @@ export const useDataRequests = () => {
             while ((curTime < endRequestTime) || continuationSegment) {
                 continuationSegment = false
 
-                // Check if current time matches cached page
+                // Check if current time matches cached page. pageEnd is the exclusive
+                // end, and curTime is always a page boundary, so an inclusive test here
+                // matches the block of the page before this one and skips requesting it.
                 let inRange = false
                 if (curSegm) {
-                    inRange = curTime >= curSegm.pageStart && curTime <= curSegm.pageEnd
+                    inRange = curTime >= curSegm.pageStart && curTime < curSegm.pageEnd
                 }
 
                 if (inRange) {
