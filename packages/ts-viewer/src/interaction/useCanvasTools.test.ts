@@ -115,7 +115,7 @@ const setup = (channels: ViewerChannel[], options: SetupOptions = {}) => {
         annotationLabelHeight: 20,
         ...options.viewport
     }
-    const renderAll = vi.fn()
+    const repaint = vi.fn()
     const setStart = vi.fn()
     const addAnnotation = vi.fn()
 
@@ -124,12 +124,12 @@ const setup = (channels: ViewerChannel[], options: SetupOptions = {}) => {
         interactionCanvas: () => canvas as unknown as HTMLCanvasElement,
         annotationCanvas: () => annotationCanvas as AnnotationCanvasTools | null,
         viewport: () => viewport,
-        renderAll,
+        repaint,
         setStart,
         addAnnotation
     })
 
-    return { store, tools, ctx, annotationCanvas, viewport, renderAll, setStart, addAnnotation }
+    return { store, tools, ctx, annotationCanvas, viewport, repaint, setStart, addAnnotation }
 }
 
 const selectedIds = (store: ViewerStore) =>
@@ -215,14 +215,14 @@ describe('pointer drag selection', () => {
     })
 
     it('clears the overlay and redraws once the selection is stored', () => {
-        const { tools, ctx, renderAll } = setup([
+        const { tools, ctx, repaint } = setup([
             { id: 'covered', rowBaseline: 50, selected: false, visible: true }
         ])
 
         dragDown(tools)
 
         expect(ctx.clearRect).toHaveBeenCalledTimes(1)
-        expect(renderAll).toHaveBeenCalledTimes(1)
+        expect(repaint).toHaveBeenCalledTimes(1)
     })
 
     it('draws the selection overlay while the pointer tool drags', () => {
@@ -334,7 +334,7 @@ describe('pan drag', () => {
     })
 
     it('does nothing when a pan drag ends', () => {
-        const { tools, ctx, renderAll, addAnnotation } = setup([
+        const { tools, ctx, repaint, addAnnotation } = setup([
             { id: 'covered', rowBaseline: 50, selected: false, visible: true }
         ], { activeTool: 'pan' })
 
@@ -342,7 +342,7 @@ describe('pan drag', () => {
         tools.onMouseUp(mouseEvent(400, CANVAS_TOP + 80))
 
         expect(ctx.clearRect).not.toHaveBeenCalled()
-        expect(renderAll).not.toHaveBeenCalled()
+        expect(repaint).not.toHaveBeenCalled()
         expect(addAnnotation).not.toHaveBeenCalled()
     })
 })
@@ -562,14 +562,14 @@ describe('annotation edge drag', () => {
     })
 
     it('hands a resize drag to the annotation canvas and redraws', () => {
-        const { tools, annotationCanvas, renderAll } = hoverEdge('annResize-right')
+        const { tools, annotationCanvas, repaint } = hoverEdge('annResize-right')
         annotationCanvas!.onMouseMove.mockReturnValue('annResize-right')
 
         tools.onMouseDown(mouseEvent(300, CANVAS_TOP + 40))
         tools.onMouseMove(mouseEvent(340, CANVAS_TOP + 40))
 
         expect(annotationCanvas?.onMouseMove).toHaveBeenCalledWith(340, 40, 'annResize-right', true)
-        expect(renderAll).toHaveBeenCalledTimes(1)
+        expect(repaint).toHaveBeenCalledTimes(1)
     })
 
     it('keeps the resize mode when the annotation canvas reports none mid drag', () => {

@@ -40,7 +40,8 @@ export interface CanvasToolsOptions {
     interactionCanvas: () => HTMLCanvasElement | null
     annotationCanvas: () => AnnotationCanvasTools | null
     viewport: () => CanvasToolsViewport
-    renderAll: () => void
+    /** Redraws the canvases. A tool changes no part of which pages are needed. */
+    repaint: () => void
     /** Reports a pan. The host owns the viewport start. */
     setStart: (start: number) => void
     addAnnotation: (
@@ -217,7 +218,7 @@ export const useCanvasTools = (options: CanvasToolsOptions) => {
                 } else if (mouseDown.value && ['annResize-left', 'annResize-right'].includes(pointerMode.value)) {
                     const newPointerMode = options.annotationCanvas()?.onMouseMove(mX, mY, pointerMode.value, mouseDown.value)
                     pointerMode.value = newPointerMode || pointerMode.value
-                    options.renderAll()
+                    options.repaint()
                 } else {
                     const newPointerMode = options.annotationCanvas()?.onMouseMove(mX, mY, pointerMode.value, mouseDown.value)
                     if (newPointerMode) {
@@ -259,7 +260,7 @@ export const useCanvasTools = (options: CanvasToolsOptions) => {
                 })
 
                 options.store.setChannels(channels)
-                options.renderAll()
+                options.repaint()
 
                 break
             }

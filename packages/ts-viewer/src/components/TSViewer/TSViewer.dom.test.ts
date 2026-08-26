@@ -91,6 +91,7 @@ vi.mock('@/transport/createTransport', async () => {
     return { createTransport: () => transport }
 })
 
+import TSPlotCanvas from '@/components/TSViewer/TSPlotCanvas.vue'
 import TSViewer from '@/components/TSViewer/TSViewer.vue'
 import TSViewerCanvas from '@/components/TSViewer/TSViewerCanvas.vue'
 import TSViewerToolbar from '@/components/TSViewer/TSViewerToolbar.vue'
@@ -174,6 +175,20 @@ function drawCallCount(canvas: HTMLCanvasElement): number {
 
 function pageRequestsFor(startTime: number): Array<Record<string, unknown>> {
     return harness.pageRequests.filter((message) => message.startTime === startTime)
+}
+
+/**
+ * Runs the render scheduler's pending animation frame and lets its work settle.
+ *
+ * Two frames, because a draw can schedule another, with a flush after each for the
+ * planning pass, which is async.
+ */
+async function settleFrame(): Promise<void> {
+    for (let i = 0; i < 2; i++) {
+        await flushPromises()
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    }
+    await flushPromises()
 }
 
 describe('TSViewer mounted against a recorded transport', () => {
@@ -311,6 +326,43 @@ describe('TSViewer mounted against a recorded transport', () => {
         await vi.waitFor(() => {
             expect(drawCallCount(canvas)).toBeGreaterThan(baseline)
         }, { timeout: 3000 })
+    })
+
+    /**
+     * Empties the plot canvas's pending-page bookkeeping.
+     *
+     * A planning pass skips a page that is already pending, so the viewport page has to
+     * be unrequested for a stray plan to send anything.
+     */
+    function clearPendingPages(): void {
+        const plot = wrapper!.findComponent(TSPlotCanvas)
+        const exposed = plot.vm as unknown as { requestedPages: Map<number, unknown> }
+        exposed.requestedPages.clear()
+    }
+
+    it('sends no page request when only the vertical zoom changes', async () => {
+        await mountViewer('dom-test-repaint-only')
+        await initializeChannels()
+        clearPendingPages()
+
+        const canvas = wrapper!.findComponent(TSViewerCanvas)
+        const before = pageRequestsFor(TS_START).length
+        canvas.vm.$emit('setGlobalZoom', (canvas.props('globalZoomMult') as number) * 2)
+        await settleFrame()
+
+        expect(pageRequestsFor(TS_START).length).toBe(before)
+    })
+
+    it('sends the viewport page again when the start moves', async () => {
+        await mountViewer('dom-test-plan-on-start')
+        await initializeChannels()
+        clearPendingPages()
+
+        const before = pageRequestsFor(TS_START).length
+        wrapper!.findComponent(TSViewerCanvas).vm.$emit('setStart', TS_START + 1_000_000)
+        await settleFrame()
+
+        expect(pageRequestsFor(TS_START).length).toBeGreaterThan(before)
     })
 
     it('sends the legacy filter wire message for lowpass, highpass, bandpass, bandstop, and clear', async () => {

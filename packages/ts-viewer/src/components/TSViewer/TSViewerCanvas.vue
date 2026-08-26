@@ -247,7 +247,7 @@ const {
     pixelRatio: pixelRatio.value,
     annotationLabelHeight: props.constants['ANNOTATIONLABELHEIGHT']
   }),
-  renderAll: () => renderAll(),
+  repaint: () => repaint(),
   setStart: (start) => emit('setStart', start),
   addAnnotation: (startTime, duration, allChannels, label, description, layer) =>
     emit('addAnnotation', startTime, duration, allChannels, label, description, layer)
@@ -255,11 +255,14 @@ const {
 
 // Watchers
 watch(() => props.cHeight, () => {
-  resize()
+  updateRsPeriod(props.cWidth, props.duration)
+  // A shorter or taller viewport relays the rows over the same pages.
+  repaint()
 })
 
 watch(() => props.cWidth, () => {
-  resize()
+  updateRsPeriod(props.cWidth, props.duration)
+  renderAll()
 })
 
 watch(() => props.start, () => {
@@ -273,9 +276,7 @@ watch(() => props.duration, () => {
 })
 
 watch(() => props.globalZoomMult, () => {
-  nextTick(() => {
-    plotCanvas.value?.throttledDataRender()
-  })
+  repaint()
 })
 
 // Watch for annotation layers being loaded
@@ -361,7 +362,7 @@ const onCloseAnnotationLayerWindow = () => {
 }
 
 const onAnnotationsReceived = () => {
-  renderAll()
+  repaint()
 }
 
 const onAnnLayersInitialized = () => {
@@ -403,11 +404,6 @@ const _onMouseWheel = (e: WheelEvent) => {
   }
 }
 
-const resize = () => {
-  updateRsPeriod(props.cWidth, props.duration)
-  renderAll()
-}
-
 const updateRsPeriod = (w: number, d: number) => {
   const newPeriod = d / w
   if (newPeriod !== rsPeriod.value) {
@@ -419,19 +415,29 @@ const _cpCanvasScaler = (sz: number, pixelRatio: number, offset: number) => {
   return pixelRatio * (sz + offset)
 }
 
+/** True when a caller sharing the pending frame changed which pages are needed. */
+let needsPlan = false
+
 const _runScheduledRender = () => {
   // Cleared before the draw, so a render requested from inside it schedules a new
   // frame and a throw cannot leave the component unable to schedule again.
   cancelScheduledRender = null
-  _renderAll()
+  const plan = needsPlan
+  needsPlan = false
+  _renderAll(plan)
 }
 
 /**
- * Draws the canvases on the next animation frame.
+ * Draws the canvases on the next animation frame, planning page requests first when a
+ * caller sharing that frame asked for it.
  *
  * Repeated calls before that frame collapse into one draw.
  */
-const renderAll = () => {
+const scheduleRender = (plan: boolean) => {
+  // Recorded before the pending-frame test. A repaint scheduled first would otherwise
+  // swallow the plan a later caller in the same frame asks for.
+  needsPlan = needsPlan || plan
+
   if (cancelScheduledRender) {
     return
   }
@@ -452,15 +458,38 @@ const renderAll = () => {
   cancelScheduledRender = () => clearTimeout(timer)
 }
 
+/**
+ * Plans page requests, then draws.
+ *
+ * For a change to the viewport start, its duration, its width, or which channels are
+ * visible.
+ */
+const renderAll = () => {
+  scheduleRender(true)
+}
+
+/**
+ * Draws without planning.
+ *
+ * For hover, selection, vertical zoom, and annotation arrival, none of which change
+ * which pages the viewport needs.
+ */
+const repaint = () => {
+  scheduleRender(false)
+}
+
 const renderAnnotationCanvas = () => {
   clearInteractionCanvas()
   annCanvas.value?.render()
 }
 
-const _renderAll = () => {
+const _renderAll = (plan: boolean) => {
   _renderAxis()
   _renderCursor()
-  plotCanvas.value?.renderAll()
+  if (plan) {
+    plotCanvas.value?.planRequests()
+  }
+  plotCanvas.value?.paint()
   annCanvas.value?.render()
 }
 
@@ -585,6 +614,7 @@ defineExpose({
   setFilters,
   setActiveTool,
   renderAll,
+  repaint,
   renderAnnotationCanvas,
   initViewerCanvas
 })
