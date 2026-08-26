@@ -355,11 +355,17 @@ const nrVisChannels = computed(() => {
  * length of the recording itself.
  */
 const maxDuration = computed(() => {
-  const backendCap = transport.value?.capabilities.maxDurationUs ?? constants.MAXDURATION
+  const activeTransport = transport.value
+  // A transport that is not open yet reports no capabilities. Hold the legacy
+  // ceiling until one arrives.
+  if (!activeTransport) {
+    return constants.MAXDURATION
+  }
+  const backendCap = activeTransport.capabilities.maxDurationUs
   if (backendCap !== null) {
     return backendCap
   }
-  // The backend imposes no ceiling, so the recording length is the bound.
+  // A null capability means no backend ceiling, so the recording length is the bound.
   if (ts_start.value === null || ts_end.value === null) {
     return constants.MAXDURATION
   }

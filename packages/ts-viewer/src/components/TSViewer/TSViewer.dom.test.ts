@@ -201,7 +201,7 @@ describe('TSViewer mounted against a recorded transport', () => {
      * Mounts the full tree, seeds the store directly (no discovery socket), and waits for
      * the plot canvas to open the mocked transport.
      */
-    async function mountViewer(instanceId: string): Promise<{ store: ViewerStore }> {
+    async function mountViewer(instanceId: string, channels: ChannelDetail[] = CHANNEL_DETAILS): Promise<{ store: ViewerStore }> {
         const pinia = createPinia()
         setActivePinia(pinia)
         const store = createViewerStore(instanceId)
@@ -215,7 +215,7 @@ describe('TSViewer mounted against a recorded transport', () => {
         await flushPromises()
 
         store.setActiveViewer({
-            channels: CHANNEL_DETAILS.map((channel) => ({ ...channel })),
+            channels: channels.map((channel) => ({ ...channel })),
             content: { ...CONTENT }
         })
         await flushPromises()
@@ -464,5 +464,30 @@ describe('TSViewer mounted against a recorded transport', () => {
             "packageId": "pkg-1",
           }
         `)
+    })
+
+    it('bounds the duration window by the recording length when the transport reports no ceiling', async () => {
+        const LONG_END = TS_START + 7_200_000_000
+        const longChannels: ChannelDetail[] = CHANNEL_DETAILS.map((channel) => ({ ...channel, end: LONG_END }))
+        await mountViewer('dom-test-max-duration', longChannels)
+
+        const toolbar = wrapper!.findComponent(TSViewerToolbar)
+        expect(toolbar.props('maxDuration')).toBe(LONG_END - TS_START)
+
+        const canvas = wrapper!.findComponent(TSViewerCanvas)
+        canvas.vm.$emit('setDuration', 1_800_000_000)
+        await flushPromises()
+        expect(canvas.props('duration')).toBe(1_800_000_000)
+    })
+
+    it('holds the duration window at the recording length when asked for more', async () => {
+        const LONG_END = TS_START + 7_200_000_000
+        const longChannels: ChannelDetail[] = CHANNEL_DETAILS.map((channel) => ({ ...channel, end: LONG_END }))
+        await mountViewer('dom-test-max-duration-clamp', longChannels)
+
+        const canvas = wrapper!.findComponent(TSViewerCanvas)
+        canvas.vm.$emit('setDuration', 9_000_000_000)
+        await flushPromises()
+        expect(canvas.props('duration')).toBe(LONG_END - TS_START)
     })
 })
