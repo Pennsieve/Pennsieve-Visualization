@@ -14,14 +14,14 @@ import { acquireClient, ensureCatalog, abortInflight } from '@/composables/strea
 import { synthesizeMontageDetails } from '@/composables/streaming/channelDetails'
 import { legacyFilterToSpec, validateSpecForRate } from '@/composables/streaming/filters'
 import { partitionRequest, filterKey } from '@/composables/streaming/translate'
-import { buildContinuousSegm, buildGapSegm, buildNeuralSegm } from '@/composables/streaming/segments'
+import { buildContinuousSegm, buildGapNotice, buildGapSegm, buildNeuralSegm } from '@/composables/streaming/segments'
 import { measureAmplitudes as surveyAmplitudes } from '@/composables/streaming/autoscale'
 import { adaptivePageSize } from '@/composables/streaming/paging'
 import type { StreamingClientEntry } from '@/composables/streaming/clientRegistry'
 import type { CatalogIndex, ChannelDetail } from '@/composables/streaming/channelDetails'
 import type { LegacyFilterMessage, SpecValidation } from '@/composables/streaming/filters'
 import type { ParsedRequest, QueryGroup, TraceIdentity } from '@/composables/streaming/translate'
-import type { NeuralSegmentBlock, SegmentBlock } from '@/composables/streaming/segments'
+import type { GapNotice, NeuralSegmentBlock, SegmentBlock } from '@/composables/streaming/segments'
 import type { ChannelInfo, FilterSpec, MontagePair } from '@pennsieve/timeseries-zarr-reader'
 import type {
     DataSpanQuery,
@@ -137,7 +137,7 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
      * Emits one segment block. `type` mirrors the legacy envelope: the block's
      * own type when it carries points, `gap` when it does not.
      */
-    const emitSegment = (block: SegmentBlock, req: ParsedRequest) => {
+    const emitSegment = (block: SegmentBlock | GapNotice, req: ParsedRequest) => {
         emit('segment', {
             pageStart: req.startTime,
             data: block,
@@ -202,12 +202,14 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
         activeEntry: StreamingClientEntry
     ) => {
         const delivered = new Set<TraceIdentity>()
+        let completed = false
         try {
             const options: {
                 startUs: number
                 endUs: number
                 pixelWidthUs: number
                 raw: boolean
+                priority: 'viewport' | 'prefetch'
                 signal: AbortSignal
                 montage?: MontagePair[]
                 channels?: string[]
@@ -217,6 +219,7 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
                 endUs: req.endTime,
                 pixelWidthUs: req.pixelWidth,
                 raw: req.raw,
+                priority: req.priority ?? 'viewport',
                 signal
             }
             if (group.isMontage) {
@@ -240,6 +243,7 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
                 // the package sets it and the transport interface has no setter.
                 emitSegment(buildContinuousSegm(segment, identity, req), req)
             }
+            completed = true
         } catch (error) {
             if (isAbort(error) || gen !== generation) {
                 return
@@ -251,7 +255,15 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
             if (gen === generation && !signal.aborted) {
                 for (const identity of group.traces) {
                     if (!delivered.has(identity)) {
-                        emitSegment(buildGapSegm(identity, req), req)
+                        // A group that ran out records an empty span, so the page is
+                        // not asked for again. One that stopped early only drains the
+                        // page, because its traces were never read.
+                        emitSegment(
+                            completed
+                                ? buildGapSegm(identity, req)
+                                : buildGapNotice(identity, req),
+                            req
+                        )
                     }
                 }
             }
@@ -266,6 +278,7 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
         activeEntry: StreamingClientEntry
     ) => {
         const delivered = new Set<TraceIdentity>()
+        let completed = false
         try {
             const options = {
                 channels: traces.map((trace) => trace.chId),
@@ -287,6 +300,7 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
                 // or the page never completes.
                 emitEvent(buildNeuralSegm(batch, identity, req), req)
             }
+            completed = true
         } catch (error) {
             if (isAbort(error) || gen !== generation) {
                 return
@@ -296,7 +310,12 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
             if (gen === generation && !signal.aborted) {
                 for (const identity of traces) {
                     if (!delivered.has(identity)) {
-                        emitSegment(buildGapSegm(identity, req), req)
+                        emitSegment(
+                            completed
+                                ? buildGapSegm(identity, req)
+                                : buildGapNotice(identity, req),
+                            req
+                        )
                     }
                 }
             }
@@ -314,6 +333,7 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
             endTime: page.endTime,
             pixelWidth: page.pixelWidth,
             raw: !page.minMax,
+            priority: page.priority ?? 'viewport',
             virtualChannels: page.channels
         }
 
@@ -547,7 +567,8 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
             channel: resolved.info.id,
             startUs: query.startUs,
             endUs: query.endUs,
-            gapThresholdUs: query.gapThresholdUs
+            gapThresholdUs: query.gapThresholdUs,
+            priority: 'background'
         })
     }
 

@@ -369,6 +369,7 @@ export const useDataRequests = () => {
                 endTime: requestEndTime,
                 pixelWidth: curRequest.pixelWidth,
                 minMax: true,
+                priority: curRequest.isInViewport ? 'viewport' : 'prefetch',
                 channels: virtualChannels
             }
 

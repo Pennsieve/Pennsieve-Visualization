@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { EventBatch, Segment } from '@pennsieve/timeseries-zarr-reader'
-import { buildContinuousSegm, buildGapSegm, buildNeuralSegm } from './segments'
+import { buildContinuousSegm, buildGapNotice, buildGapSegm, buildNeuralSegm } from './segments'
 
 const CONTINUOUS_KEYS = [
     'chId', 'lastUsed', 'unit', 'samplePeriod', 'requestedSamplePeriod', 'pageStart',
@@ -314,6 +314,22 @@ describe('buildContinuousSegm page seams at 512 Hz', () => {
             accumulated += P512
         }
         expect(Math.abs(accumulated - times[times.length - 1])).toBeGreaterThan(100)
+    })
+})
+
+describe('buildGapNotice', () => {
+    it('carries every field of a gap block except the sample rows', () => {
+        const request = req(1000, 2000)
+        const notice = buildGapNotice(identity, request)
+        const answered = buildGapSegm(identity, request)
+
+        expect(Object.keys(notice).sort()).toEqual(
+            Object.keys(answered).filter(key => key !== 'parsedData').sort()
+        )
+        expect('parsedData' in notice).toBe(false)
+        expect(notice.pageStart).toBe(request.startTime)
+        expect(notice.requestedSamplePeriod).toBe(request.pixelWidth)
+        expect(notice.nrPoints).toBe(0)
     })
 })
 

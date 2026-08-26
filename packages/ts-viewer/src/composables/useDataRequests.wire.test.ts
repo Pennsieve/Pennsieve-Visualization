@@ -75,8 +75,22 @@ describe('requestDataFromServer', () => {
             endTime: 30000000,
             pixelWidth: 250,
             minMax: true,
+            priority: 'viewport',
             channels: [{ id: 'N:channel:aaa', name: 'CH1' }]
         })
+    })
+
+    it('tags a page outside the viewport as prefetch', () => {
+        const { requestDataFromServer } = useDataRequests()
+        const { transport, requestPage } = makeTransport()
+        const requestedPages = new Map<number, RequestedPageInfo>()
+
+        requestDataFromServer(
+            [plannedRequest({ isInViewport: false })],
+            0, transport, requestedPages, TS_END
+        )
+
+        expect(requestPage.mock.calls[0][0].priority).toBe('prefetch')
     })
 
     it('maps a montaged channel serverId and composite label onto the request id and name', () => {
@@ -94,6 +108,7 @@ describe('requestDataFromServer', () => {
             endTime: 30000000,
             pixelWidth: 250,
             minMax: true,
+            priority: 'viewport',
             channels: [{ id: 'N:channel:bbb', name: 'F3<->C3' }]
         })
     })
@@ -114,6 +129,7 @@ describe('requestDataFromServer', () => {
             endTime: 3600000000,
             pixelWidth: 250,
             minMax: true,
+            priority: 'viewport',
             channels: [{ id: 'N:channel:aaa', name: 'CH1' }]
         })
     })

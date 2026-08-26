@@ -577,7 +577,10 @@ const handleChannelDetails = (channelDetails: ChannelDetail[]) => {
 }
 
 const handleError = (error: TransportError) => {
+  // The store field no template reads, kept for callers that poll it.
   viewerStore.setViewerErrors(error)
+  // A failed page draws as blank, so without this the cause is invisible.
+  console.error('TSPlotCanvas: transport error', error)
 }
 
 const initPlotCanvas = () => {

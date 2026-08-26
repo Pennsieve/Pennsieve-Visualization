@@ -283,6 +283,7 @@ describe('TSViewer mounted against a recorded transport', () => {
             "endTime": 30000000,
             "minMax": true,
             "pixelWidth": 1,
+            "priority": "viewport",
             "startTime": 15000000,
           }
         `)
