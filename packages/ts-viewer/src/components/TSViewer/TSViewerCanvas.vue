@@ -536,6 +536,10 @@ const setFilters = (payload: FilterPayload) => {
 // Lifecycle
 onMounted(() => {
   pixelRatio.value = getScreenPixelRatio()
+  // This canvas is an async component, so the viewer can finish measuring itself before
+  // it mounts. Without this the sample period stays at zero until a prop changes, and
+  // every renderer that divides by it draws off the canvas.
+  updateRsPeriod(props.cWidth, props.duration)
 })
 
 // Expose methods that might be called from parent components
