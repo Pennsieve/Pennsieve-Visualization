@@ -114,7 +114,8 @@ const {
   initializeCanvases,
   renderData,
   cpCanvasScaler,
-  computeChannelViews
+  computeChannelViews,
+  getScreenPixelRatio
 } = useCanvasRenderer()
 
 // Define pixelRatio directly in main component to avoid dependency issues
@@ -175,9 +176,13 @@ const lastRequestDuration = ref<number | null>(null)
 const staleDataCounter = ref(0)
 
 // Computed properties (from original) - moved after composable initialization
-const canvasWidth = computed(() => pixelRatio.value * props.cWidth)
-const canvasHeight = computed(() => cpCanvasScaler(props.cHeight, pixelRatio.value, 0))
 const pHeight = computed(() => props.cHeight - 20)
+
+// The backing store matches the CSS box the canvas is drawn into. A backing height of
+// cHeight against a CSS height of pHeight makes the compositor rescale every frame by a
+// fraction, and row geometry then has to carry the difference.
+const canvasWidth = computed(() => cpCanvasScaler(props.cWidth, pixelRatio.value, 0))
+const canvasHeight = computed(() => cpCanvasScaler(pHeight.value, pixelRatio.value, 0))
 
 const canvasStyle = computed(() => ({
   width: props.cWidth + 'px',
@@ -719,7 +724,7 @@ watch(transport, (activeTransport, previous) => {
 
 // Lifecycle (from original mounted/unmounted logic)
 onMounted(async () => {
-  pixelRatio.value = 1
+  pixelRatio.value = getScreenPixelRatio()
   initializeCanvases(pixelRatio.value)
 
   initPlotCanvas()

@@ -42,6 +42,29 @@ export const useCanvasRenderer = () => {
         return pixelRatio * (sz + offset)
     }
 
+    /**
+     * Device pixels per CSS pixel for the plot canvas.
+     *
+     * The backing-store ratio is a nonstandard field that reports a browser's own
+     * upscaling. Dividing by it leaves one device pixel per backing pixel where it is
+     * reported. A canvas with no 2D context falls back to the window ratio.
+     */
+    const getScreenPixelRatio = () => {
+        const canvas = plotCanvasRef.value
+        // The backing-store ratio fields are nonstandard and untyped.
+        const ctx = canvas ? (canvas.getContext('2d') as any) : null
+        const dpr = window.devicePixelRatio || 1
+        if (!ctx) {
+            return dpr
+        }
+        const bsr = ctx.webkitBackingStorePixelRatio ||
+            ctx.mozBackingStorePixelRatio ||
+            ctx.msBackingStorePixelRatio ||
+            ctx.oBackingStorePixelRatio ||
+            ctx.backingStorePixelRatio || 1
+        return dpr / bsr
+    }
+
     // Initialize canvases
     const initializeCanvases = (pixelRatioValue = 1) => {
         // No longer managing pixelRatio internally
@@ -315,9 +338,7 @@ export const useCanvasRenderer = () => {
         })
         const rankedIds = mapped.map(function(el) { return el.index })
 
-        // Need to add 20px to pHeight as pHeight is calculated as => const pHeight = computed(() => props.cHeight - 20)
-        // and spacing of labels is based on cHeight
-        const interChannelDist = (pHeight + 20) / nrVisibleChannels
+        const interChannelDist = pHeight / nrVisibleChannels
 
         let curIdx = 0
         for (let i = 0; i < rankedIds.length; i++) {
@@ -437,6 +458,7 @@ export const useCanvasRenderer = () => {
         plotCanvasRef,
         blurCanvasRef,
         initializeCanvases,
+        getScreenPixelRatio,
         renderData,
         computeChannelViews,
         getPointCoords,
