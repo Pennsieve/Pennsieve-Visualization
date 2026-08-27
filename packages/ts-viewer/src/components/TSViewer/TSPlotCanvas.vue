@@ -114,11 +114,13 @@ const {
   initializeCanvases,
   renderData,
   cpCanvasScaler,
-  computeChannelViews,
-  getScreenPixelRatio
+  computeChannelViews
 } = useCanvasRenderer()
 
-// Define pixelRatio directly in main component to avoid dependency issues
+// One device pixel per CSS pixel, against the real ratio that TSViewerCanvas.vue and
+// TSScrubber.vue read. The plot canvas rasterizes a polyline per channel, so the real
+// ratio on a 2x display quadruples the pixels every fill and stroke covers, which costs
+// more than the sharpness returns here.
 const pixelRatio = ref(1)
 
 const isDumpingBuffer = ref(false)
@@ -724,7 +726,6 @@ watch(transport, (activeTransport, previous) => {
 
 // Lifecycle (from original mounted/unmounted logic)
 onMounted(async () => {
-  pixelRatio.value = getScreenPixelRatio()
   initializeCanvases(pixelRatio.value)
 
   initPlotCanvas()

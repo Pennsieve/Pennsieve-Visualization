@@ -1,6 +1,7 @@
 // The plot canvas mounted on its own, to pin the relation between its backing store and
-// the CSS box it is drawn into. The full TSViewer tree cannot carry these assertions:
-// happy-dom reports no layout, so cHeight arrives as NaN through the real measure path.
+// the CSS box it is drawn into: equal, at one device pixel per CSS pixel. The full
+// TSViewer tree cannot carry these assertions: happy-dom reports no layout, so cHeight
+// arrives as NaN through the real measure path.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
@@ -48,20 +49,22 @@ describe('plot canvas geometry', () => {
         return wrapper.findAll('canvas')
     }
 
-    it('sizes the backing store to the CSS box times the device pixel ratio', async () => {
+    it('sizes the backing store to the CSS box', async () => {
         const canvases = await mountCanvas(2)
         expect(canvases).toHaveLength(2)
         for (const canvas of canvases) {
             const el = canvas.element as HTMLCanvasElement
             expect(el.style.height).toBe(`${P_HEIGHT}px`)
             expect(el.style.width).toBe(`${C_WIDTH}px`)
-            expect(el.height).toBe(2 * P_HEIGHT)
-            expect(el.width).toBe(2 * C_WIDTH)
+            expect(el.height).toBe(P_HEIGHT)
+            expect(el.width).toBe(C_WIDTH)
         }
     })
 
-    it('follows a device pixel ratio of one', async () => {
-        const canvases = await mountCanvas(1)
+    // Raising the ratio quadruples the pixels every fill and stroke covers on a 2x
+    // display, which measured slower than the sharpness returns.
+    it('holds one device pixel per CSS pixel whatever the display reports', async () => {
+        const canvases = await mountCanvas(3)
         const el = canvases[0].element as HTMLCanvasElement
         expect(el.height).toBe(P_HEIGHT)
         expect(el.width).toBe(C_WIDTH)
