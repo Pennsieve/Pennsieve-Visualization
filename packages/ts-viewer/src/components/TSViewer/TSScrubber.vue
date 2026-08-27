@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick, inject } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, inject } from 'vue'
 import { createViewerStore } from '../../stores/tsviewer'
 import type { ActiveViewer, ViewerChannel } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
@@ -228,7 +228,23 @@ const resetComponentState = () => {
   clearCanvases()
 }
 
+/**
+ * Cancels the availability scan in flight, if any.
+ *
+ * One controller covers every channel of a scan, because they are one logical pass over
+ * the recording. A scan left running holds its share of each read it makes, and the
+ * deduping store cannot cancel a read while any caller still wants it.
+ */
+let spanAbort: AbortController | null = null
+
+const abortSegmentSpans = () => {
+  spanAbort?.abort()
+  spanAbort = null
+}
+
 const resetSegmentState = () => {
+  abortSegmentSpans()
+
   // Reset segments array
   segments.value = new Array(5000)
   segments.value = segments.value.fill(0, 0, 4999)
@@ -374,12 +390,13 @@ const initSegmentSpans = () => {
 
   // Reset segment state before fetching new data
   resetSegmentState()
+  spanAbort = new AbortController()
 
   // GET SEGMENTS AND GAPS
   const vChans = viewerStore.viewerChannels
 
   for (let i = 0; i < vChans.length; i++) {
-    _requestSegmentSpan(vChans[i].id, i)
+    _requestSegmentSpan(vChans[i].id, i, spanAbort.signal)
   }
 }
 
@@ -391,7 +408,7 @@ const initSegmentSpans = () => {
  * `gapThresholdUs` is one cell of the scrubber's own 5000-cell bitmap: a gap narrower than a
  * cell cannot be drawn, so coalescing at that width matches what is actually rendered.
  */
-const _requestSegmentSpan = async (channel: string, channelIdx: number) => {
+const _requestSegmentSpan = async (channel: string, channelIdx: number, signal?: AbortSignal) => {
   const activeTransport = transport.value
   if (!activeTransport) {
     console.warn('TSScrubber: transport not ready, skipping segment spans')
@@ -413,7 +430,8 @@ const _requestSegmentSpan = async (channel: string, channelIdx: number) => {
       channel,
       startUs: props.ts_start!,
       endUs: props.ts_end!,
-      gapThresholdUs
+      gapThresholdUs,
+      signal
     })
 
     // Validate that we still have the same channels (user might have switched packages)
@@ -483,6 +501,10 @@ const _requestSegmentSpan = async (channel: string, channelIdx: number) => {
 
     renderSegments()
   } catch (err) {
+    // An abandoned scan is expected: the channel set changed, or the component went away.
+    if (signal?.aborted) {
+      return
+    }
     console.error(`TSScrubber: Error fetching segments for channel ${channel}:`, err)
     useHandleXhrError(err)
   }
@@ -713,6 +735,11 @@ const createPinstripeCanvas = () => {
   return patternCanvas
 }
 
+// A transport swap leaves a scan reading through a client the viewer has finished with.
+watch(transport, () => {
+  abortSegmentSpans()
+})
+
 // Lifecycle
 onMounted(() => {
   segments.value = new Array(5000)
@@ -721,6 +748,10 @@ onMounted(() => {
   pixelRatio.value = getScreenPixelRatio()
   patternCnvs.value = createPinstripeCanvas()
   renderViewPort()
+})
+
+onBeforeUnmount(() => {
+  abortSegmentSpans()
 })
 
 // Expose methods for parent component access

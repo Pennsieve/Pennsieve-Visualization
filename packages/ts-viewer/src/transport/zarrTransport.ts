@@ -568,7 +568,8 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
             startUs: query.startUs,
             endUs: query.endUs,
             gapThresholdUs: query.gapThresholdUs,
-            priority: 'background'
+            priority: 'background',
+            signal: query.signal
         })
     }
 

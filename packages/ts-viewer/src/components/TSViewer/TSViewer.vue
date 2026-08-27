@@ -418,6 +418,20 @@ const onResize = async () => {
 let verticalScaleMeasured = false
 
 /**
+ * Cancels the survey in flight, if any.
+ *
+ * A survey left running holds its share of each read it makes, and the deduping store
+ * cannot cancel a read while any caller still wants it. The survey reads the same coarse
+ * level the availability scan does, so those are the reads it holds.
+ */
+let surveyAbort: AbortController | null = null
+
+const abortVerticalScaleSurvey = () => {
+  surveyAbort?.abort()
+  surveyAbort = null
+}
+
+/**
  * Sets the vertical scale from the bundle's own amplitude, once per bundle.
  *
  * Reads the coarsest pyramid level over the whole recording, which the availability scan
@@ -445,11 +459,15 @@ const measureVerticalScale = async () => {
   }
 
   verticalScaleMeasured = true
+  abortVerticalScaleSurvey()
+  const controller = new AbortController()
+  surveyAbort = controller
   try {
     const amplitudes = await activeTransport.measureAmplitudes(
       channels,
       ts_start.value,
-      ts_end.value
+      ts_end.value,
+      controller.signal
     )
     const zoom = zoomMultForAmplitudes(amplitudes, rowHeight)
     if (zoom !== null) {
@@ -457,9 +475,17 @@ const measureVerticalScale = async () => {
       viewerCanvas.value?.repaint?.()
     }
   } catch (error: any) { // TODO(ts-phase4)
-    // A bundle that cannot be surveyed still renders at the default scale.
+    // A bundle that cannot be surveyed still renders at the default scale. The latch is
+    // released either way, so a bundle whose survey was abandoned can be measured again.
     verticalScaleMeasured = false
+    if (controller.signal.aborted) {
+      return
+    }
     console.warn(`TSViewer: vertical autoscale skipped: ${error?.message ?? error}`)
+  } finally {
+    if (surveyAbort === controller) {
+      surveyAbort = null
+    }
   }
 }
 
@@ -858,6 +884,11 @@ const transportKey = computed(() => {
 })
 
 watch(transportKey, (key) => {
+  // The survey in flight belongs to the bundle being replaced, and its latch belongs to
+  // that bundle too: a new bundle has its own amplitude to measure.
+  abortVerticalScaleSurvey()
+  verticalScaleMeasured = false
+
   const content = activeViewer.value?.content
   if (key && content) {
     void openTransportFor(content)
@@ -896,6 +927,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  abortVerticalScaleSurvey()
   resizeObserver?.disconnect()
   resizeObserver = null
   window.removeEventListener('resize', onResize)

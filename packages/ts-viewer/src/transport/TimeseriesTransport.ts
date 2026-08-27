@@ -66,6 +66,11 @@ export interface DataSpanQuery {
     endUs: number
     /** A gap narrower than this is bridged when merging spans. */
     gapThresholdUs: number
+    /**
+     * Cancels the scan. A caller that passes nothing holds its share of every read the
+     * scan makes until the read completes, including reads a viewport page joined.
+     */
+    signal?: AbortSignal
 }
 
 export interface TransportEvents {
