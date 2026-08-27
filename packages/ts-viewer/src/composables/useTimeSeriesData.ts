@@ -63,6 +63,16 @@ export interface SegmentMessage {
 
 type ChannelStore = Pick<ViewerStore, 'setChannels'>
 
+/**
+ * Pages kept behind the range the request walk covers.
+ *
+ * The walk runs from the page boundary at or before the viewport to
+ * `start + duration + prefetchPages * pageSize`. A page dropped from inside that range
+ * is requested again on the next pass, so eviction keeps all of it, and this many pages
+ * behind it so that panning back does not refetch.
+ */
+export const CACHE_TRAIL_PAGES = 2
+
 export const useTimeSeriesData = () => {
     // Shallow: nothing watches these structures, and every redraw after a block
     // arrives is called imperatively. Deep reactivity put a proxy on every channel
@@ -82,6 +92,11 @@ export const useTimeSeriesData = () => {
      * signal of its own. A caller that has to react to cached data watches this.
      */
     const dataVersion = ref(0)
+
+    // The span worth keeping in the segment cache, in microseconds. An end at or below
+    // the start keeps every page, which is the state until the first request pass.
+    let cacheKeepStart = 0
+    let cacheKeepEnd = 0
 
     // State from original
     const channelsReady = ref(false)
@@ -366,6 +381,7 @@ export const useTimeSeriesData = () => {
                     }
                     curSegments.splice(lo, 0, block)
                     dataVersion.value++
+                    evictOutsideWindow(curChData)
                 }
                 break
 
@@ -441,6 +457,55 @@ export const useTimeSeriesData = () => {
     }
 
     /**
+     * Records the span the request walk covers and drops cached pages outside it.
+     *
+     * Called from the request pass, which is where the page span and the prefetch depth
+     * are known. A page span that is not a positive number, or a prefetch depth that is
+     * not a number, leaves the window as it was: a NaN bound would evict the whole cache.
+     */
+    const updateCacheWindow = (start: number, duration: number, pageSize: number, prefetchPages: number) => {
+        if (!Number.isFinite(pageSize) || pageSize <= 0 || !Number.isFinite(prefetchPages)) {
+            return
+        }
+        const alignedStart = Math.floor(start / pageSize) * pageSize
+        cacheKeepStart = Math.max(0, alignedStart - CACHE_TRAIL_PAGES * pageSize)
+        cacheKeepEnd = start + duration + prefetchPages * pageSize
+
+        // Every channel, not only the ones still receiving. A channel hidden after it
+        // cached pages receives nothing more and would hold them for the session.
+        for (let i = 0; i < chData.value.length; i++) {
+            evictOutsideWindow(chData.value[i])
+        }
+    }
+
+    /**
+     * Drops the channel's cached pages that fall outside the keep window.
+     *
+     * A page is kept while `[pageStart, pageEnd)` intersects the window. Every block
+     * answering one page request carries the same pair, so a page goes whole. A page
+     * dropped in part still reads as cached to the request walk, which then draws the
+     * blocks that remain and requests nothing for the rest.
+     */
+    const evictOutsideWindow = (channel: ChannelData) => {
+        if (cacheKeepEnd <= cacheKeepStart) {
+            return
+        }
+        const segments = channel.segments
+        let kept = 0
+        for (let i = 0; i < segments.length; i++) {
+            const segm = segments[i]
+            if (segm.pageEnd > cacheKeepStart && segm.pageStart < cacheKeepEnd) {
+                segments[kept] = segm
+                kept++
+            }
+        }
+        if (kept < segments.length) {
+            segments.length = kept
+            dataVersion.value++
+        }
+    }
+
+    /**
      * Whether a block was produced for the viewport's current resolution.
      *
      * `requestedSamplePeriod` echoes the pixelWidth of the request that produced the
@@ -485,6 +550,7 @@ export const useTimeSeriesData = () => {
         autoScaleViewData,
         segmIndexOf,
         updateCurrentRequestedSamplePeriod,
+        updateCacheWindow,
         isDataCurrentForViewport,
 
         // Helpers

@@ -134,6 +134,7 @@ const {
   autoScaleViewData,
   segmIndexOf,
   updateCurrentRequestedSamplePeriod,
+  updateCacheWindow,
   currentRequestedSamplePeriod,
   isDataCurrentForViewport,
   isSwitchingMontage
@@ -386,6 +387,10 @@ const planRequests = async () => {
   const pageSize = currentPageSize()
   const prefetchPages = currentPrefetchPages()
   const requestConstants = { ...props.constants, PREFETCHPAGES: prefetchPages }
+
+  // Before the walk, so a page the walk is about to read as cached is one the window
+  // still covers.
+  updateCacheWindow(props.start, props.duration, pageSize, prefetchPages)
 
   const buildRequests = () => generatePoints(
     showChannels,

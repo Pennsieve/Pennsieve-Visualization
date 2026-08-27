@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isReactive, reactive } from 'vue'
-import { useTimeSeriesData } from './useTimeSeriesData'
+import { useTimeSeriesData, CACHE_TRAIL_PAGES } from './useTimeSeriesData'
 import type { ContinuousSegmentBlock } from './streaming/segments'
 
 const block = (overrides: Partial<ContinuousSegmentBlock> = {}): ContinuousSegmentBlock => ({
@@ -195,5 +195,105 @@ describe('cache reactivity', () => {
         expect(ts.dataVersion.value).toBe(1)
         ts.invalidate()
         expect(ts.dataVersion.value).toBe(2)
+    })
+})
+
+describe('cache eviction', () => {
+    const PS = 15000000
+
+    const row = (id: string) => ({
+        id,
+        serverId: id,
+        label: id,
+        segments: [],
+        gaps: [],
+        dataSegments: []
+    })
+
+    // A block answering the page that starts at `page * PS`.
+    const pageBlock = (page: number, overrides: Partial<ContinuousSegmentBlock> = {}) => block({
+        pageStart: page * PS,
+        pageEnd: (page + 1) * PS,
+        startTs: page * PS,
+        ...overrides
+    })
+
+    const deliver = (ts: ReturnType<typeof useTimeSeriesData>, data: ContinuousSegmentBlock) => {
+        ts.dataCallback({ pageStart: data.pageStart, type: 'Continuous', nrResponses: 1, data })
+    }
+
+    const pagesOf = (ts: ReturnType<typeof useTimeSeriesData>, channel = 0) =>
+        ts.chData.value[channel].segments.map(segm => segm.pageStart / PS)
+
+    // Viewport on page 5, one page wide, two pages of read-ahead. The walk covers
+    // [5 * PS, 8 * PS) and eviction keeps CACHE_TRAIL_PAGES behind that.
+    const windowOnPage5 = (ts: ReturnType<typeof useTimeSeriesData>) => {
+        ts.updateCacheWindow(5 * PS, PS, PS, 2)
+    }
+
+    it('drops the pages the request walk has left behind', () => {
+        const ts = setup()
+        for (const page of [0, 1, 2, 3, 4, 5]) {
+            deliver(ts, pageBlock(page))
+        }
+        windowOnPage5(ts)
+        expect(pagesOf(ts)).toEqual([3, 4, 5])
+    })
+
+    it('keeps the pages behind the viewport that the trail covers', () => {
+        const ts = setup()
+        deliver(ts, pageBlock(5 - CACHE_TRAIL_PAGES))
+        deliver(ts, pageBlock(5 - CACHE_TRAIL_PAGES - 1))
+        windowOnPage5(ts)
+        expect(pagesOf(ts)).toEqual([5 - CACHE_TRAIL_PAGES])
+    })
+
+    it('keeps a read-ahead page that arrives at the far edge of the walk', () => {
+        const ts = setup()
+        windowOnPage5(ts)
+        deliver(ts, pageBlock(7))
+        expect(pagesOf(ts)).toEqual([7])
+    })
+
+    it('drops a block that arrives for a page outside the window', () => {
+        const ts = setup()
+        windowOnPage5(ts)
+        deliver(ts, pageBlock(1))
+        expect(pagesOf(ts)).toEqual([])
+    })
+
+    it('keeps every block of a wider page that still reaches into the window', () => {
+        const ts = setup()
+        const wide = { pageStart: 0, pageEnd: 4 * PS }
+        deliver(ts, pageBlock(0, { ...wide, startTs: 0 }))
+        deliver(ts, pageBlock(0, { ...wide, startTs: 3.5 * PS }))
+        windowOnPage5(ts)
+        expect(ts.chData.value[0].segments.map(segm => segm.startTs)).toEqual([0, 3.5 * PS])
+    })
+
+    it('drops stale pages from a channel that receives nothing more', () => {
+        const ts = useTimeSeriesData()
+        ts.chData.value = [row('ch-1'), row('ch-2')]
+        ts.chData.value[1].segments.push(pageBlock(0))
+        deliver(ts, pageBlock(0))
+        windowOnPage5(ts)
+        expect(pagesOf(ts, 0)).toEqual([])
+        expect(pagesOf(ts, 1)).toEqual([])
+    })
+
+    it('keeps every page until the first request pass sets a window', () => {
+        const ts = setup()
+        for (const page of [0, 40, 400]) {
+            deliver(ts, pageBlock(page))
+        }
+        expect(pagesOf(ts)).toEqual([0, 40, 400])
+    })
+
+    it('leaves the window alone when the page span or read-ahead depth is unusable', () => {
+        const ts = setup()
+        deliver(ts, pageBlock(0))
+        ts.updateCacheWindow(5 * PS, PS, 0, 2)
+        ts.updateCacheWindow(5 * PS, PS, PS, Number.NaN)
+        expect(pagesOf(ts)).toEqual([0])
     })
 })
