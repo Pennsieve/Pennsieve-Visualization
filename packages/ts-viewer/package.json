@@ -29,7 +29,7 @@
     "type-check": "vue-tsc --noEmit -p tsconfig.typecheck.json"
   },
   "dependencies": {
-    "@pennsieve/timeseries-zarr-reader": "0.5.0",
+    "@pennsieve/timeseries-zarr-reader": "0.5.1",
     "protobufjs": "^7.6.3"
   },
   "devDependencies": {
