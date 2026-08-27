@@ -1,5 +1,5 @@
 // @/composables/useTimeSeriesData.ts
-import {reactive, ref} from 'vue'
+import {markRaw, ref, shallowReactive, shallowRef} from 'vue'
 import type { SegmentBlock, SegmentBlockBase } from './streaming/segments'
 import type { RequestedPageInfo } from './useDataRequests'
 import type { VirtualChannel, VirtualChannelContent } from './useChannelProcessing'
@@ -64,14 +64,24 @@ export interface SegmentMessage {
 type ChannelStore = Pick<ViewerStore, 'setChannels'>
 
 export const useTimeSeriesData = () => {
-    // Data structures from original
-    const chData = ref<ChannelData[]>([])
-    const requestedPages = ref(new Map<number, RequestedPageInfo>())
-    const viewData: ViewData = reactive({
+    // Shallow: nothing watches these structures, and every redraw after a block
+    // arrives is called imperatively. Deep reactivity put a proxy on every channel
+    // row, every block, and every parsedData array the renderer reads per sample.
+    const chData = shallowRef<ChannelData[]>([])
+    const requestedPages = shallowRef(new Map<number, RequestedPageInfo>())
+    const viewData: ViewData = shallowReactive({
         start: 0,
         duration: 0,
         channels: []
     })
+
+    /**
+     * Counts changes to the segment cache.
+     *
+     * The cache structures are shallow, so a mutation inside one raises no reactive
+     * signal of its own. A caller that has to react to cached data watches this.
+     */
+    const dataVersion = ref(0)
 
     // State from original
     const channelsReady = ref(false)
@@ -338,7 +348,9 @@ export const useTimeSeriesData = () => {
 
                 // Add data to cache
                 if (addData) {
-                    const block = obj.data as SegmentBlock
+                    // The same object also goes into viewData. Raw here keeps it
+                    // unproxied in either container.
+                    const block = markRaw(obj.data as SegmentBlock)
                     // Past the last block with an equal startTs, where appending and
                     // sorting left it. The dedupe walk above runs first, so its splice
                     // cannot shift this position.
@@ -353,6 +365,7 @@ export const useTimeSeriesData = () => {
                         }
                     }
                     curSegments.splice(lo, 0, block)
+                    dataVersion.value++
                 }
                 break
 
@@ -371,6 +384,7 @@ export const useTimeSeriesData = () => {
         for (let i = 0; i < viewData.channels.length; i++) {
             viewData.channels[i].blocks = []
         }
+        dataVersion.value++
     }
 
     // Auto scale (from original) - now accepts cHeight as parameter
@@ -452,6 +466,7 @@ export const useTimeSeriesData = () => {
         chData,
         requestedPages,
         viewData,
+        dataVersion,
         channelsReady,
         autoScale,
         globalGaps,

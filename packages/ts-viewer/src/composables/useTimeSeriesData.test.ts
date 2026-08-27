@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { isReactive, reactive } from 'vue'
 import { useTimeSeriesData } from './useTimeSeriesData'
 import type { ContinuousSegmentBlock } from './streaming/segments'
 
@@ -135,5 +136,64 @@ describe('autoScaleViewData', () => {
         const zoom = ts.autoScaleViewData(400)
         expect(Number.isFinite(zoom)).toBe(true)
         expect(zoom).toBeGreaterThan(0)
+    })
+})
+
+describe('cache reactivity', () => {
+    it('holds the channel rows without a proxy', () => {
+        const rows = [{
+            id: 'ch-1',
+            serverId: 'ch-1',
+            label: 'Ch 1',
+            segments: [],
+            gaps: [],
+            dataSegments: []
+        }]
+        const ts = useTimeSeriesData()
+        ts.chData.value = rows
+        expect(ts.chData.value).toBe(rows)
+        expect(ts.chData.value[0]).toBe(rows[0])
+        expect(isReactive(ts.chData.value[0])).toBe(false)
+    })
+
+    it('caches the block object itself rather than a proxy of it', () => {
+        const ts = setup()
+        const incoming = block()
+        ts.dataCallback({ pageStart: 0, type: 'Continuous', nrResponses: 1, data: incoming })
+        const cached = ts.chData.value[0].segments[0]
+        expect(cached).toBe(incoming)
+        expect(isReactive(cached.parsedData)).toBe(false)
+    })
+
+    it('marks a cached block raw so a reactive container cannot proxy it', () => {
+        const ts = setup()
+        const incoming = block()
+        ts.dataCallback({ pageStart: 0, type: 'Continuous', nrResponses: 1, data: incoming })
+        const holder = reactive({ blocks: ts.chData.value[0].segments })
+        expect(holder.blocks[0]).toBe(incoming)
+    })
+
+    it('holds the viewport channel list without a proxy', () => {
+        const ts = setup()
+        const channels = [{ id: 'ch-1', blocks: [] }]
+        ts.viewData.channels = channels
+        expect(ts.viewData.channels).toBe(channels)
+    })
+
+    it('holds the pending page map without a proxy', () => {
+        const ts = setup()
+        const info = { count: 1, counter: new Map([['ch-1', 1]]), subPageCount: 1, ts: 0, inViewport: true }
+        ts.requestedPages.value.set(0, info)
+        expect(ts.requestedPages.value.get(0)).toBe(info)
+        expect(ts.requestedPages.value.get(0)!.counter).toBe(info.counter)
+    })
+
+    it('counts a cached block and an invalidate', () => {
+        const ts = setup()
+        expect(ts.dataVersion.value).toBe(0)
+        ts.dataCallback({ pageStart: 0, type: 'Continuous', nrResponses: 1, data: block() })
+        expect(ts.dataVersion.value).toBe(1)
+        ts.invalidate()
+        expect(ts.dataVersion.value).toBe(2)
     })
 })
