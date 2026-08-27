@@ -215,14 +215,82 @@ const computedRsPeriod = computed(() => {
   return 1
 })
 
+/**
+ * How long the viewport holds still before the pages it needs are planned again.
+ *
+ * A wheel gesture moves the resolution on every tick. Planning each one dumps the buffer
+ * and refetches, which leaves the viewport blank for the whole gesture.
+ */
+const VIEWPORT_SETTLE_MS = 200
+
+let viewportSettleTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Sample period in effect when the open settle window began, null when none is open.
+ *
+ * The period the window closes on says whether the cached blocks are the wrong width for
+ * the viewport. `lastRequestedSamplePeriod` cannot answer that: a planning pass inside
+ * the window moves it without dropping a single block.
+ */
+let gestureStartPeriod: number | null = null
+
+/**
+ * Plans the viewport again now that the gesture moving it has stopped.
+ *
+ * Blocks read at another resolution are the wrong width for the window, so they go, and
+ * with them the pending pages that would stop the walk asking again. Blocks at the
+ * resolution the gesture ended on still cover the window. `planRequests` dumps whatever
+ * the abandoned resolutions left in flight.
+ */
+const settleViewport = () => {
+  viewportSettleTimer = undefined
+
+  const settled = Math.ceil(computedRsPeriod.value)
+  if (gestureStartPeriod !== null && settled !== gestureStartPeriod) {
+    invalidate()
+  }
+  gestureStartPeriod = null
+
+  renderAll()
+}
+
+/** Restarts the settle window, so every change inside one gesture extends it. */
+const armViewportSettle = () => {
+  clearTimeout(viewportSettleTimer)
+  viewportSettleTimer = setTimeout(settleViewport, VIEWPORT_SETTLE_MS)
+}
+
+/** Drops a pending settle, for a change that voids the cache on its own. */
+const cancelViewportSettle = () => {
+  clearTimeout(viewportSettleTimer)
+  viewportSettleTimer = undefined
+  gestureStartPeriod = null
+}
+
+// Immediate, so the requested period is set before the first request goes out. Blocks
+// answered at any other period are rejected on arrival until it changes again.
 watch(computedRsPeriod, (newRsPeriod) => {
   if (newRsPeriod > 0) {
     updateCurrentRequestedSamplePeriod(newRsPeriod)
   }
 }, { immediate: true })
 
-// Main methods (from original) - Define these first before throttled functions
-const renderDataInternal = () => {
+// Both halves of the viewport shape arm the settle. A width change moves the resolution
+// without moving the duration, and a duration change that a width change cancels out
+// moves the duration without moving the resolution.
+watch([computedRsPeriod, () => props.duration], (_current, [previousPeriod]) => {
+  if (viewportSettleTimer === undefined) {
+    gestureStartPeriod = Math.ceil(previousPeriod)
+  }
+  armViewportSettle()
+})
+
+/**
+ * Draws the cached blocks of every visible channel.
+ *
+ * Plans nothing. A caller that changed which pages the viewport needs plans first.
+ */
+const paint = () => {
   try {
     if (!channelsReady.value) {
       return
@@ -251,7 +319,7 @@ const renderDataInternal = () => {
     )
 
   } catch (error) {
-    console.error('renderDataInternal failed:', error)
+    console.error('TSPlotCanvas: paint failed', error)
   }
 }
 
@@ -285,7 +353,13 @@ const monitorPrefetchActivity = () => {
   }, 5000)
 }
 
-const generateAndProcessRequests = async () => {
+/**
+ * Sends the pages the viewport and the prefetch horizon are missing, dumping the
+ * buffer first when the pending set has gone stale.
+ *
+ * Draws nothing.
+ */
+const planRequests = async () => {
   if (!viewerChannels.value) {
     return
   }
@@ -418,19 +492,22 @@ const generateAndProcessRequests = async () => {
   }
 }
 
+/** Plans, then draws. Data arrival and channel initialization both need both halves. */
 const renderAll = () => {
-  generateAndProcessRequests()
-  renderDataInternal()
+  planRequests()
+  paint()
 }
 
 const renderDataOnMessage = () => {
-  generateAndProcessRequests()
+  // Arrivals stay on the planning path: a block that lands can reveal the next page
+  // the viewport needs.
+  planRequests()
 
   if (autoScale.value === 0) {
     autoScale.value--
     handleAutoScale()
   } else {
-    renderDataInternal()
+    paint()
   }
 }
 
@@ -439,30 +516,13 @@ const handleAutoScale = () => {
   if (autoScaleValue && !isNaN(autoScaleValue)) {
     emit('setGlobalZoom', autoScaleValue)
   }
-  renderDataInternal()
+  paint()
 }
 
-// Throttled functions (from original) - Create these AFTER function definitions
 // Leading edge so the first block of a burst paints immediately, with the trailing call
 // catching whatever lands inside the window. The Zarr reader answers a whole viewport in
 // one burst, so a trailing-only delay held every first paint back by the full wait.
 const throttledGetRenderData = createThrottle(renderDataOnMessage, 100)
-const throttledDataRender = createThrottle(() => renderAll(), 50)
-
-// Watchers (from original)
-watch(() => props.rsPeriod, (newRsPeriod) => {
-  if (newRsPeriod > 0) {
-    updateCurrentRequestedSamplePeriod(newRsPeriod)
-  }
-
-  invalidate()
-  requestedPages.value.clear()
-})
-
-watch(() => props.duration, () => {
-  // Only clear caches, don't reject responses
-  invalidate()
-})
 
 watch(() => viewerMontageScheme.value, (newScheme) => {
 
@@ -475,7 +535,9 @@ watch(() => viewerMontageScheme.value, (newScheme) => {
   // Flag the transition so stale in-flight responses are discarded
   isSwitchingMontage.value = true
 
-  // Clear all pending requests and data
+  // Clear all pending requests and data. A settle planning for the outgoing channel
+  // set would send requests the incoming one cannot use.
+  cancelViewportSettle()
   requestedPages.value.clear()
   clearRequests()
   invalidate()
@@ -622,7 +684,9 @@ watch(transport, (activeTransport, previous) => {
   unsubscribeTransport = []
 
   if (previous) {
-    // The outgoing transport's pages will never arrive.
+    // The outgoing transport's pages will never arrive, and a settle must not ask the
+    // incoming one for them.
+    cancelViewportSettle()
     requestedPages.value.clear()
     clearRequests()
     invalidate()
@@ -659,6 +723,7 @@ onMounted(async () => {
 onUnmounted(() => {
 
   clearInterval(PrefetchInterval.value)
+  cancelViewportSettle()
 
   if (requestedPages.value.size > 0) {
     transport.value?.dumpBuffer()
@@ -674,16 +739,13 @@ onUnmounted(() => {
   if (throttledGetRenderData.cancel) {
     throttledGetRenderData.cancel()
   }
-  if (throttledDataRender.cancel) {
-    throttledDataRender.cancel()
-  }
 })
 
 // Expose methods (from original)
 defineExpose({
-  renderAll,
+  planRequests,
+  paint,
   invalidate,
-  throttledDataRender,
   sendFilterMessage,
   viewData,
   requestedPages,

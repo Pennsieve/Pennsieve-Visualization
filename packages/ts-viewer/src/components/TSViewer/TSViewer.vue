@@ -275,6 +275,7 @@ interface ViewerCanvasHandle {
   setFilters: (payload: FilterPayload) => void
   setActiveTool: (tool: string) => void
   renderAll: () => void
+  repaint: () => void
   renderAnnotationCanvas: () => void
   initViewerCanvas: () => void
 }
@@ -453,7 +454,7 @@ const measureVerticalScale = async () => {
     const zoom = zoomMultForAmplitudes(amplitudes, rowHeight)
     if (zoom !== null) {
       globalZoomMult.value = zoom
-      viewerCanvas.value?.renderAll?.()
+      viewerCanvas.value?.repaint?.()
     }
   } catch (error: any) { // TODO(ts-phase4)
     // A bundle that cannot be surveyed still renders at the default scale.
