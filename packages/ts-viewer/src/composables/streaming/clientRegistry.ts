@@ -16,7 +16,25 @@ import { loadReader } from './loadReader'
  */
 const registry = new Map<string, StreamingClientEntry>()
 
+/**
+ * Compressed bytes the viewer holds across every client, in total.
+ *
+ * One viewer keeps all of it. A second viewer halves it, and so on, so the number of
+ * viewers on a page does not multiply what the tab holds.
+ */
+const CACHE_BYTES_BUDGET = 256 * 1024 * 1024
+
 let nextGeneration = 1
+
+/**
+ * The budget share a client created now would take.
+ *
+ * A cap is fixed at construction, so a client already in the registry keeps the larger
+ * share it was built with, and the total runs over the budget until it is disposed.
+ */
+function newClientCacheBytes(): number {
+    return Math.floor(CACHE_BYTES_BUDGET / (registry.size + 1))
+}
 
 export interface StreamingClientEntry {
     /** Viewer store id that owns this entry. */
@@ -92,10 +110,17 @@ export async function acquireClient(
         storeId,
         url: base,
         onUrlExpired: options.onUrlExpired ?? null,
-        // A filter or a montage forces raw samples, so the reader's byte cap is spent
-        // over one page span. The cap rises with the span set in paging.ts, which keeps
-        // the widest filtered or montaged window that renders where it was before.
-        client: new StreamingClient({ store, maxRawBytes: 60_000_000 }),
+        client: new StreamingClient({
+            store,
+            // A filter or a montage forces raw samples, so the reader's byte cap is spent
+            // over one page span. The cap rises with the span set in paging.ts, which keeps
+            // the widest filtered or montaged window that renders where it was before.
+            maxRawBytes: 60_000_000,
+            // The cache holds compressed chunk bytes. The scrubber reads availability for
+            // the whole recording through this same client, and at the reader's 64 MB
+            // default those reads evict the pages the viewport is drawing.
+            maxCacheBytes: newClientCacheBytes(),
+        }),
         generation: nextGeneration++,
         filterRegistry: new Map(),
         inflight: new Set(),
