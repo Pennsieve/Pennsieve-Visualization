@@ -365,6 +365,88 @@ describe('TSViewer mounted against a recorded transport', () => {
         expect(pageRequestsFor(TS_START).length).toBeGreaterThan(before)
     })
 
+    it('sends no page request until the duration stops changing', async () => {
+        await mountViewer('dom-test-settle-requests')
+        await initializeChannels()
+        clearPendingPages()
+
+        const canvas = wrapper!.findComponent(TSViewerCanvas)
+        const before = pageRequestsFor(TS_START).length
+
+        let duration = canvas.props('duration') as number
+        for (let tick = 0; tick < 5; tick++) {
+            duration = duration / 1.1
+            canvas.vm.$emit('setDuration', duration)
+            await flushPromises()
+        }
+
+        expect(pageRequestsFor(TS_START).length).toBe(before)
+
+        await vi.waitFor(() => {
+            expect(pageRequestsFor(TS_START).length).toBeGreaterThan(before)
+        }, { timeout: 3000 })
+    })
+
+    it('requests the viewport again once the resolution settles', async () => {
+        await mountViewer('dom-test-settle-refetch')
+        await initializeChannels()
+
+        const wireRequest = pageRequestsFor(TS_START)[0]
+        const req: PageRequestWindow = {
+            startTime: wireRequest.startTime as number,
+            endTime: wireRequest.endTime as number,
+            pixelWidth: wireRequest.pixelWidth as number
+        }
+        harness.segmentHandlers.forEach((handler) => {
+            handler(makeSegmentEnvelope('ch-1', 'CH1', req))
+            handler(makeSegmentEnvelope('ch-2', 'CH2', req))
+        })
+        await flushPromises()
+
+        const canvas = wrapper!.findComponent(TSViewerCanvas)
+        const before = pageRequestsFor(TS_START).length
+
+        // The mounted canvas has no width, so the sample period the viewport implies
+        // always falls back to 1. Writing the period TSViewerCanvas owns is what a zoom
+        // does once the canvas is laid out.
+        ;(canvas.vm as unknown as { rsPeriod: number }).rsPeriod = 2000
+        await flushPromises()
+
+        // The request walk reads no resolution off a cached block, so the page it covers
+        // is asked for again only after the settle drops it.
+        await vi.waitFor(() => {
+            expect(pageRequestsFor(TS_START).length).toBeGreaterThan(before)
+        }, { timeout: 3000 })
+    })
+
+    it('keeps drawing the cached blocks while the duration changes', async () => {
+        await mountViewer('dom-test-settle-paint')
+        await initializeChannels()
+
+        const wireRequest = pageRequestsFor(TS_START)[0]
+        const req: PageRequestWindow = {
+            startTime: wireRequest.startTime as number,
+            endTime: wireRequest.endTime as number,
+            pixelWidth: wireRequest.pixelWidth as number
+        }
+        harness.segmentHandlers.forEach((handler) => {
+            handler(makeSegmentEnvelope('ch-1', 'CH1', req))
+            handler(makeSegmentEnvelope('ch-2', 'CH2', req))
+        })
+
+        const canvasElement = plotCanvasElement()
+        await vi.waitFor(() => {
+            expect(drawCallCount(canvasElement)).toBeGreaterThan(0)
+        }, { timeout: 3000 })
+
+        const baseline = drawCallCount(canvasElement)
+        const canvas = wrapper!.findComponent(TSViewerCanvas)
+        canvas.vm.$emit('setDuration', (canvas.props('duration') as number) / 1.1)
+        await settleFrame()
+
+        expect(drawCallCount(canvasElement)).toBeGreaterThan(baseline)
+    })
+
     it('sends the legacy filter wire message for lowpass, highpass, bandpass, bandstop, and clear', async () => {
         await mountViewer('dom-test-filters')
 

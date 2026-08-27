@@ -270,9 +270,10 @@ watch(() => props.start, () => {
 })
 
 watch(() => props.duration, () => {
-  plotCanvas.value?.invalidate()
   updateRsPeriod(props.cWidth, props.duration)
-  renderAll()
+  // The cached blocks stretch to the new window while the gesture runs. TSPlotCanvas
+  // plans the pages it needs once the gesture stops.
+  repaint()
 })
 
 watch(() => props.globalZoomMult, () => {
