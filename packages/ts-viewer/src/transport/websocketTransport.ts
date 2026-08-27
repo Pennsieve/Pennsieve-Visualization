@@ -695,8 +695,11 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
         let end = start + chunkSpan
 
         for (let ix = 0; ; ix++) {
+            // Between chunks as well as inside the fetch, so an abort stops the walk
+            // rather than only the request it is waiting on.
+            query.signal?.throwIfAborted()
             const url = `${timeSeriesApi}/ts/retrieve/segments?session=${token}&channel=${channel}&start=${start}&end=${end}`
-            const response = await fetchImpl(url)
+            const response = await fetchImpl(url, { signal: query.signal })
             if (!response.ok) {
                 throw new Error(`segment span request failed with HTTP status ${response.status}`)
             }

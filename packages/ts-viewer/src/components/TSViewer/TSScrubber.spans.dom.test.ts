@@ -97,6 +97,20 @@ function makeSpanRecorder(spansFor: (query: DataSpanQuery) => Array<[number, num
     return { queries, transport }
 }
 
+/** Records the signal of each dataSpans query and leaves the query pending. */
+function makePendingSpanRecorder() {
+    const signals: AbortSignal[] = []
+    const base = makeSpanRecorder(() => [])
+    const transport: TimeseriesTransport = {
+        ...base.transport,
+        dataSpans: (query: DataSpanQuery) => {
+            signals.push(query.signal!)
+            return new Promise<Array<[number, number]>>(() => {})
+        }
+    }
+    return { signals, transport }
+}
+
 /** Records the queries a transport is asked, and forwards each to it. */
 function recordQueries(transport: TimeseriesTransport) {
     const queries: DataSpanQuery[] = []
@@ -183,6 +197,7 @@ interface MountedScrubber {
     wrapper: VueWrapper
     store: ViewerStore
     internals: ScrubberInternals
+    transportRef: { value: TimeseriesTransport | null }
 }
 
 describe('TSScrubber availability spans', () => {
@@ -243,7 +258,8 @@ describe('TSScrubber availability spans', () => {
         mounted = {
             wrapper,
             store,
-            internals: wrapper.vm as unknown as ScrubberInternals
+            internals: wrapper.vm as unknown as ScrubberInternals,
+            transportRef
         }
         return mounted
     }
@@ -280,8 +296,8 @@ describe('TSScrubber availability spans', () => {
 
         // gapThresholdUs is one bitmap cell: (6000000 - 1000000) / 5000.
         expect(recorder.queries).toEqual([
-            { channel: 'ch-1', startUs: TS_START, endUs: TS_END, gapThresholdUs: CELL_US },
-            { channel: 'unit-1', startUs: TS_START, endUs: TS_END, gapThresholdUs: CELL_US }
+            { channel: 'ch-1', startUs: TS_START, endUs: TS_END, gapThresholdUs: CELL_US, signal: expect.any(AbortSignal) },
+            { channel: 'unit-1', startUs: TS_START, endUs: TS_END, gapThresholdUs: CELL_US, signal: expect.any(AbortSignal) }
         ])
 
         // Cells 500..999 and 2000..4999 carry data. The span walk stops one cell
@@ -326,7 +342,7 @@ describe('TSScrubber availability spans', () => {
         await flushPromises()
 
         expect(spans.queries).toEqual([
-            { channel: 'ch-1', startUs: TS_START, endUs: TS_END, gapThresholdUs: CELL_US }
+            { channel: 'ch-1', startUs: TS_START, endUs: TS_END, gapThresholdUs: CELL_US, signal: expect.any(AbortSignal) }
         ])
         expect(recorder.urls).toEqual([
             `${TIME_SERIES_API}/ts/retrieve/segments?session=test-token&channel=ch-1&start=1000000&end=6000000`
@@ -386,7 +402,7 @@ describe('TSScrubber availability spans', () => {
         // One query for the whole recording, and the transport's own walk turns it
         // into the same three chunks the component used to request one at a time.
         expect(spans.queries).toEqual([
-            { channel: 'ch-1', startUs: tsStart, endUs: tsEnd, gapThresholdUs: cell }
+            { channel: 'ch-1', startUs: tsStart, endUs: tsEnd, gapThresholdUs: cell, signal: expect.any(AbortSignal) }
         ])
         // Three one-week chunks. The last one runs past the recording end.
         expect(recorder.urls).toEqual([
@@ -448,4 +464,82 @@ describe('TSScrubber availability spans', () => {
         expect(warn).toHaveBeenCalled()
         warn.mockRestore()
     })
+    it('cancels the scan in flight when the channel set changes', async () => {
+        const recorder = makePendingSpanRecorder()
+        const scrubber = await mountScrubber({
+            instanceId: 'scrubber-spans-abort-channels',
+            assetType: 'timeseries-zarr',
+            channelIds: ['ch-1'],
+            transport: recorder.transport
+        })
+
+        scrubber.internals.initSegmentSpans()
+        await vi.waitFor(() => {
+            expect(recorder.signals).toHaveLength(1)
+        })
+        expect(recorder.signals[0].aborted).toBe(false)
+
+        scrubber.store.setChannels(makeChannels(['ch-9', 'ch-10']))
+        await flushPromises()
+
+        expect(recorder.signals[0].aborted).toBe(true)
+    })
+
+    it('cancels the scan in flight when the transport is replaced', async () => {
+        const recorder = makePendingSpanRecorder()
+        const scrubber = await mountScrubber({
+            instanceId: 'scrubber-spans-abort-transport',
+            assetType: 'timeseries-zarr',
+            channelIds: ['ch-1'],
+            transport: recorder.transport
+        })
+
+        scrubber.internals.initSegmentSpans()
+        await vi.waitFor(() => {
+            expect(recorder.signals).toHaveLength(1)
+        })
+
+        scrubber.transportRef.value = makePendingSpanRecorder().transport
+        await flushPromises()
+
+        expect(recorder.signals[0].aborted).toBe(true)
+    })
+
+    it('cancels the scan in flight on unmount', async () => {
+        const recorder = makePendingSpanRecorder()
+        const scrubber = await mountScrubber({
+            instanceId: 'scrubber-spans-abort-unmount',
+            assetType: 'timeseries-zarr',
+            channelIds: ['ch-1'],
+            transport: recorder.transport
+        })
+
+        scrubber.internals.initSegmentSpans()
+        await vi.waitFor(() => {
+            expect(recorder.signals).toHaveLength(1)
+        })
+
+        scrubber.wrapper.unmount()
+        mounted = null
+
+        expect(recorder.signals[0].aborted).toBe(true)
+    })
+
+    it('gives every channel of one scan the same signal', async () => {
+        const recorder = makePendingSpanRecorder()
+        const scrubber = await mountScrubber({
+            instanceId: 'scrubber-spans-one-signal',
+            assetType: 'timeseries-zarr',
+            channelIds: ['ch-1', 'ch-2', 'ch-3'],
+            transport: recorder.transport
+        })
+
+        scrubber.internals.initSegmentSpans()
+        await vi.waitFor(() => {
+            expect(recorder.signals).toHaveLength(3)
+        })
+
+        expect(new Set(recorder.signals).size).toBe(1)
+    })
+
 })
