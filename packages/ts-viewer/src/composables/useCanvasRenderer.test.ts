@@ -60,10 +60,13 @@ const minMaxPage = (startUs: number, binCount: number, periodUs: number) => buil
 )
 
 // Geometry: 4000 us bins at 4000 us/px put bins 1px apart, page A at x 0..99
-// and an adjacent page B at x 100..199. rowBaseline lands at 50 and zero-valued
-// min/max bins collapse to y 50, y2 51.
+// and an adjacent page B at x 100..199. One visible channel centers its row at
+// half the viewport's pHeight, and zero-valued min/max bins collapse to y BASELINE,
+// y2 BASELINE + 1.
 const PERIOD = 4000
 const BINS = 100
+const P_HEIGHT = 80
+const BASELINE = P_HEIGHT / 2
 
 const renderBlocks = (blocks: ContinuousSegmentBlock[], { sampleRateHz = 1000 }: { sampleRateHz?: number } = {}) => {
     const { plotCanvasRef, blurCanvasRef, renderData } = useCanvasRenderer()
@@ -94,7 +97,7 @@ const renderBlocks = (blocks: ContinuousSegmentBlock[], { sampleRateHz = 1000 }:
         duration: 900000,
         cWidth: 225,
         cHeight: 100,
-        pHeight: 80,
+        pHeight: P_HEIGHT,
         rsPeriod: PERIOD,
         nrVisibleChannels: 1
     }
@@ -123,21 +126,21 @@ describe('renderData min/max blocks', () => {
         const stroke = drawn.find((p) => p.end === 'stroke')!
 
         // The second block's polygon starts at the first block's last point, not its own.
-        expect(subPathStarts(fill)).toEqual([[0, 50], [99, 50]])
-        expect(fill.ops).toContainEqual({ op: 'lineTo', args: [99, 51] })
+        expect(subPathStarts(fill)).toEqual([[0, BASELINE], [99, BASELINE]])
+        expect(fill.ops).toContainEqual({ op: 'lineTo', args: [99, BASELINE + 1] })
 
         // The trace crosses the page boundary inside one sub-path.
-        expect(subPathStarts(stroke)).toEqual([[0, 50]])
+        expect(subPathStarts(stroke)).toEqual([[0, BASELINE]])
         const seam = stroke.ops.findIndex((o) => o.args[0] === 99)
-        expect(stroke.ops[seam]).toEqual({ op: 'lineTo', args: [99, 50] })
-        expect(stroke.ops[seam + 1]).toEqual({ op: 'lineTo', args: [100, 50] })
+        expect(stroke.ops[seam]).toEqual({ op: 'lineTo', args: [99, BASELINE] })
+        expect(stroke.ops[seam + 1]).toEqual({ op: 'lineTo', args: [100, BASELINE] })
     })
 
     it('includes the last bin in the fill bottom edge', () => {
         const drawn = renderBlocks([minMaxPage(0, BINS, PERIOD)])
         const fill = drawn.find((p) => p.end === 'fill')!
-        expect(fill.ops[BINS]).toEqual({ op: 'lineTo', args: [99, 50] })
-        expect(fill.ops[BINS + 1]).toEqual({ op: 'lineTo', args: [99, 51] })
+        expect(fill.ops[BINS]).toEqual({ op: 'lineTo', args: [99, BASELINE] })
+        expect(fill.ops[BINS + 1]).toEqual({ op: 'lineTo', args: [99, BASELINE + 1] })
     })
 
     it('keeps blocks separated by a data gap apart', () => {
@@ -148,8 +151,8 @@ describe('renderData min/max blocks', () => {
         const fill = drawn.find((p) => p.end === 'fill')!
         const stroke = drawn.find((p) => p.end === 'stroke')!
 
-        expect(subPathStarts(fill)).toEqual([[0, 50], [103, 50]])
-        expect(subPathStarts(stroke)).toEqual([[0, 50], [103, 50]])
+        expect(subPathStarts(fill)).toEqual([[0, BASELINE], [103, BASELINE]])
+        expect(subPathStarts(stroke)).toEqual([[0, BASELINE], [103, BASELINE]])
 
         // The second block's polygon reaches back to nothing on the far side of the gap.
         const second = fill.ops.slice(fill.ops.findIndex((o, i) => o.op === 'moveTo' && i > 0))
@@ -169,8 +172,37 @@ describe('renderData min/max blocks', () => {
         expect(strokes).toHaveLength(2)
 
         const trace = strokes[1]
-        expect(subPathStarts(trace)).toEqual([[0, 50]])
+        expect(subPathStarts(trace)).toEqual([[0, BASELINE]])
         const seam = trace.ops.findIndex((o) => o.args[0] === 99)
-        expect(trace.ops[seam + 1]).toEqual({ op: 'lineTo', args: [100, 50] })
+        expect(trace.ops[seam + 1]).toEqual({ op: 'lineTo', args: [100, BASELINE] })
+    })
+})
+
+describe('computeChannelViews', () => {
+    const channel = (id: string, rank: number, visible = true) => ({
+        id,
+        type: 'CONTINUOUS',
+        visible,
+        rank,
+        rowScale: 1,
+        rowBaseline: null as number | null,
+        sf: 250,
+        selected: false,
+        hover: false,
+        dataSegments: []
+    })
+
+    it('centers the rows in the height the canvas is drawn into', () => {
+        const { computeChannelViews } = useCanvasRenderer()
+        const channels = [channel('a', 0), channel('b', 1), channel('c', 2)]
+        computeChannelViews(channels, 90, 3)
+        expect(channels.map((c) => c.rowBaseline)).toEqual([15, 45, 75])
+    })
+
+    it('spaces the visible rows by the visible count, not the row count', () => {
+        const { computeChannelViews } = useCanvasRenderer()
+        const channels = [channel('a', 0), channel('b', 1, false), channel('c', 2)]
+        computeChannelViews(channels, 80, 2)
+        expect(channels.map((c) => c.rowBaseline)).toEqual([20, null, 60])
     })
 })

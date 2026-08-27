@@ -315,9 +315,7 @@ export const useCanvasRenderer = () => {
         })
         const rankedIds = mapped.map(function(el) { return el.index })
 
-        // Need to add 20px to pHeight as pHeight is calculated as => const pHeight = computed(() => props.cHeight - 20)
-        // and spacing of labels is based on cHeight
-        const interChannelDist = (pHeight + 20) / nrVisibleChannels
+        const interChannelDist = pHeight / nrVisibleChannels
 
         let curIdx = 0
         for (let i = 0; i < rankedIds.length; i++) {

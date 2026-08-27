@@ -117,7 +117,10 @@ const {
   computeChannelViews
 } = useCanvasRenderer()
 
-// Define pixelRatio directly in main component to avoid dependency issues
+// One device pixel per CSS pixel, against the real ratio that TSViewerCanvas.vue and
+// TSScrubber.vue read. The plot canvas rasterizes a polyline per channel, so the real
+// ratio on a 2x display quadruples the pixels every fill and stroke covers, which costs
+// more than the sharpness returns here.
 const pixelRatio = ref(1)
 
 const isDumpingBuffer = ref(false)
@@ -134,6 +137,7 @@ const {
   autoScaleViewData,
   segmIndexOf,
   updateCurrentRequestedSamplePeriod,
+  updateCacheWindow,
   currentRequestedSamplePeriod,
   isDataCurrentForViewport,
   isSwitchingMontage
@@ -174,9 +178,13 @@ const lastRequestDuration = ref<number | null>(null)
 const staleDataCounter = ref(0)
 
 // Computed properties (from original) - moved after composable initialization
-const canvasWidth = computed(() => pixelRatio.value * props.cWidth)
-const canvasHeight = computed(() => cpCanvasScaler(props.cHeight, pixelRatio.value, 0))
 const pHeight = computed(() => props.cHeight - 20)
+
+// The backing store matches the CSS box the canvas is drawn into. A backing height of
+// cHeight against a CSS height of pHeight makes the compositor rescale every frame by a
+// fraction, and row geometry then has to carry the difference.
+const canvasWidth = computed(() => cpCanvasScaler(props.cWidth, pixelRatio.value, 0))
+const canvasHeight = computed(() => cpCanvasScaler(pHeight.value, pixelRatio.value, 0))
 
 const canvasStyle = computed(() => ({
   width: props.cWidth + 'px',
@@ -386,6 +394,10 @@ const planRequests = async () => {
   const pageSize = currentPageSize()
   const prefetchPages = currentPrefetchPages()
   const requestConstants = { ...props.constants, PREFETCHPAGES: prefetchPages }
+
+  // Before the walk, so a page the walk is about to read as cached is one the window
+  // still covers.
+  updateCacheWindow(props.start, props.duration, pageSize, prefetchPages)
 
   const buildRequests = () => generatePoints(
     showChannels,
@@ -714,7 +726,6 @@ watch(transport, (activeTransport, previous) => {
 
 // Lifecycle (from original mounted/unmounted logic)
 onMounted(async () => {
-  pixelRatio.value = 1
   initializeCanvases(pixelRatio.value)
 
   initPlotCanvas()
