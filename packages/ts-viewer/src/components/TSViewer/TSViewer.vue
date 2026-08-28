@@ -64,6 +64,7 @@
       :max-duration="maxDuration"
       :duration="duration"
       :start="start"
+      :ts-end="ts_end"
       v-model:globalZoomMult="globalZoomMult"
       @pageBack="onPageBack"
       @pageForward="onPageForward"

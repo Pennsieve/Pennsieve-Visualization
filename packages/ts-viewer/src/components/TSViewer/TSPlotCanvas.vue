@@ -425,13 +425,17 @@ const planRequests = async () => {
     dumpReason = `rsPeriod changed: ${lastRequestedSamplePeriod.value} -> ${currentRequestedSamplePeriod} (resolution change)`
   }
 
-  // Check for large time jump
+  // Check for a jump past every page the walk would ask for. The threshold is the
+  // range the walk covers, which is what `updateCacheWindow` keeps. A shorter jump
+  // leaves pending pages the new viewport still wants, and a dump cancels the reads
+  // that would answer them.
   if (lastRequestStart.value !== null) {
     const timeJump = Math.abs(props.start - lastRequestStart.value)
     const windowSize = Math.max(props.duration, lastRequestDuration.value || props.duration)
-    if (timeJump > windowSize * 2) {
+    const requestHorizon = windowSize + prefetchPages * pageSize
+    if (timeJump > requestHorizon) {
       shouldDumpBuffer = true
-      dumpReason = `Large time jump: ${timeJump} > ${windowSize * 2} (${(timeJump / windowSize).toFixed(1)}x window)`
+      dumpReason = `Large time jump: ${timeJump} > ${requestHorizon} (request horizon)`
     }
   }
 
@@ -453,6 +457,15 @@ const planRequests = async () => {
   // Only one dump at a time
   if (shouldDumpBuffer && !isDumpingBuffer.value) {
     isDumpingBuffer.value = true
+
+    // A dump cancels every read in flight, so a pass that dumps repeatedly cannot
+    // finish a page on a slow link. Nothing else reports the rate or the cause.
+    console.warn('Dumping the request buffer:', {
+      reason: dumpReason,
+      start: props.start,
+      duration: props.duration,
+      pageSize
+    })
 
     try {
       if (activeTransport && activeTransport.dumpBuffer()) {
