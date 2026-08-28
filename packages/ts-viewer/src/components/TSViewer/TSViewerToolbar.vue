@@ -60,6 +60,7 @@
         content="Automatic Forward">
         <button
           class="btn-icon"
+          name="playback-toggle"
           @click="togglePlayback()">
           <component :is="iconPlay" :height="12"
                      :width="18"/>
@@ -126,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import IconPreviousPage from "../icons/IconPreviousPage.vue"
 import IconNextAnnotationLeftFacing from "../icons/IconNextAnnotationLeftFacing.vue"
 import IconNextAnnotationRightFacing from "@/components/icons/IconNextAnnotationRightFacing.vue"
@@ -135,6 +136,7 @@ import IconStopwatch from "../icons/IconStopwatch.vue"
 import IconControllerPlay from "@/components/icons/IconControllerPlay.vue"
 import IconControllerPause from "@/components/icons/IconControllerPause.vue"
 import { durationStepFor, durationPrecisionFor } from '@/utils/durationStep'
+import { playbackPeriodFor, playbackStepFor } from '@/utils/playbackStep'
 
 // Props
 const props = defineProps<{
@@ -142,6 +144,7 @@ const props = defineProps<{
   duration: number
   start: number
   globalZoomMult: number
+  tsEnd: number | null
 }>()
 
 const zoomMult = computed({
@@ -173,8 +176,6 @@ const showPlaybackSpeed = ref(true)
 const isPlaying = ref(false)
 const selectedPlaySpeed = ref<number | null>(null)
 const intervalTimer = ref<ReturnType<typeof setTimeout> | null>(null)
-const intervalPeriod = ref(150)
-const intervalPage = ref(1000000)
 
 const playSpeedOptions = [
   {
@@ -268,24 +269,48 @@ const previousAnnotation = () => {
   emit('previousAnnotation')
 }
 
+/** Last start the viewport can hold without running past the end of the recording. */
+const lastStart = computed(() => {
+  if (props.tsEnd === null || !Number.isFinite(props.tsEnd)) {
+    return null
+  }
+  return Math.max(0, props.tsEnd - props.duration)
+})
+
 const startPlay = () => {
   isPlaying.value = true
-  const intervalTimerFnc = () => {
-    emit('setStart', props.start + (intervalPage.value * selectedPlaySpeed.value!))
-    intervalTimer.value = setTimeout(intervalTimerFnc, intervalPeriod.value)
+  const tick = () => {
+    const next = props.start + playbackStepFor(props.duration)
+    const limit = lastStart.value
+    if (limit !== null && next >= limit) {
+      emit('setStart', limit)
+      stopPlay()
+      return
+    }
+    emit('setStart', next)
+    // Read per tick, so a zoom or a speed change during playback takes effect on the
+    // next one rather than when playback restarts.
+    intervalTimer.value = setTimeout(tick, playbackPeriodFor(selectedPlaySpeed.value))
   }
-  intervalTimer.value = setTimeout(intervalTimerFnc, intervalPeriod.value)
+  intervalTimer.value = setTimeout(tick, playbackPeriodFor(selectedPlaySpeed.value))
 }
 
 const stopPlay = () => {
   isPlaying.value = false
-  intervalPeriod.value = 150
-  clearInterval(intervalTimer.value!)
+  if (intervalTimer.value !== null) {
+    clearTimeout(intervalTimer.value)
+    intervalTimer.value = null
+  }
 }
 
 // Lifecycle
 onMounted(() => {
   selectedPlaySpeed.value = 1
+})
+
+// A timer outliving the toolbar keeps moving the viewport of a viewer that is gone.
+onBeforeUnmount(() => {
+  stopPlay()
 })
 </script>
 
