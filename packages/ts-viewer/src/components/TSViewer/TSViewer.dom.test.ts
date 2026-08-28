@@ -102,6 +102,10 @@ import { buildContinuousSegm } from '@/composables/streaming/segments'
 import type { SegmentEnvelope } from '@/composables/streaming/segments'
 import { contextFor } from '@/test/setup-canvas'
 
+// Past the VIEWPORT_SETTLE_MS window TSPlotCanvas owns, so a settle fires before the
+// assertion that follows it.
+const SETTLE_WAIT_MS = 300
+
 // TS_START sits on a BASE_PAGE_SIZE boundary so the first viewport page starts exactly
 // at the recording start and the page-request snapshot carries round numbers.
 const TS_START = 15_000_000
@@ -417,6 +421,76 @@ describe('TSViewer mounted against a recorded transport', () => {
         await vi.waitFor(() => {
             expect(pageRequestsFor(TS_START).length).toBeGreaterThan(before)
         }, { timeout: 3000 })
+    })
+
+    /**
+     * Narrows the window to one second and lets the zoom settle close, so a start jump
+     * measured after it is measured against a window smaller than the recording.
+     *
+     * The mounted canvas has no width under happy-dom, so the sample period holds at its
+     * fallback of 1 and the narrowing triggers no resolution dump of its own.
+     */
+    async function narrowWindowTo(durationUs: number): Promise<void> {
+        const canvas = wrapper!.findComponent(TSViewerCanvas)
+        canvas.vm.$emit('setDuration', durationUs)
+        await settleFrame()
+        await new Promise<void>((resolve) => setTimeout(resolve, SETTLE_WAIT_MS))
+        await settleFrame()
+        clearPendingPages()
+        harness.dumpBufferRequests = 0
+    }
+
+    it('keeps the reads in flight when the start moves inside the request horizon', async () => {
+        await mountViewer('dom-test-jump-inside-horizon')
+        await initializeChannels()
+        await narrowWindowTo(1_000_000)
+
+        // Three windows on, and the horizon is one window plus five 15 second pages.
+        // Playback steps a fixed second, so this is the jump it makes at every span
+        // under half a second.
+        wrapper!.findComponent(TSViewerCanvas).vm.$emit('setStart', TS_START + 3_000_000)
+        await settleFrame()
+
+        expect(harness.dumpBufferRequests).toBe(0)
+    })
+
+    it('dumps the reads in flight when the start moves past the request horizon', async () => {
+        await mountViewer('dom-test-jump-past-horizon')
+        await initializeChannels()
+        await narrowWindowTo(1_000_000)
+
+        wrapper!.findComponent(TSViewerCanvas).vm.$emit('setStart', TS_START + 200_000_000)
+        await settleFrame()
+
+        expect(harness.dumpBufferRequests).toBeGreaterThan(0)
+    })
+
+    it('reports the reason to the console when it dumps the request buffer', async () => {
+        await mountViewer('dom-test-dump-reason')
+        await initializeChannels()
+
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        // A later test in this file counts console.warn calls, so the spy is restored
+        // even when an assertion below throws.
+        let calls: unknown[][] = []
+        try {
+            // A resolution change is the cheapest dump to drive here. The canvas has no
+            // width under happy-dom, so writing the period is what a zoom does.
+            const canvas = wrapper!.findComponent(TSViewerCanvas)
+            ;(canvas.vm as unknown as { rsPeriod: number }).rsPeriod = 2000
+
+            await vi.waitFor(() => {
+                expect(harness.dumpBufferRequests).toBeGreaterThan(0)
+            }, { timeout: 3000 })
+        } finally {
+            calls = warn.mock.calls.slice()
+            warn.mockRestore()
+        }
+
+        const dumpLog = calls.find(([message]) => message === 'Dumping the request buffer:')
+        expect(dumpLog).toBeDefined()
+        expect(dumpLog![1]).toMatchObject({ reason: expect.stringContaining('rsPeriod changed') })
     })
 
     it('keeps drawing the cached blocks while the duration changes', async () => {
