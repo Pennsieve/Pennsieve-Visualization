@@ -454,6 +454,15 @@ const planRequests = async () => {
   if (shouldDumpBuffer && !isDumpingBuffer.value) {
     isDumpingBuffer.value = true
 
+    // A dump cancels every read in flight, so a pass that dumps repeatedly cannot
+    // finish a page on a slow link. Nothing else reports the rate or the cause.
+    console.warn('Dumping the request buffer:', {
+      reason: dumpReason,
+      start: props.start,
+      duration: props.duration,
+      pageSize
+    })
+
     try {
       if (activeTransport && activeTransport.dumpBuffer()) {
         // Clear client state after successful dump
