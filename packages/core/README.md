@@ -20,7 +20,6 @@ The following peer dependencies must be installed by the host application:
 | `plotly.js` | ^2.35.0 | Optional (for AiPlotly) |
 | `@aws-amplify/auth` | ^6.0.0 | Optional (for authenticated data fetching) |
 | `@pennsieve-viz/micro-ct` | ^1.0.0 | Optional (for OmeViewer, TiffViewer) |
-| `@pennsieve-viz/tsviewer` | ^1.0.0 | Optional (for TSViewer) |
 
 ## DuckDB Setup
 
@@ -100,7 +99,6 @@ Lazy-loaded variants are also available: `DataExplorerLazy`, `UMAPLazy`, `Markdo
 
 | Component | Import | Requires |
 |-----------|--------|----------|
-| `TSViewer` | `import { TSViewer } from '@pennsieve-viz/core'` | `@pennsieve-viz/tsviewer` |
 | `OmeViewer` | `import { OmeViewer } from '@pennsieve-viz/core'` | `@pennsieve-viz/micro-ct` |
 | `TiffViewer` | `import { TiffViewer } from '@pennsieve-viz/core'` | `@pennsieve-viz/micro-ct` |
 
