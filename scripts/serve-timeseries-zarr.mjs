@@ -5,9 +5,14 @@
  *   node scripts/serve-timeseries-zarr.mjs [rootDir] [port]
  *   node scripts/serve-timeseries-zarr.mjs 9095
  *   node scripts/serve-timeseries-zarr.mjs ../../timeseries-zarr-py/data/output/large_test.zarr 9095
+ *   TS_ZARR_ROOT=/path/to/bundle.zarr pnpm dev
  *
- * Defaults: rootDir = test-data/sample-timeseries.zarr (relative to this repo), port = 9091.
- * A lone numeric argument is read as the port, so either argument may be given alone.
+ * Defaults: rootDir = TS_ZARR_ROOT from the environment when set, otherwise
+ * test-data/sample-timeseries.zarr (relative to this repo); port = 9091. A lone numeric
+ * argument is read as the port, so either argument may be given alone. The environment
+ * variable exists for `pnpm dev`, which starts this server with no arguments: it points
+ * the playground at any bundle without editing a script or regenerating the fixture,
+ * which the unit tests read.
  *
  * Sharded (ZEP2) bundles cannot be read at all without HTTP Range: zarrita reads a shard's
  * index from the END of the object with `Range: bytes=-<n>` and only then reads the inner
@@ -53,10 +58,11 @@ const CORS_HEADERS = {
 
 /**
  * Reads `[rootDir] [port]` off argv, in either order for a single argument.
- * Returns an absolute root; a relative rootDir resolves against the process cwd.
+ * Returns an absolute root; a relative rootDir resolves against the process cwd. An
+ * argument outranks `TS_ZARR_ROOT`, which outranks the fixture.
  */
-function parseArgs(argv) {
-    let root = DEFAULT_ROOT
+function parseArgs(argv, env = process.env) {
+    let root = env.TS_ZARR_ROOT ? resolve(env.TS_ZARR_ROOT) : DEFAULT_ROOT
     let port = DEFAULT_PORT
     for (const arg of argv) {
         if (/^\d+$/.test(arg)) {
