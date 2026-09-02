@@ -16,6 +16,14 @@ export const FETCH_STORE_OPTIONS = { useSuffixRequest: true }
 const REFRESH_MARGIN_MS = 5 * 60 * 1000
 
 /**
+ * A 403 this soon after a renewal carried a signature minted moments ago, so the object
+ * itself was refused: a key that does not exist, or a path outside the policy. Renewing
+ * again cannot change that answer, and every such 403 would otherwise cost the host one
+ * renewal call.
+ */
+export const RENEWAL_COOLDOWN_MS = 30 * 1000
+
+/**
  * Removes one trailing slash. Reader store keys always begin with `/`, so a base URL that
  * keeps its own trailing slash produces a double slash and a 404 on some origins.
  */
@@ -137,6 +145,7 @@ export async function createStoreForUrl(url: string, options: CreateStoreOptions
     // key even after a renewal moves the base.
     const initialBase = base
     let expiresAtMs = policyExpiryMs(search)
+    let lastRenewalMs = Number.NEGATIVE_INFINITY
     let pending: Promise<void> | null = null
 
     const refresh = () => {
@@ -148,6 +157,7 @@ export async function createStoreForUrl(url: string, options: CreateStoreOptions
                     base = next.base
                     search = next.search
                     expiresAtMs = policyExpiryMs(search)
+                    lastRenewalMs = now()
                     // A renewal that comes back still inside the margin would otherwise make
                     // every subsequent read renew again, forever. Disarm the proactive path
                     // and let the 403 handler be the backstop.
@@ -197,10 +207,14 @@ export async function createStoreForUrl(url: string, options: CreateStoreOptions
             return response
         }
 
-        // CloudFront answers 403 for an expired signature, a rotated key, and a path outside
-        // the policy. Renew once and retry; a second 403 is a real authorization failure.
-        // If a concurrent read already renewed, reuse that result instead of renewing again.
+        // CloudFront answers 403 for an expired signature, a rotated key, a missing object,
+        // and a path outside the policy. Renew once and retry; a second 403 is a real
+        // authorization failure. If a concurrent read already renewed, reuse that result
+        // instead of renewing again.
         if (search === attempted) {
+            if (now() - lastRenewalMs < RENEWAL_COOLDOWN_MS) {
+                return response
+            }
             await refresh()
         }
         return await fetchImpl(new Request(addressOf(request.url), request))

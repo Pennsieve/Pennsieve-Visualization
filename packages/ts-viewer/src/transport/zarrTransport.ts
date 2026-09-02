@@ -22,7 +22,7 @@ import type { CatalogIndex, ChannelDetail } from '@/composables/streaming/channe
 import type { LegacyFilterMessage, SpecValidation } from '@/composables/streaming/filters'
 import type { ParsedRequest, QueryGroup, TraceIdentity } from '@/composables/streaming/translate'
 import type { GapNotice, NeuralSegmentBlock, SegmentBlock } from '@/composables/streaming/segments'
-import type { ChannelInfo, FilterSpec, MontagePair } from '@pennsieve/timeseries-zarr-reader'
+import type { ChannelInfo, QueryOptions } from '@pennsieve/timeseries-zarr-reader'
 import type {
     DataSpanQuery,
     MontageMessage,
@@ -40,9 +40,47 @@ export interface ZarrTransportDeps {
     registryKey: string
     /** Injectable for tests; forwarded to store construction. */
     fetchImpl?: (request: Request) => Promise<Response>
+    /** Injectable clock for tests, epoch milliseconds. Drives the page failure cooldowns. */
+    now?: () => number
+    /** Byte cap on forced-raw reads, forwarded to the client. */
+    maxRawBytes?: number
 }
 
+/** Failed attempts at one page before it is recorded as empty and left alone. */
+export const MAX_PAGE_FAILURES = 5
+/** Cooldown after the first failure of a page, milliseconds. It doubles per failure. */
+export const FIRST_COOLDOWN_MS = 1000
+/** Longest cooldown between attempts at a failing page, milliseconds. */
+export const MAX_COOLDOWN_MS = 30_000
+/**
+ * Single-trace retries that may fail in a row before the rest of a failed group is
+ * presumed to share the fault and is drained without a read.
+ */
+const ISOLATION_FAILURE_LIMIT = 3
+/** A ledger entry that has not failed again for this long is forgotten. */
+const LEDGER_TTL_MS = 10 * 60 * 1000
+
 const isAbort = (error: unknown) => (error as { name?: string } | null)?.name === 'AbortError'
+
+/**
+ * Errors the reader raises before it reads anything. The same request fails the same
+ * way every time, so a retry cannot help and the page is recorded as empty at once.
+ */
+const DETERMINISTIC_ERRORS = new Set(['RawReadTooLargeError', 'RangeError'])
+const isDeterministic = (error: unknown) =>
+    DETERMINISTIC_ERRORS.has((error as { name?: string } | null)?.name ?? '')
+
+/** Ledger group key for a page's unit-channel traces, which run as one query. */
+const UNIT_GROUP_KEY = 'units'
+
+interface PageFailure {
+    /** Failed attempts so far. */
+    failures: number
+    /** Epoch milliseconds before which the page is drained without a read. */
+    notBefore: number
+    /** Epoch milliseconds of the last failure, for pruning. */
+    lastAt: number
+}
 
 /**
  * Maps a reader failure onto the transport error payload. Matched by name
@@ -133,6 +171,40 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
     /** Serializes filtered queries per filter spec, so the reader's stateful filter advances in send order. */
     const filterChains = new Map<string, Promise<void>>()
 
+    const now = deps.now ?? (() => Date.now())
+
+    /**
+     * Failed pages, keyed by window, resolution, raw flag, and query group.
+     *
+     * A failed query is drained with gap notices, which the viewer does not cache, so
+     * the request loop plans the page again on its next pass. Without a record of the
+     * failure that is the same request every 100 ms for as long as the fault lasts.
+     * The ledger drains a failed page without a read until its cooldown passes, and
+     * once it has failed MAX_PAGE_FAILURES times, or failed in a way a retry cannot
+     * change, answers it with cached empty blocks so the loop stops planning it. A
+     * zoom, a pan, or a filter change alters the key and reads the page afresh.
+     */
+    const failureLedger = new Map<string, PageFailure>()
+
+    const ledgerKey = (req: ParsedRequest, groupKey: string) =>
+        `${req.startTime}|${req.endTime}|${req.pixelWidth}|${req.raw ? 'raw' : 'minmax'}|${groupKey}`
+
+    const isExhausted = (failure: PageFailure) => failure.failures >= MAX_PAGE_FAILURES
+
+    const recordFailure = (key: string, deterministic: boolean): PageFailure => {
+        const at = now()
+        for (const [staleKey, stale] of failureLedger) {
+            if (at - stale.lastAt > LEDGER_TTL_MS) {
+                failureLedger.delete(staleKey)
+            }
+        }
+        const failures = deterministic ? MAX_PAGE_FAILURES : (failureLedger.get(key)?.failures ?? 0) + 1
+        const cooldown = Math.min(FIRST_COOLDOWN_MS * 2 ** (failures - 1), MAX_COOLDOWN_MS)
+        const failure: PageFailure = { failures, notBefore: at + cooldown, lastAt: at }
+        failureLedger.set(key, failure)
+        return failure
+    }
+
     /**
      * Emits one segment block. `type` mirrors the legacy envelope: the block's
      * own type when it carries points, `gap` when it does not.
@@ -154,6 +226,28 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
             nrResponses: 1
         })
     }
+
+    /**
+     * Drains traces with one block each. A cached empty span records that the page
+     * was answered; a gap notice only completes the page's counters, and the request
+     * loop may plan the page again.
+     */
+    const drain = (traces: Iterable<TraceIdentity>, req: ParsedRequest, cacheable: boolean) => {
+        for (const identity of traces) {
+            emitSegment(cacheable ? buildGapSegm(identity, req) : buildGapNotice(identity, req), req)
+        }
+    }
+
+    const queryOptions = (group: QueryGroup, req: ParsedRequest, signal: AbortSignal): QueryOptions => ({
+        startUs: req.startTime,
+        endUs: req.endTime,
+        pixelWidthUs: req.pixelWidth,
+        raw: req.raw,
+        priority: req.priority ?? 'viewport',
+        signal,
+        ...(group.isMontage ? { montage: group.montage } : { channels: group.channels }),
+        ...(group.filterSpec ? { filter: group.filterSpec } : {})
+    })
 
     /**
      * Resolves a viewer client channel id to its catalog channel and display
@@ -193,6 +287,10 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
      * per requested trace in request order, and the compound key it puts on a
      * montaged segment is not what the viewer matches on, so identity comes
      * from the request-side table.
+     *
+     * The reader stops at the first trace it cannot read, so a failed group
+     * re-reads its undelivered traces one at a time before recording the
+     * failure against the traces that still cannot be read.
      */
     const runContinuousGroup = async (
         group: QueryGroup,
@@ -202,37 +300,10 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
         activeEntry: StreamingClientEntry
     ) => {
         const delivered = new Set<TraceIdentity>()
-        let completed = false
+        let failure: { error: unknown } | null = null
         try {
-            const options: {
-                startUs: number
-                endUs: number
-                pixelWidthUs: number
-                raw: boolean
-                priority: 'viewport' | 'prefetch'
-                signal: AbortSignal
-                montage?: MontagePair[]
-                channels?: string[]
-                filter?: FilterSpec
-            } = {
-                startUs: req.startTime,
-                endUs: req.endTime,
-                pixelWidthUs: req.pixelWidth,
-                raw: req.raw,
-                priority: req.priority ?? 'viewport',
-                signal
-            }
-            if (group.isMontage) {
-                options.montage = group.montage
-            } else {
-                options.channels = group.channels
-            }
-            if (group.filterSpec) {
-                options.filter = group.filterSpec
-            }
-
             let index = 0
-            for await (const segment of activeEntry.client.query(options)) {
+            for await (const segment of activeEntry.client.query(queryOptions(group, req, signal))) {
                 const identity = group.traces[index]
                 index++
                 if (!identity || gen !== generation || signal.aborted) {
@@ -243,31 +314,103 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
                 // the package sets it and the transport interface has no setter.
                 emitSegment(buildContinuousSegm(segment, identity, req), req)
             }
-            completed = true
         } catch (error) {
             if (isAbort(error) || gen !== generation) {
                 return
             }
-            reportError(describeError(error))
-        } finally {
-            // An aborted group is left undrained: whoever aborted (a dumpBuffer
-            // call or a close) has already cleared the page bookkeeping.
-            if (gen === generation && !signal.aborted) {
-                for (const identity of group.traces) {
-                    if (!delivered.has(identity)) {
-                        // A group that ran out records an empty span, so the page is
-                        // not asked for again. One that stopped early only drains the
-                        // page, because its traces were never read.
-                        emitSegment(
-                            completed
-                                ? buildGapSegm(identity, req)
-                                : buildGapNotice(identity, req),
-                            req
-                        )
-                    }
-                }
+            failure = { error }
+        }
+        // An aborted group is left undrained: whoever aborted (a dumpBuffer
+        // call or a close) has already cleared the page bookkeeping.
+        if (gen !== generation || signal.aborted) {
+            return
+        }
+
+        const undelivered = group.traces.filter((identity) => !delivered.has(identity))
+        if (failure === null) {
+            // A group that ran out records an empty span, so the page is not asked for again.
+            drain(undelivered, req, true)
+            return
+        }
+
+        const deterministic = isDeterministic(failure.error)
+        let remaining = undelivered
+        if (!deterministic && group.traces.length > 1) {
+            remaining = await isolateTraces(group, undelivered, req, signal, gen, activeEntry, delivered)
+            if (gen !== generation || signal.aborted) {
+                return
             }
         }
+        const described = describeError(failure.error)
+        if (remaining.length === 0) {
+            reportError(described)
+            return
+        }
+        const record = recordFailure(ledgerKey(req, group.key), deterministic)
+        if (!isExhausted(record)) {
+            reportError(described)
+            drain(remaining, req, false)
+            return
+        }
+        reportError(
+            deterministic
+                ? described
+                : {
+                      ...described,
+                      error: `${described.error} Gave up on this page after ${record.failures} attempts; zoom or pan to read it again.`
+                  }
+        )
+        drain(remaining, req, true)
+    }
+
+    /**
+     * Re-reads the traces a failed group never delivered, one query per trace,
+     * so one unreadable channel does not take its whole group with it. Stops
+     * reading after ISOLATION_FAILURE_LIMIT failures in a row, since by then
+     * the fault is not one channel's. Returns the traces still undelivered.
+     */
+    const isolateTraces = async (
+        group: QueryGroup,
+        undelivered: TraceIdentity[],
+        req: ParsedRequest,
+        signal: AbortSignal,
+        gen: number,
+        activeEntry: StreamingClientEntry,
+        delivered: Set<TraceIdentity>
+    ): Promise<TraceIdentity[]> => {
+        const remaining: TraceIdentity[] = []
+        let consecutiveFailures = 0
+        for (const identity of undelivered) {
+            if (consecutiveFailures >= ISOLATION_FAILURE_LIMIT) {
+                remaining.push(identity)
+                continue
+            }
+            const position = group.traces.indexOf(identity)
+            const single: QueryGroup = group.isMontage
+                ? { ...group, montage: [group.montage![position]], traces: [identity] }
+                : { ...group, channels: [group.channels![position]], traces: [identity] }
+            try {
+                for await (const segment of activeEntry.client.query(queryOptions(single, req, signal))) {
+                    if (gen !== generation || signal.aborted) {
+                        return remaining
+                    }
+                    delivered.add(identity)
+                    emitSegment(buildContinuousSegm(segment, identity, req), req)
+                }
+                if (!delivered.has(identity)) {
+                    delivered.add(identity)
+                    drain([identity], req, true)
+                }
+                consecutiveFailures = 0
+            } catch (error) {
+                if (isAbort(error) || gen !== generation) {
+                    return remaining
+                }
+                remaining.push(identity)
+                consecutiveFailures++
+            }
+        }
+        return remaining
     }
 
     const runUnitGroup = async (
@@ -306,19 +449,11 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
                 return
             }
             reportError(describeError(error))
-        } finally {
-            if (gen === generation && !signal.aborted) {
-                for (const identity of traces) {
-                    if (!delivered.has(identity)) {
-                        emitSegment(
-                            completed
-                                ? buildGapSegm(identity, req)
-                                : buildGapNotice(identity, req),
-                            req
-                        )
-                    }
-                }
-            }
+            const record = recordFailure(ledgerKey(req, UNIT_GROUP_KEY), isDeterministic(error))
+            completed = isExhausted(record)
+        }
+        if (gen === generation && !signal.aborted) {
+            drain(traces.filter((identity) => !delivered.has(identity)), req, completed)
         }
     }
 
@@ -363,7 +498,28 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
             reportError({ error: `Cannot read channel ${identity.label}: ${reason}` })
         }
 
-        if (groups.length === 0 && unitTraces.length === 0) {
+        // A group the ledger knows is answered from the ledger: cached empty
+        // blocks for an exhausted page, gap notices for one still cooling down.
+        const at = now()
+        const readable: QueryGroup[] = []
+        for (const group of groups) {
+            const failure = failureLedger.get(ledgerKey(req, group.key))
+            if (failure && isExhausted(failure)) {
+                drain(group.traces, req, true)
+            } else if (failure && at < failure.notBefore) {
+                drain(group.traces, req, false)
+            } else {
+                readable.push(group)
+            }
+        }
+        let readableUnits = unitTraces
+        const unitFailure = unitTraces.length > 0 ? failureLedger.get(ledgerKey(req, UNIT_GROUP_KEY)) : undefined
+        if (unitFailure && (isExhausted(unitFailure) || at < unitFailure.notBefore)) {
+            drain(unitTraces, req, isExhausted(unitFailure))
+            readableUnits = []
+        }
+
+        if (readable.length === 0 && readableUnits.length === 0) {
             return
         }
 
@@ -372,7 +528,7 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
         const signal = controller.signal
 
         const pending: Promise<void>[] = []
-        for (const group of groups) {
+        for (const group of readable) {
             const run = () => runContinuousGroup(group, req, signal, gen, activeEntry)
             if (group.filterSpec) {
                 const previous = filterChains.get(group.key) ?? Promise.resolve()
@@ -383,8 +539,8 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
                 pending.push(run())
             }
         }
-        if (unitTraces.length > 0) {
-            pending.push(runUnitGroup(unitTraces, req, signal, gen, activeEntry))
+        if (readableUnits.length > 0) {
+            pending.push(runUnitGroup(readableUnits, req, signal, gen, activeEntry))
         }
 
         try {
@@ -448,7 +604,8 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
 
             const opened = await acquireClient(deps.registryKey, url, {
                 onUrlExpired: opts.onUrlExpired ?? undefined,
-                fetchImpl: deps.fetchImpl
+                fetchImpl: deps.fetchImpl,
+                maxRawBytes: deps.maxRawBytes
             })
             const index = await ensureCatalog(opened)
             if (gen !== generation) {
@@ -487,6 +644,7 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
             entry.filterRegistry.clear()
         }
         filterChains.clear()
+        failureLedger.clear()
         status.value = 'disconnected'
         connectionPromise = null
         entry = null
