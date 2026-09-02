@@ -80,12 +80,23 @@ export interface TransportEvents {
     error: TransportError
 }
 
+/** What one page will carry, for a backend whose page span depends on it. */
+export interface PageTraces {
+    /** Visible traces the page is requested for. */
+    count: number
+    /** Whether each trace is a montage pair, which reads two channels. */
+    montaged: boolean
+}
+
 /** Backend differences the request loop is allowed to know about. */
 export interface TransportCapabilities {
     /** Longest viewable window, microseconds. null: bounded only by the recording. */
     readonly maxDurationUs: number | null
-    /** Page span for a viewport duration, microseconds. */
-    pageSizeFor(durationUs: number): number
+    /**
+     * Page span for a viewport duration, microseconds. A backend that reads raw samples
+     * under a byte cap may narrow the span for the traces the page carries.
+     */
+    pageSizeFor(durationUs: number, traces?: PageTraces): number
     /** Pages to read ahead of the viewport. Counted in whatever span pageSizeFor returns. */
     readonly prefetchPages: number
     /** Wait after dumpBuffer before rebuilding requests, milliseconds. */

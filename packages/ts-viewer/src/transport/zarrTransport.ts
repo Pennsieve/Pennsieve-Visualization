@@ -10,13 +10,13 @@
 // are resolved against the bundle catalog, which carries the same ids, names,
 // and rates as the viewer's channel rows.
 import { ref, readonly } from 'vue'
-import { acquireClient, ensureCatalog, abortInflight } from '@/composables/streaming/clientRegistry'
+import { acquireClient, ensureCatalog, abortInflight, DEFAULT_MAX_RAW_BYTES } from '@/composables/streaming/clientRegistry'
 import { synthesizeMontageDetails } from '@/composables/streaming/channelDetails'
 import { legacyFilterToSpec, validateSpecForRate } from '@/composables/streaming/filters'
 import { partitionRequest, filterKey } from '@/composables/streaming/translate'
 import { buildContinuousSegm, buildGapNotice, buildGapSegm, buildNeuralSegm } from '@/composables/streaming/segments'
 import { measureAmplitudes as surveyAmplitudes } from '@/composables/streaming/autoscale'
-import { adaptivePageSize } from '@/composables/streaming/paging'
+import { adaptivePageSize, rawBudgetPageSize } from '@/composables/streaming/paging'
 import type { StreamingClientEntry } from '@/composables/streaming/clientRegistry'
 import type { CatalogIndex, ChannelDetail } from '@/composables/streaming/channelDetails'
 import type { LegacyFilterMessage, SpecValidation } from '@/composables/streaming/filters'
@@ -27,6 +27,7 @@ import type {
     DataSpanQuery,
     MontageMessage,
     PageRequest,
+    PageTraces,
     TimeseriesTransport,
     TransportCapabilities,
     TransportError,
@@ -748,9 +749,34 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
         return channels.map((id) => amplitudes.get(id) ?? Number.NaN)
     }
 
+    /**
+     * The viewport-sized span, narrowed when the page will read raw samples. A
+     * filter on any channel or a montage forces raw reads, and the reader rejects a
+     * read over its byte cap before fetching anything, so the span has to keep a
+     * page under the cap or every page of a wide filtered view fails.
+     */
+    const pageSizeFor = (durationUs: number, traces?: PageTraces): number => {
+        const span = adaptivePageSize(durationUs)
+        const activeEntry = entry
+        if (!traces || !(traces.count > 0) || !activeEntry || !catalogIndex) {
+            return span
+        }
+        if (!traces.montaged && activeEntry.filterRegistry.size === 0) {
+            return span
+        }
+        let rateHz = 0
+        for (const info of catalogIndex.byId.values()) {
+            if (info.kind === 'continuous' && info.rateHz > rateHz) {
+                rateHz = info.rateHz
+            }
+        }
+        const budget = rawBudgetPageSize(traces.count, rateHz, traces.montaged, deps.maxRawBytes ?? DEFAULT_MAX_RAW_BYTES)
+        return Math.min(span, budget)
+    }
+
     const capabilities: TransportCapabilities = {
         maxDurationUs: null,
-        pageSizeFor: adaptivePageSize,
+        pageSizeFor,
         // A page already spans the viewport, so two of them read a further two windows
         // ahead.
         prefetchPages: 2,
