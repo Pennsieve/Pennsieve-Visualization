@@ -206,3 +206,42 @@ describe('computeChannelViews', () => {
         expect(channels.map((c) => c.rowBaseline)).toEqual([20, null, 60])
     })
 })
+
+describe('paint band', () => {
+    // Bins swinging a million units either way at a scale of 1 would reach a million
+    // pixels past the baseline; the band holds them two rows either side of it.
+    const loudPage = (startUs: number, binCount: number, periodUs: number) => {
+        const data = new Float64Array(binCount * 2)
+        for (let i = 0; i < binCount; i++) {
+            data[2 * i] = -1_000_000
+            data[2 * i + 1] = 1_000_000
+        }
+        return buildContinuousSegm(
+            { startUs, samplePeriodUs: periodUs, isMinMax: true, data } as Segment,
+            identity,
+            { startTime: startUs, endTime: startUs + binCount * periodUs } as PageRequest
+        )
+    }
+
+    const yValues = (drawn: RecordedPath[]) =>
+        drawn.flatMap((path) => path.ops.filter((o) => o.op !== 'closePath').map((o) => o.args[1]))
+
+    it('holds a channel swinging far past its row to two rows either side of its baseline', () => {
+        const drawn = renderBlocks([loudPage(0, BINS, PERIOD)])
+        const ys = yValues(drawn)
+        expect(ys.length).toBeGreaterThan(0)
+        for (const y of ys) {
+            expect(y).toBeGreaterThanOrEqual(BASELINE - 2 * P_HEIGHT)
+            expect(y).toBeLessThanOrEqual(BASELINE + 2 * P_HEIGHT)
+        }
+        expect(Math.min(...ys)).toBe(BASELINE - 2 * P_HEIGHT)
+        expect(Math.max(...ys)).toBe(BASELINE + 2 * P_HEIGHT)
+    })
+
+    it('leaves an ordinary swing untouched', () => {
+        const drawn = renderBlocks([minMaxPage(0, BINS, PERIOD)])
+        const ys = yValues(drawn)
+        expect(Math.min(...ys)).toBeGreaterThanOrEqual(BASELINE)
+        expect(Math.max(...ys)).toBeLessThanOrEqual(BASELINE + 1)
+    })
+})

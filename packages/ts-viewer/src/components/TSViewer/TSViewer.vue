@@ -133,7 +133,7 @@ import { createEmitter, provideViewerEmitter } from '@/events/emitter'
 import type { ViewerEvents } from '@/events/emitter'
 import {
   uvPerMmToZoomMult,
-  zoomMultForAmplitudes
+  rowScalingForAmplitudes
 } from '@/composables/streaming/autoscale'
 import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
 
@@ -452,9 +452,7 @@ const measureVerticalScale = async () => {
   if (!ts_start.value || !ts_end.value || !(rowHeight > 0)) {
     return
   }
-  const channels = visibleChannels.value
-    .filter((channel) => channel.type !== 'UNIT')
-    .map((channel) => channel.serverId || channel.id)
+  const channels = visibleChannels.value.filter((channel) => channel.type !== 'UNIT')
   if (channels.length === 0) {
     return
   }
@@ -464,15 +462,27 @@ const measureVerticalScale = async () => {
   const controller = new AbortController()
   surveyAbort = controller
   try {
+    // The survey is keyed by server id; the result is parallel to the request.
     const amplitudes = await activeTransport.measureAmplitudes(
-      channels,
+      channels.map((channel) => channel.serverId || channel.id),
       ts_start.value,
       ts_end.value,
       controller.signal
     )
-    const zoom = zoomMultForAmplitudes(amplitudes, rowHeight)
-    if (zoom !== null) {
-      globalZoomMult.value = zoom
+    const amplitudeById = new Map<string, number>()
+    const unitById = new Map<string, string>()
+    channels.forEach((channel, index) => {
+      amplitudeById.set(channel.id, amplitudes[index])
+      unitById.set(channel.id, typeof channel.unit === 'string' ? channel.unit : '')
+    })
+    const scaling = rowScalingForAmplitudes(amplitudeById, unitById, rowHeight)
+    if (scaling !== null) {
+      globalZoomMult.value = scaling.zoomMult
+      // Every surveyed row is written, so a row scaled by an earlier survey returns
+      // to the shared scale when it no longer needs its own.
+      for (const channel of channels) {
+        viewerStore.updateChannelProperty(channel.id, 'rowScale', scaling.rowScales.get(channel.id) ?? 1)
+      }
       viewerCanvas.value?.repaint?.()
     }
   } catch (error: any) { // TODO(ts-phase4)
