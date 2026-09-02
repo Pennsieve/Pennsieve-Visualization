@@ -3,7 +3,8 @@ import {
     createStoreForUrl,
     splitSignedUrl,
     stripTrailingSlash,
-    policyExpiryMs
+    policyExpiryMs,
+    RENEWAL_COOLDOWN_MS
 } from './createStore'
 import { TIMESERIES_ZARR, TIMESERIES_WEBSOCKET, isZarrAssetType } from './assetTypes'
 
@@ -151,6 +152,30 @@ describe('createStoreForUrl', () => {
         })
         await expect(store.get('/zarr.json')).rejects.toBeTruthy()
         expect(fetchImpl).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not renew for a 403 that follows a renewal within the cooldown', async () => {
+        let clock = 1_700_000_000_000
+        const onUrlExpired = vi.fn(async () => `${BASE}/?Policy=FRESH`)
+        // The fresh signature reads existing objects and is refused for a missing key,
+        // the way S3 answers 403 rather than 404 for a key the policy does not list.
+        const fetchImpl = vi.fn(async (request: Request) =>
+            request.url.includes('Policy=FRESH') && !request.url.includes('/missing')
+                ? ok()
+                : new Response(null, { status: 403 }))
+        const store = await createStoreForUrl(`${BASE}/?${SIG}`, { fetchImpl, onUrlExpired, now: () => clock })
+
+        await store.get('/zarr.json')
+        expect(onUrlExpired).toHaveBeenCalledTimes(1)
+
+        clock += 5_000
+        await expect(store.get('/missing')).rejects.toThrow()
+        expect(onUrlExpired).toHaveBeenCalledTimes(1)
+        expect(fetchImpl).toHaveBeenCalledTimes(3)
+
+        clock += RENEWAL_COOLDOWN_MS
+        await expect(store.get('/missing')).rejects.toThrow()
+        expect(onUrlExpired).toHaveBeenCalledTimes(2)
     })
 
     it('does not retry a 403 when the host gave no way to renew', async () => {
