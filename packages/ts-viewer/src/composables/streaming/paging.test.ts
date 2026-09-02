@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { adaptivePageSize, BASE_PAGE_SIZE } from './paging'
+import { adaptivePageSize, rawBudgetPageSize, BASE_PAGE_SIZE } from './paging'
 
 const SECOND = 1000000
 
@@ -53,5 +53,50 @@ describe('adaptivePageSize', () => {
         expect(adaptivePageSize(-5)).toBe(BASE_PAGE_SIZE)
         expect(adaptivePageSize(NaN)).toBe(BASE_PAGE_SIZE)
         expect(adaptivePageSize(Infinity)).toBe(BASE_PAGE_SIZE)
+    })
+})
+
+describe('rawBudgetPageSize', () => {
+    const MB = 1_000_000
+
+    it('fits 103 channels at 512 Hz under the viewer cap in 240 s pages', () => {
+        // 103 x 512 x 4 bytes is 211 kB per second; 60 MB lasts 284 s, and the largest
+        // power-of-two multiple of 15 s under that is 240 s.
+        expect(rawBudgetPageSize(103, 512, false, 60 * MB)).toBe(16 * BASE_PAGE_SIZE)
+    })
+
+    it('fits the same channels under the reader default in 60 s pages', () => {
+        expect(rawBudgetPageSize(103, 512, false, 15 * MB)).toBe(4 * BASE_PAGE_SIZE)
+    })
+
+    it('counts a montage pair as two channels', () => {
+        expect(rawBudgetPageSize(51, 512, true, 60 * MB)).toBe(rawBudgetPageSize(102, 512, false, 60 * MB))
+    })
+
+    it('never returns less than the base span', () => {
+        expect(rawBudgetPageSize(1000, 30000, true, 15 * MB)).toBe(BASE_PAGE_SIZE)
+        expect(rawBudgetPageSize(103, 512, false, 1)).toBe(BASE_PAGE_SIZE)
+    })
+
+    it('returns the base span for a count, rate, or cap that is not positive', () => {
+        expect(rawBudgetPageSize(0, 512, false, 60 * MB)).toBe(BASE_PAGE_SIZE)
+        expect(rawBudgetPageSize(10, 0, false, 60 * MB)).toBe(BASE_PAGE_SIZE)
+        expect(rawBudgetPageSize(10, 512, false, 0)).toBe(BASE_PAGE_SIZE)
+        expect(rawBudgetPageSize(NaN, 512, false, 60 * MB)).toBe(BASE_PAGE_SIZE)
+    })
+
+    it('keeps every span under the cap and on the adaptive grid', () => {
+        for (const count of [1, 4, 64, 103, 256]) {
+            for (const rate of [250, 512, 1000, 30000]) {
+                for (const montaged of [false, true]) {
+                    const span = rawBudgetPageSize(count, rate, montaged, 60 * MB)
+                    const bytes = (span / SECOND) * count * rate * 4 * (montaged ? 2 : 1)
+                    if (span > BASE_PAGE_SIZE) {
+                        expect(bytes).toBeLessThanOrEqual(60 * MB)
+                    }
+                    expect(Math.log2(span / BASE_PAGE_SIZE) % 1).toBe(0)
+                }
+            }
+        }
     })
 })
