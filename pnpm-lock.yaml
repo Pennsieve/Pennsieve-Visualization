@@ -235,8 +235,8 @@ importers:
   packages/ts-viewer:
     dependencies:
       '@pennsieve/timeseries-zarr-reader':
-        specifier: 0.5.1
-        version: 0.5.1
+        specifier: 0.6.0
+        version: 0.6.0
       protobufjs:
         specifier: ^7.6.3
         version: 7.6.5
@@ -1085,8 +1085,8 @@ packages:
     resolution: {integrity: sha512-dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg==}
     engines: {node: '>= 10.0.0'}
 
-  '@pennsieve/timeseries-zarr-reader@0.5.1':
-    resolution: {integrity: sha512-R24sT/ZLDgx78UNlX5NK8i1v3XauSkj3DmDoORLHih06oHjnoTHSXm2Nj8I4wjgwL6gnInQ3Xpl67gkiD4KzUw==}
+  '@pennsieve/timeseries-zarr-reader@0.6.0':
+    resolution: {integrity: sha512-xFIf8Z8E8LHntJFuTV+k7BoO15O789oYQMFGFRsNZ7lauO0Hazj6QJb/jeXhSk0ARQE7PUSjEbfdAzmKv2fWeA==}
     engines: {node: '>=20'}
 
   '@petamoriken/float16@3.9.3':
@@ -6294,7 +6294,7 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.1
     optional: true
 
-  '@pennsieve/timeseries-zarr-reader@0.5.1':
+  '@pennsieve/timeseries-zarr-reader@0.6.0':
     dependencies:
       fili: 2.0.3
       p-limit: 7.3.1
