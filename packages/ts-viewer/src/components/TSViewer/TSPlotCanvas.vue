@@ -92,9 +92,18 @@ const transport = useViewerTransport()
 // A Zarr bundle answers a wide window from its pyramid in a few reads, so its page span
 // covers the viewport instead of splitting it into fixed 15-second columns. The legacy
 // streaming service keeps the fixed span it was built around. The difference travels
-// through the transport's capabilities.
-const currentPageSize = () =>
-  transport.value ? transport.value.capabilities.pageSizeFor(props.duration) : BASE_PAGE_SIZE
+// through the transport's capabilities, which also hear what the page will carry: a
+// backend reading raw samples under a byte cap narrows the span to fit them.
+const currentPageSize = () => {
+  if (!transport.value) {
+    return BASE_PAGE_SIZE
+  }
+  const count = viewerChannels.value?.reduce((n, ch) => (ch.visible ? n + 1 : n), 0) ?? 0
+  return transport.value.capabilities.pageSizeFor(props.duration, {
+    count,
+    montaged: viewerMontageScheme.value !== 'NOT_MONTAGED'
+  })
+}
 
 // Read-ahead is counted in pages, so the two backends need different counts to reach a
 // comparable distance past the viewport. A count that is not a number would make the
@@ -177,6 +186,26 @@ const lastRequestStart = ref<number | null>(null)
 const lastRequestDuration = ref<number | null>(null)
 const staleDataCounter = ref(0)
 
+/**
+ * Pages counted in `staleDataCounter` since the last current block. Stale blocks are
+ * counted once per page: a resolution change with 103 channels in flight leaves
+ * hundreds of stale blocks from two or three pages, and counting blocks dumped the
+ * fresh reads on every pass while those trickled in.
+ */
+const stalePageStarts = new Set<number>()
+
+const noteStaleBlock = (pageStart: number) => {
+  if (!stalePageStarts.has(pageStart)) {
+    stalePageStarts.add(pageStart)
+    staleDataCounter.value++
+  }
+}
+
+const clearStaleBlocks = () => {
+  stalePageStarts.clear()
+  staleDataCounter.value = 0
+}
+
 // Computed properties (from original) - moved after composable initialization
 const pHeight = computed(() => props.cHeight - 20)
 
@@ -207,20 +236,20 @@ const viewport = computed(() => ({
   nrVisibleChannels: nrVisibleChannels.value
 }))
 
+/**
+ * Microseconds per pixel column, or 0 while the viewport has no measured width.
+ *
+ * Zero plans nothing. A positive stand-in would select the reader's finest level for
+ * every visible channel, and the blocks would arrive stale once the width is known.
+ */
 const computedRsPeriod = computed(() => {
-  // Use props value if valid
   if (props.rsPeriod > 0) {
     return props.rsPeriod
   }
-
-  // Fall back to the ratio the viewport implies
   if (props.duration > 0 && props.cWidth > 0) {
     return props.duration / props.cWidth
   }
-
-  // Safe fallback
-  console.warn('Using fallback rsPeriod = 1')
-  return 1
+  return 0
 })
 
 /**
@@ -391,6 +420,9 @@ const planRequests = async () => {
   })
 
   const currentRsPeriod = computedRsPeriod.value
+  if (!(currentRsPeriod > 0)) {
+    return
+  }
   const pageSize = currentPageSize()
   const prefetchPages = currentPrefetchPages()
   const requestConstants = { ...props.constants, PREFETCHPAGES: prefetchPages }
@@ -451,7 +483,7 @@ const planRequests = async () => {
   // Check for high stale data rate
   if (staleDataCounter.value >= 5) {
     shouldDumpBuffer = true
-    dumpReason = `High stale data rate: ${staleDataCounter.value} consecutive stale segments`
+    dumpReason = `High stale data rate: ${staleDataCounter.value} stale pages`
   }
 
   // Only one dump at a time
@@ -472,7 +504,7 @@ const planRequests = async () => {
         // Clear client state after successful dump
         requestedPages.value.clear()
         clearRequests()
-        staleDataCounter.value = 0
+        clearStaleBlocks()
 
         // Brief delay to let the legacy server process the dump request. The Zarr
         // transport aborts synchronously and reports 0 ms, so its next requests
@@ -568,7 +600,7 @@ watch(() => viewerMontageScheme.value, (newScheme) => {
   invalidate()
 
   // Reset stale data tracking
-  staleDataCounter.value = 0
+  clearStaleBlocks()
   lastRequestedSamplePeriod.value = null
   lastRequestStart.value = null
   lastRequestDuration.value = null
@@ -608,10 +640,10 @@ const handleSegment = (segmentData: TransportSegmentEnvelope) => {
   // request pass would treat its page as fulfilled and never fetch it at the current
   // resolution. Its page entry was already cleared when the resolution changed.
   if (!isDataCurrentForViewport(segmentData.data as { requestedSamplePeriod?: number })) {
-    staleDataCounter.value++
+    noteStaleBlock(segmentData.pageStart)
     return
   }
-  staleDataCounter.value = 0
+  clearStaleBlocks()
 
   dataCallback(segmentData as SegmentMessage)
 
@@ -623,11 +655,11 @@ const handleSegment = (segmentData: TransportSegmentEnvelope) => {
 
 const handleEvent = (eventData: TransportSegmentEnvelope) => {
   if (!isDataCurrentForViewport(eventData.data as { requestedSamplePeriod?: number })) {
-    staleDataCounter.value++
+    noteStaleBlock(eventData.pageStart)
     return
   }
 
-  staleDataCounter.value = 0
+  clearStaleBlocks()
   dataCallback(eventData as unknown as SegmentMessage)
 
   if (eventData.pageStart < (props.start + props.duration)) {
@@ -672,7 +704,9 @@ const handleError = (error: TransportError) => {
 
 const initPlotCanvas = () => {
   const initialRsPeriod = computedRsPeriod.value
-  updateCurrentRequestedSamplePeriod(initialRsPeriod)
+  if (initialRsPeriod > 0) {
+    updateCurrentRequestedSamplePeriod(initialRsPeriod)
+  }
 
   // Initialize prefetch function - create a wrapper that captures current values
   initializePrefetch(
@@ -715,7 +749,7 @@ watch(transport, (activeTransport, previous) => {
     requestedPages.value.clear()
     clearRequests()
     invalidate()
-    staleDataCounter.value = 0
+    clearStaleBlocks()
     lastRequestedSamplePeriod.value = null
     lastRequestStart.value = null
     lastRequestDuration.value = null

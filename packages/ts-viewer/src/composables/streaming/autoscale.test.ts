@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
     peakToPeakByChannel,
     zoomMultForAmplitudes,
+    rowScalingForAmplitudes,
     zoomMultToUvPerMm,
     uvPerMmToZoomMult,
     measureAmplitudes
@@ -88,6 +89,106 @@ describe('zoomMultForAmplitudes', () => {
     it('returns null rather than a scale when handed nothing', () => {
         expect(zoomMultForAmplitudes(null, 20)).toBeNull()
         expect(zoomMultForAmplitudes(new Map(), 20)).toBeNull()
+    })
+})
+
+describe('rowScalingForAmplitudes', () => {
+    const units = (entries: Array<[string, string]>) => new Map(entries)
+    const swings = (entries: Array<[string, number]>) => new Map(entries)
+
+    it('shares one scale across microvolt channels of ordinary swing', () => {
+        const scaling = rowScalingForAmplitudes(
+            swings([['a', 100], ['b', 120], ['c', 90]]),
+            units([['a', 'uV'], ['b', 'uV'], ['c', 'uV']]),
+            20,
+            0.8
+        )!
+        expect(scaling.referenceUnit).toBe('uV')
+        expect(scaling.zoomMult).toBeCloseTo(zoomMultForAmplitudes([100, 120, 90], 20, 0.8)!, 10)
+        expect([...scaling.rowScales.values()]).toEqual([1, 1, 1])
+    })
+
+    it('fits a microvolt channel swinging far past the median to its own row', () => {
+        const scaling = rowScalingForAmplitudes(
+            swings([['a', 100], ['b', 100], ['c', 100], ['dc', 47_000]]),
+            units([['a', 'uV'], ['b', 'uV'], ['c', 'uV'], ['dc', 'uV']]),
+            20
+        )!
+        expect(scaling.rowScales.get('a')).toBe(1)
+        expect(scaling.rowScales.get('dc')).toBeCloseTo(100 / 47_000, 12)
+    })
+
+    it('keeps a microvolt channel within the outlier ratio on the shared scale', () => {
+        const scaling = rowScalingForAmplitudes(
+            swings([['a', 100], ['b', 100], ['c', 100], ['ecg', 700]]),
+            units([['a', 'uV'], ['b', 'uV'], ['c', 'uV'], ['ecg', 'uV']]),
+            20
+        )!
+        expect(scaling.rowScales.get('ecg')).toBe(1)
+    })
+
+    it('scales channels of another unit as a group by their median swing', () => {
+        const scaling = rowScalingForAmplitudes(
+            swings([['a', 200], ['b', 200], ['pr', 60], ['pq', 40]]),
+            units([['a', 'uV'], ['b', 'uV'], ['pr', 'bpm'], ['pq', 'bpm']]),
+            20
+        )!
+        // bpm median 50: both fill a row the way the 200 uV median does.
+        expect(scaling.rowScales.get('pr')).toBeCloseTo(4, 12)
+        expect(scaling.rowScales.get('pq')).toBeCloseTo(4, 12)
+    })
+
+    it('fits an outlier within another unit on its own', () => {
+        const scaling = rowScalingForAmplitudes(
+            swings([['a', 200], ['x', 10], ['y', 10], ['z', 10], ['loud', 1000]]),
+            units([['a', 'uV'], ['x', 'ms'], ['y', 'ms'], ['z', 'ms'], ['loud', 'ms']]),
+            20
+        )!
+        expect(scaling.rowScales.get('x')).toBeCloseTo(20, 12)
+        expect(scaling.rowScales.get('loud')).toBeCloseTo(200 / 1000, 12)
+    })
+
+    it('leaves a flat or unmeasured channel unlisted', () => {
+        const scaling = rowScalingForAmplitudes(
+            swings([['a', 100], ['flat', 0], ['gap', NaN]]),
+            units([['a', 'uV'], ['flat', 'uV'], ['gap', 'uV']]),
+            20
+        )!
+        expect(scaling.rowScales.has('flat')).toBe(false)
+        expect(scaling.rowScales.has('gap')).toBe(false)
+    })
+
+    it('takes the most common unit as the reference when no channel is in microvolts', () => {
+        const scaling = rowScalingForAmplitudes(
+            swings([['p', 100], ['q', 100], ['r', 5]]),
+            units([['p', 'cmH2O'], ['q', 'cmH2O'], ['r', '%']]),
+            20
+        )!
+        expect(scaling.referenceUnit).toBe('cmH2O')
+        expect(scaling.zoomMult).toBeCloseTo((20 * 0.8) / 100, 12)
+        expect(scaling.rowScales.get('r')).toBeCloseTo(20, 12)
+    })
+
+    it('counts a channel with no unit under the empty unit', () => {
+        const scaling = rowScalingForAmplitudes(swings([['a', 100], ['n', 10]]), units([['a', 'uV']]), 20)!
+        expect(scaling.rowScales.get('n')).toBeCloseTo(10, 12)
+    })
+
+    it('ignores a railed microvolt channel when setting the shared scale, and fits it', () => {
+        const scaling = rowScalingForAmplitudes(
+            swings([['a', 100], ['b', 100], ['rail', 5_000_000]]),
+            units([['a', 'uV'], ['b', 'uV'], ['rail', 'uV']]),
+            20
+        )!
+        expect(scaling.zoomMult).toBeCloseTo((20 * 0.8) / 100, 12)
+        expect(scaling.rowScales.get('rail')).toBeCloseTo(100 / 5_000_000, 15)
+    })
+
+    it('returns null when no reference channel has a usable swing or the row has no height', () => {
+        expect(rowScalingForAmplitudes(swings([['a', 0]]), units([['a', 'uV']]), 20)).toBeNull()
+        expect(rowScalingForAmplitudes(swings([['a', 5_000_000]]), units([['a', 'uV']]), 20)).toBeNull()
+        expect(rowScalingForAmplitudes(swings([['a', 100]]), units([['a', 'uV']]), 0)).toBeNull()
+        expect(rowScalingForAmplitudes(swings([]), units([]), 20)).toBeNull()
     })
 })
 

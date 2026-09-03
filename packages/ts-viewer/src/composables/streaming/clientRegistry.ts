@@ -59,7 +59,19 @@ export interface StreamingClientEntry {
     catalogIndex: CatalogIndex | null
 }
 
-export type AcquireClientOptions = CreateStoreOptions
+/**
+ * Byte cap on forced-raw reads, per query.
+ *
+ * A filter or a montage forces raw samples, so the reader's byte cap is spent over one page
+ * span. The cap rises with the span set in paging.ts, which keeps the widest filtered or
+ * montaged window that renders where it was before.
+ */
+export const DEFAULT_MAX_RAW_BYTES = 60_000_000
+
+export interface AcquireClientOptions extends CreateStoreOptions {
+    /** Byte cap on forced-raw reads. Defaults to `DEFAULT_MAX_RAW_BYTES`. */
+    maxRawBytes?: number
+}
 
 /**
  * Returns the entry for `storeId`, creating it when absent and replacing it when the bundle
@@ -112,10 +124,7 @@ export async function acquireClient(
         onUrlExpired: options.onUrlExpired ?? null,
         client: new StreamingClient({
             store,
-            // A filter or a montage forces raw samples, so the reader's byte cap is spent
-            // over one page span. The cap rises with the span set in paging.ts, which keeps
-            // the widest filtered or montaged window that renders where it was before.
-            maxRawBytes: 60_000_000,
+            maxRawBytes: options.maxRawBytes ?? DEFAULT_MAX_RAW_BYTES,
             // The cache holds compressed chunk bytes. The scrubber reads availability for
             // the whole recording through this same client, and at the reader's 64 MB
             // default those reads evict the pages the viewport is drawing.

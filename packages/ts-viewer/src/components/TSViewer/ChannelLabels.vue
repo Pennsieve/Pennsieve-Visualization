@@ -14,7 +14,7 @@
     >
       <template v-if="labelShown(index)">
         <div :class="[item.selected? 'labelDiv selected': 'labelDiv' ]" >
-          {{ item.displayName }}
+          {{ labelText(item) }}
         </div>
         <div
           v-if="!hideLabelInfo"
@@ -109,6 +109,18 @@ const hideLabelInfo = computed(() => {
   }
   return hide
 })
+
+/**
+ * The row's name. It carries the unit when the sensitivity line that would name it is
+ * hidden and the unit is not the microvolt the rest of the column is read in.
+ */
+const labelText = (item: ViewerChannel & { displayName: string }) => {
+  const unit = typeof item.unit === 'string' ? item.unit : ''
+  if (!hideLabelInfo.value || unit === '' || unit === 'uV') {
+    return item.displayName
+  }
+  return `${item.displayName} (${unit})`
+}
 
 /** Sensitivity of one row, in channel units per millimeter of screen. */
 const _computeLabelInfo = (item: ViewerChannel, globalZoomMult: number, rowscale: number | undefined) => {

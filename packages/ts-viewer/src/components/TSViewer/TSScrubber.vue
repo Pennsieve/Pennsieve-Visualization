@@ -390,14 +390,45 @@ const initSegmentSpans = () => {
 
   // Reset segment state before fetching new data
   resetSegmentState()
-  spanAbort = new AbortController()
+  const controller = new AbortController()
+  spanAbort = controller
 
-  // GET SEGMENTS AND GAPS
-  const vChans = viewerStore.viewerChannels
+  void scanSegmentSpans(viewerStore.viewerChannels.map((channel) => channel.id), controller)
+}
 
-  for (let i = 0; i < vChans.length; i++) {
-    _requestSegmentSpan(vChans[i].id, i, spanAbort.signal)
+/** One channel's answer to a scan, held until every channel has answered. */
+interface ChannelSpans {
+  channel: string
+  channelIdx: number
+  spans: Array<[number, number]>
+}
+
+/**
+ * One availability scan: every channel's spans are fetched, then applied in one pass.
+ *
+ * Applying each answer as it arrived filled the bitmap, walked it for the global spans,
+ * wrote a row in the store, and drew the hatch once per channel. The store's deep
+ * watchers ran once per write, and at a hundred channels the scan cost a hundred
+ * traversals and a hundred draws for one picture. The single pass writes every row in
+ * one synchronous sweep, so the watchers run once, and draws once. A scan the reset
+ * aborted applies nothing.
+ */
+const scanSegmentSpans = async (channelIds: string[], controller: AbortController) => {
+  const answers = await Promise.all(
+    channelIds.map((channel, index) => fetchSegmentSpan(channel, index, controller.signal))
+  )
+  if (controller.signal.aborted) {
+    return
   }
+  const answered = answers.filter((answer): answer is ChannelSpans => answer !== null)
+  if (answered.length === 0) {
+    return
+  }
+  for (const answer of answered) {
+    applySegmentSpan(answer)
+  }
+  recomputeSegmentSpans()
+  renderSegments()
 }
 
 /**
@@ -407,17 +438,19 @@ const initSegmentSpans = () => {
  *
  * `gapThresholdUs` is one cell of the scrubber's own 5000-cell bitmap: a gap narrower than a
  * cell cannot be drawn, so coalescing at that width matches what is actually rendered.
+ *
+ * Resolves null for a channel that could not be read; the scan goes on without it.
  */
-const _requestSegmentSpan = async (channel: string, channelIdx: number, signal?: AbortSignal) => {
+const fetchSegmentSpan = async (channel: string, channelIdx: number, signal: AbortSignal): Promise<ChannelSpans | null> => {
   const activeTransport = transport.value
   if (!activeTransport) {
     console.warn('TSScrubber: transport not ready, skipping segment spans')
-    return
+    return null
   }
 
   if (!channel) {
     console.warn('TSScrubber: Cannot request segment span - no channel ID provided')
-    return
+    return null
   }
 
   const span = props.ts_end! - props.ts_start!
@@ -426,88 +459,81 @@ const _requestSegmentSpan = async (channel: string, channelIdx: number, signal?:
   try {
     // Unit channels and montage lead resolution are the transport's business; it
     // answers a unit channel with no spans rather than throwing.
-    const resp = await activeTransport.dataSpans({
+    const spans = await activeTransport.dataSpans({
       channel,
       startUs: props.ts_start!,
       endUs: props.ts_end!,
       gapThresholdUs,
       signal
     })
-
-    // Validate that we still have the same channels (user might have switched packages)
-    if (!viewerStore.viewerChannels[channelIdx] || viewerStore.viewerChannels[channelIdx].id !== channel) {
-      console.warn('TSScrubber: Channel mismatch detected, ignoring segment response (likely package switched)')
-      return
-    }
-
-    // Parse response into vector
-    let vector: number[] = new Array(resp.length * 2)
-    let i = 0
-    for (let j = 0; j < resp.length; j++) {
-      vector[i] = resp[j][0]
-      vector[i + 1] = resp[j][1]
-      i = i + 2
-
-      // append to global
-      const pxStart = Math.floor(((resp[j][0] - props.ts_start!) / (props.ts_end! - props.ts_start!)) * 5000)
-      const pxEnd = Math.ceil(((resp[j][1] - props.ts_start!) / (props.ts_end! - props.ts_start!)) * 5000)
-      segments.value.fill(1, pxStart, pxEnd)
-    }
-
-    // Find Global spans
-    let ii = 0
-    let inSegment = false
-    let startSegment = 0
-    segmentSpans.value = []
-    while (ii < (segments.value.length - 1)) {
-      if (!segments.value[ii] && !inSegment) {
-        ii++
-        continue
-      } else if (!segments.value[ii]) {
-        // create segment
-        segmentSpans.value = segmentSpans.value.concat([startSegment, ii])
-        inSegment = false
-      } else if (!inSegment) {
-        startSegment = ii
-        inSegment = true
-      }
-      ii++
-    }
-
-    if (inSegment) {
-      segmentSpans.value = segmentSpans.value.concat([startSegment, ii])
-    }
-    segmentSpans.value = segmentSpans.value.concat([5000])
-
-    // remove first value if there is overlap with what a previous init stored
-    let firstValue = vector[0]
-    let chConfig = viewerStore.viewerChannels[channelIdx] as ViewerChannel & { dataSegments: number[] }
-
-    // Double-check that the channel still exists and matches
-    if (!chConfig || chConfig.id !== channel) {
-      console.warn('TSScrubber: Channel configuration mismatch, skipping update')
-      return
-    }
-
-    if (firstValue < chConfig.dataSegments[chConfig.dataSegments.length - 1]) {
-      vector.shift()
-      vector.shift()
-    }
-
-    chConfig.dataSegments = chConfig.dataSegments.concat(vector.sort((a, b) => a - b))
-
-    // Update channel in store
-    viewerStore.updateChannelProperty(chConfig.id, 'dataSegments', chConfig.dataSegments)
-
-    renderSegments()
+    return { channel, channelIdx, spans }
   } catch (err) {
     // An abandoned scan is expected: the channel set changed, or the component went away.
-    if (signal?.aborted) {
-      return
+    if (signal.aborted) {
+      return null
     }
     console.error(`TSScrubber: Error fetching segments for channel ${channel}:`, err)
     useHandleXhrError(err)
+    return null
   }
+}
+
+/** Marks one channel's spans in the bitmap and records them on the channel's row. */
+const applySegmentSpan = ({ channel, channelIdx, spans }: ChannelSpans) => {
+  // Validate that we still have the same channels (user might have switched packages)
+  const chConfig = viewerStore.viewerChannels[channelIdx] as (ViewerChannel & { dataSegments: number[] }) | undefined
+  if (!chConfig || chConfig.id !== channel) {
+    console.warn('TSScrubber: Channel mismatch detected, ignoring segment response (likely package switched)')
+    return
+  }
+
+  const range = props.ts_end! - props.ts_start!
+  const vector: number[] = new Array(spans.length * 2)
+  for (let j = 0; j < spans.length; j++) {
+    vector[2 * j] = spans[j][0]
+    vector[2 * j + 1] = spans[j][1]
+
+    const pxStart = Math.floor(((spans[j][0] - props.ts_start!) / range) * 5000)
+    const pxEnd = Math.ceil(((spans[j][1] - props.ts_start!) / range) * 5000)
+    segments.value.fill(1, pxStart, pxEnd)
+  }
+
+  // remove first value if there is overlap with what a previous init stored
+  if (vector[0] < chConfig.dataSegments[chConfig.dataSegments.length - 1]) {
+    vector.shift()
+    vector.shift()
+  }
+
+  chConfig.dataSegments = chConfig.dataSegments.concat(vector.sort((a, b) => a - b))
+  viewerStore.updateChannelProperty(chConfig.id, 'dataSegments', chConfig.dataSegments)
+}
+
+/** Derives the global spans, as bitmap cell pairs closed by 5000, from the bitmap. */
+const recomputeSegmentSpans = () => {
+  const spans: number[] = []
+  let ii = 0
+  let inSegment = false
+  let startSegment = 0
+  while (ii < (segments.value.length - 1)) {
+    if (!segments.value[ii] && !inSegment) {
+      ii++
+      continue
+    } else if (!segments.value[ii]) {
+      // create segment
+      spans.push(startSegment, ii)
+      inSegment = false
+    } else if (!inSegment) {
+      startSegment = ii
+      inSegment = true
+    }
+    ii++
+  }
+
+  if (inSegment) {
+    spans.push(startSegment, ii)
+  }
+  spans.push(5000)
+  segmentSpans.value = spans
 }
 
 const getAnnotations = async () => {

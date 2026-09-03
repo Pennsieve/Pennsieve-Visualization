@@ -23,6 +23,15 @@ export interface RendererChannelView {
     dataSegments: number[]
 }
 
+/**
+ * Rows a trace may reach above or below its own baseline.
+ *
+ * A trace may overlap its neighbors, as EEG review expects at a high sensitivity, but a
+ * channel swinging thousands of times the shared scale must not paint a filled polygon
+ * across the whole canvas on every frame and hide the rows under it.
+ */
+const PAINT_BAND_ROWS = 2
+
 interface RendererViewport {
     start: number
     duration: number
@@ -403,6 +412,9 @@ export const useCanvasRenderer = () => {
                     const Y2Array = curData[2]
 
                     const rowBaseLine = channelInfo.rowBaseline!
+                    const rowHeight = viewport.pHeight / viewport.nrVisibleChannels
+                    const yLow = rowBaseLine - PAINT_BAND_ROWS * rowHeight
+                    const yHigh = rowBaseLine + PAINT_BAND_ROWS * rowHeight
 
                     let chDatCenterer = 0
                     if (constants.USEMEDIAN) {
@@ -414,15 +426,16 @@ export const useCanvasRenderer = () => {
                     const rsp = viewport.rsPeriod
                     const startT = viewport.start
 
+                    // A gap is NaN and stays NaN through the clamp.
                     for (let iPoint = 0; iPoint < length; iPoint++) {
                         cXArray[iPoint] = (((xOffset + (XArray[iPoint] - startT) / rsp)))
-                        cYArray[iPoint] = (((rowBaseLine - (YArray[iPoint] - chDatCenterer) * curScale)))
+                        cYArray[iPoint] = Math.min(yHigh, Math.max(yLow, rowBaseLine - (YArray[iPoint] - chDatCenterer) * curScale))
 
                         if (curSeg.isMinMax) {
                             if (YArray[iPoint] === Y2Array[iPoint]) {
                                 cY2Array[iPoint] = cYArray[iPoint] + 1
                             } else {
-                                cY2Array[iPoint] = (((rowBaseLine - (Y2Array[iPoint] - chDatCenterer) * curScale)))
+                                cY2Array[iPoint] = Math.min(yHigh, Math.max(yLow, rowBaseLine - (Y2Array[iPoint] - chDatCenterer) * curScale))
                             }
                         }
                     }
