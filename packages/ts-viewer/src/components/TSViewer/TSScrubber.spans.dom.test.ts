@@ -315,6 +315,44 @@ describe('TSScrubber availability spans', () => {
         expect(dataSegmentsFor(scrubber.store, 'unit-1')).toEqual([])
     })
 
+    it('applies a scan in one pass once every channel has answered', async () => {
+        const spans: Array<[number, number]> = [[TS_START + 1000 * CELL_US, TS_START + 2000 * CELL_US]]
+        const base = makeSpanRecorder(() => spans)
+        // One slow channel: applying answers as they arrive would draw the fast
+        // channel's spans while this one is still pending.
+        const transport: TimeseriesTransport = {
+            ...base.transport,
+            dataSpans: async (query: DataSpanQuery) => {
+                if (query.channel === 'ch-2') {
+                    await new Promise((resolve) => setTimeout(resolve, 40))
+                }
+                return base.transport.dataSpans(query)
+            }
+        }
+        const scrubber = await mountScrubber({
+            instanceId: 'scrubber-spans-one-pass',
+            assetType: 'timeseries-zarr',
+            channelIds: ['ch-1', 'ch-2'],
+            transport
+        })
+        const canvas = scrubber.wrapper.find('#segmentsCanvas').element as HTMLCanvasElement
+        const clearRect = contextFor(canvas).clearRect as ReturnType<typeof vi.fn>
+        clearRect.mockClear()
+
+        scrubber.internals.initSegmentSpans()
+        await vi.waitFor(() => {
+            expect(scrubber.internals.segmentSpans.length).toBeGreaterThan(0)
+        }, { timeout: 3000 })
+
+        // The slow channel's row landed in the same pass as the fast one's.
+        expect(dataSegmentsFor(scrubber.store, 'ch-2')).toEqual([TS_START + 1000 * CELL_US, TS_START + 2000 * CELL_US])
+        expect(scrubber.internals.segmentSpans).toEqual([1000, 2000, 5000])
+
+        // One draw for the whole scan.
+        await flushPromises()
+        expect(clearRect).toHaveBeenCalledTimes(1)
+    })
+
     it('requests one legacy segment-span url for a recording shorter than SEGMENTSPAN', async () => {
         // The middle gap is 500 us, half a bitmap cell.
         const recorder = makeRestRecorder(() => [

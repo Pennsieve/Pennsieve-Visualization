@@ -127,6 +127,98 @@ export function uvPerMmToZoomMult(uvPerMm: number, dpi: number, devicePixelRatio
     return (dpi * devicePixelRatio) / (uvPerMm * MM_PER_INCH)
 }
 
+/**
+ * Swing, as a multiple of its unit group's median, past which a channel is fitted to
+ * its own row rather than sharing the group's scale.
+ */
+const OUTLIER_RATIO = 8
+
+/** The unit whose channels set the shared scale whenever the recording carries it. */
+const REFERENCE_UNIT = 'uV'
+
+export interface RowScaling {
+    /** Vertical zoom multiplier that fits the reference swing to a row. */
+    zoomMult: number
+    /** Unit of the channels whose median swing set `zoomMult`. */
+    referenceUnit: string
+    /** Row scale per surveyed channel id. A channel not listed keeps 1. */
+    rowScales: Map<string, number>
+}
+
+/** The unit carried by the most channels; the first seen wins a tie. */
+function largestGroup(byUnit: Map<string, unknown[]>): string {
+    let best = ''
+    let size = -1
+    for (const [unit, group] of byUnit) {
+        if (group.length > size) {
+            best = unit
+            size = group.length
+        }
+    }
+    return best
+}
+
+/**
+ * Shared scale and per-channel row scales from a whole-recording amplitude survey.
+ *
+ * Channels in the reference unit share one scale, fitted from their median swing the way
+ * {@link zoomMultForAmplitudes} fits it, so their traces stay comparable. One of them
+ * swinging more than OUTLIER_RATIO times that median is fitted to its own row instead.
+ * Channels in any other unit are scaled by unit: the unit's median swing fills a row the
+ * way the reference median does, and an outlier within the unit is fitted on its own. A
+ * channel without a usable swing is not listed and keeps 1.
+ *
+ * The reference unit is `uV` when any surveyed channel carries it, otherwise the unit
+ * carried by the most channels. The trusted ceiling `MAX_TRUSTED_P2P_UV` applies to the
+ * reference median only when the reference unit is `uV`.
+ *
+ * @param amplitudes Peak-to-peak per channel id, each in its channel's own unit.
+ * @param unitById Unit per channel id; a channel missing here counts as unit ''.
+ * @param rowHeight Height of one channel row, in canvas pixels.
+ * @param fill Fraction of the row the reference median swing should fill.
+ * @returns null when no reference channel has a usable swing or `rowHeight` is not positive.
+ */
+export function rowScalingForAmplitudes(
+    amplitudes: Map<string, number>,
+    unitById: Map<string, string>,
+    rowHeight: number,
+    fill = ROW_FILL
+): RowScaling | null {
+    if (!(rowHeight > 0) || !(fill > 0)) {
+        return null
+    }
+    const byUnit = new Map<string, Array<[string, number]>>()
+    for (const [id, p2p] of amplitudes) {
+        if (!(Number.isFinite(p2p) && p2p > 0)) {
+            continue
+        }
+        const unit = unitById.get(id) ?? ''
+        const group = byUnit.get(unit) ?? []
+        group.push([id, p2p])
+        byUnit.set(unit, group)
+    }
+    if (byUnit.size === 0) {
+        return null
+    }
+    const referenceUnit = byUnit.has(REFERENCE_UNIT) ? REFERENCE_UNIT : largestGroup(byUnit)
+    const reference = byUnit.get(referenceUnit)!.map(([, p2p]) => p2p)
+    const trusted = referenceUnit === REFERENCE_UNIT ? reference.filter((p2p) => p2p <= MAX_TRUSTED_P2P_UV) : reference
+    const typical = median(trusted)
+    if (typical === null) {
+        return null
+    }
+
+    const rowScales = new Map<string, number>()
+    for (const [unit, group] of byUnit) {
+        const groupTypical = unit === referenceUnit ? typical : median(group.map(([, p2p]) => p2p))!
+        const unitScale = typical / groupTypical
+        for (const [id, p2p] of group) {
+            rowScales.set(id, p2p > OUTLIER_RATIO * groupTypical ? typical / p2p : unitScale)
+        }
+    }
+    return { zoomMult: (rowHeight * fill) / typical, referenceUnit, rowScales }
+}
+
 /** Columns the amplitude pass asks for across the whole recording. */
 const SURVEY_COLUMNS = 2000
 

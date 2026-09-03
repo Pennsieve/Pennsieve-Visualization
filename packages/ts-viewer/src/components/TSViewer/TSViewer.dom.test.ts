@@ -198,8 +198,19 @@ async function settleFrame(): Promise<void> {
 describe('TSViewer mounted against a recorded transport', () => {
     let wrapper: VueWrapper | null = null
 
+    // happy-dom lays nothing out, so the viewer would measure a zero-width plot area and
+    // the canvas would plan no page. The tree measures its root's offsetWidth and the label
+    // column's clientWidth, so both report fixed sizes here: a 1000 px plot area, which at
+    // the 15 s viewport is a 15000 us sample period.
+    const layout = {
+        offsetWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth'),
+        clientWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    }
+
     beforeEach(() => {
         harness.reset()
+        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 1116 })
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 100 })
         // TSAnnotationCanvas loads annotation layers over HTTP on mount. One canned layer
         // satisfies it without a server; every other HTTP path is guarded off by leaving
         // apiUrl and timeSeriesApi out of the config.
@@ -214,6 +225,13 @@ describe('TSViewer mounted against a recorded transport', () => {
         wrapper = null
         await flushPromises()
         vi.unstubAllGlobals()
+        for (const [name, descriptor] of Object.entries(layout)) {
+            if (descriptor) {
+                Object.defineProperty(HTMLElement.prototype, name, descriptor)
+            } else {
+                delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name]
+            }
+        }
         document.body.innerHTML = ''
     })
 
@@ -284,9 +302,8 @@ describe('TSViewer mounted against a recorded transport', () => {
         expect(pageRequest).toBeDefined()
         // The typed PageRequest carries no session or packageId: the token and the
         // package id are transport-internal. The byte-exact legacy wire JSON is
-        // pinned in src/transport/websocketTransport.wire.test.ts. pixelWidth is 1
-        // because the unlaid-out canvas reports a non-positive width and rsPeriod
-        // falls back to 1. pins current behavior; revisit in the refactor
+        // pinned in src/transport/websocketTransport.wire.test.ts. pixelWidth is the
+        // 15 s viewport over the 1000 px plot area the layout stubs report.
         expect(pageRequest).toMatchInlineSnapshot(`
           {
             "channels": [
@@ -301,7 +318,7 @@ describe('TSViewer mounted against a recorded transport', () => {
             ],
             "endTime": 30000000,
             "minMax": true,
-            "pixelWidth": 1,
+            "pixelWidth": 15000,
             "priority": "viewport",
             "startTime": 15000000,
           }

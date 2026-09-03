@@ -99,7 +99,7 @@ pennsieve-visualization/
 
    `pnpm dev` also starts two static fixture servers:
     - **:9090** (`scripts/serve-test-zarr.py`) serving the imaging OME-Zarr at `test-data/sample.zarr`
-    - **:9091** (`scripts/serve-timeseries-zarr.mjs`) serving the timeseries bundle at `test-data/sample-timeseries.zarr` for the TSViewer Zarr path.
+    - **:9091** (`scripts/serve-timeseries-zarr.mjs`) serving the timeseries bundle at `test-data/sample-timeseries.zarr` for the TSViewer Zarr path. Set `TS_ZARR_ROOT=/path/to/bundle.zarr` to serve another bundle instead, for example a full recording written by `timeseries-zarr-py`.
     The timeseries server supports HTTP Range requests, which sharded Zarr bundles require. See `test-data/README.md` for more details.
 
 > **Why do I need to build first?** The core package imports components from `@pennsieve-viz/micro-ct` and `@pennsieve-viz/tsviewer` as dependencies. Without building them, those imports will fail and the dev server won't start.
