@@ -258,8 +258,12 @@ export const useTimeSeriesData = () => {
     let rowsByServerId = new Map<string | undefined, Map<string | undefined, ChannelData>>()
     let indexedRows: ChannelData[] | null = null
 
+    /** Pairs already reported as unmatched, so one broken channel reports once. */
+    const unmatchedPairs = new Set<string>()
+
     const rowFor = (serverId?: string, label?: string): ChannelData | undefined => {
         if (indexedRows !== chData.value) {
+            unmatchedPairs.clear()
             rowsByServerId = new Map()
             for (const row of chData.value) {
                 let byLabel = rowsByServerId.get(row.serverId)
@@ -290,7 +294,21 @@ export const useTimeSeriesData = () => {
         const curChData = rowFor(serverResponseId, serverResponseName)
 
         if (!curChData) {
-            // Stale response from a previous channel config: discard silently
+            // A response from the previous channel config lands here after a montage
+            // switch, and so does a backend whose block names a channel differently
+            // from its catalog. The second leaves the page pending and the row blank.
+            const pair = `${serverResponseId}|${serverResponseName}`
+            if (!unmatchedPairs.has(pair)) {
+                unmatchedPairs.add(pair)
+                console.warn('useTimeSeriesData: no channel matches the response', {
+                    serverId: serverResponseId,
+                    label: serverResponseName,
+                    knownPairs: chData.value.slice(0, 3).map((row) => ({
+                        serverId: row.serverId,
+                        label: row.label
+                    }))
+                })
+            }
             return
         }
 
