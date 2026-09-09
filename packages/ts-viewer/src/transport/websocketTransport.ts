@@ -161,6 +161,18 @@ const timeSeriesMessageType = wireRoot.lookupType('TimeSeriesMessage')
 // the same default.
 const useMedian = false
 
+/**
+ * One decoded uint64 field as a number.
+ *
+ * protobufjs decodes uint64 through long.js whenever `long` resolves, and it resolves in
+ * every bundled build. A Long is not a number: it keys no map, and adding one to a number
+ * concatenates two strings. Every uint64 on this wire is a microsecond timestamp or a
+ * count, so all of them are inside the exact integer range.
+ */
+function wireNumber(value: unknown): number {
+    return typeof value === 'number' ? value : Number(value)
+}
+
 export interface WebsocketTransportDeps {
     createSocket?: (url: string) => WebSocket
     fetchImpl?: typeof fetch
@@ -390,15 +402,16 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
             const segment = timeSeriesMsg.segment
 
             // Handle Neural Data
-            if (timeSeriesMsg.event && timeSeriesMsg.event.length > 0 && timeSeriesMsg.event[0].pageStart) {
-                const tsEvent = timeSeriesMsg.event[0]
+            const tsEvent = timeSeriesMsg.event?.[0]
+            const eventPageStart = tsEvent ? wireNumber(tsEvent.pageStart) : 0
+            if (tsEvent && eventPageStart) {
                 const dataPoints: number[][] = [[], []]
                 const nrVal = tsEvent.times.length / 2
 
                 let curI = 0
                 for (let i = 0; i < nrVal; i++) {
-                    dataPoints[0].push(tsEvent.times[curI])
-                    dataPoints[1].push(tsEvent.times[curI + 1])
+                    dataPoints[0].push(wireNumber(tsEvent.times[curI]))
+                    dataPoints[1].push(wireNumber(tsEvent.times[curI + 1]))
                     curI += 2
                 }
 
@@ -414,9 +427,9 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
                     lastUsed: 0,
                     unit: 'uV',
                     samplePeriod: tsEvent.samplePeriod,
-                    pageStart: tsEvent.pageStart,
-                    pageEnd: tsEvent.pageEnd,
-                    startTs: tsEvent.pageStart,
+                    pageStart: eventPageStart,
+                    pageEnd: wireNumber(tsEvent.pageEnd),
+                    startTs: eventPageStart,
                     isMinMax: tsEvent.isResampled,
                     unitM: 1,
                     type: 'Neural',
@@ -426,10 +439,10 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
                 }
 
                 const envelope: WebSocketEventEnvelope = {
-                    pageStart: tsEvent.pageStart,
+                    pageStart: eventPageStart,
                     data: segm,
                     type: 'Neural',
-                    nrResponses: timeSeriesMsg.totalResponses
+                    nrResponses: wireNumber(timeSeriesMsg.totalResponses)
                 }
                 emit('event', envelope)
             }
@@ -444,7 +457,8 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
                 }
 
                 const parsedData: Float64Array[] = new Array(3)
-                const startTs = segment.startTs
+                const startTs = wireNumber(segment.startTs)
+                const pageStart = wireNumber(segment.pageStart)
 
                 let sumElem = 0
                 let nrValidPoints = 0
@@ -495,17 +509,17 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
 
                 const segm: WebSocketSegmentBlock = {
                     chId: segment.source,
-                    lastUsed: segment.lastUsed,
+                    lastUsed: wireNumber(segment.lastUsed),
                     unit: segment.unit,
                     samplePeriod: segment.samplePeriod,
                     // Zero for a page this transport has no record of asking for; the
                     // viewer treats a non-positive value as unknown and accepts the block.
-                    requestedSamplePeriod: requestedWidths.get(segment.pageStart) ?? 0,
-                    pageStart: segment.pageStart,
-                    pageEnd: segment.pageEnd,
+                    requestedSamplePeriod: requestedWidths.get(pageStart) ?? 0,
+                    pageStart: pageStart,
+                    pageEnd: wireNumber(segment.pageEnd),
                     startTs: startTs,
                     isMinMax: segment.isMinMax,
-                    unitM: segment.unitM,
+                    unitM: wireNumber(segment.unitM),
                     type: segment.segmentType,
                     nrPoints: nrVal,
                     cData: cData,
@@ -519,17 +533,17 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
 
                 if (segm.nrPoints > 0) {
                     const envelope: WebSocketSegmentEnvelope = {
-                        pageStart: segment.pageStart,
+                        pageStart: pageStart,
                         data: segm,
                         type: segment.segmentType,
-                        nrResponses: timeSeriesMsg.totalResponses
+                        nrResponses: wireNumber(timeSeriesMsg.totalResponses)
                     }
                     emit('segment', envelope)
                 } else {
                     const envelope: WebSocketSegmentEnvelope = {
-                        pageStart: segment.pageStart,
+                        pageStart: pageStart,
                         data: segm,
-                        nrResponses: timeSeriesMsg.totalResponses,
+                        nrResponses: wireNumber(timeSeriesMsg.totalResponses),
                         type: 'gap'
                     }
                     emit('segment', envelope)

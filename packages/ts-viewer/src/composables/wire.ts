@@ -1,9 +1,9 @@
 // @/composables/wire.ts
 //
 // Decoded shapes of the protobuf schema in transport/websocketTransport.ts, hand-declared
-// as the message handling observes them. uint64 fields decode to plain numbers
-// because the `long` package is not installed; a value above 2^53 - 1 loses
-// precision.
+// as the message handling observes them. A uint64 field is typed as a number because
+// `wireNumber` converts it during decode; protobufjs itself hands over a long.js Long.
+// A value above 2^53 - 1 loses precision in the conversion.
 
 export interface WireEvent {
     source: string

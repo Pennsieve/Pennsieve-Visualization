@@ -12,13 +12,10 @@ import { createWebsocketTransport, timeSeriesProto } from '../websocketTransport
 import type { TransportOpenOptions, VirtualChannelRef } from '../TimeseriesTransport'
 import type { ChannelDetail } from '@/composables/streaming/channelDetails'
 
-// In a browser protobufjs cannot require('long'), so uint64 fields decode to
-// plain numbers (composables/wire.ts). Vitest runs in node, where the require
-// succeeds and uint64 would decode to Long objects instead. Drop Long and
-// reconfigure so frames decode as they do in the shipped viewer. Vitest
-// isolates test files, so the mutation stays inside this file's run.
-;(protobuf.util as { Long?: unknown }).Long = undefined
-protobuf.configure()
+// protobufjs resolves long.js here exactly as a bundled build does, so uint64 fields
+// decode to Long objects and the transport has to convert them. Leaving that resolution
+// alone is what makes this suite exercise the shipped decode.
+expect(protobuf.util.Long).toBeTruthy()
 
 const PAGE_START = 15000000
 const PAGE_END = 30000000
