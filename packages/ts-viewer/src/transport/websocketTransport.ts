@@ -222,6 +222,21 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
     /** Whether a catalog has arrived on this transport before, across reconnects. */
     let hasReceivedDetails = false
 
+    /**
+     * `pixelWidth` of the request each page was asked for, keyed by page start.
+     *
+     * The transport contract requires every block to carry the pixelWidth of the request
+     * that produced it. The streaming service owns `Segment.requestedSamplePeriod` and
+     * fills it with a value of its own, so the block is stamped from what was sent.
+     */
+    const requestedWidths = new Map<number, number>()
+
+    /**
+     * Pages remembered for the stamp. The viewport and the read-ahead hold well under
+     * this many; past it the oldest entry goes and its blocks arrive unstamped.
+     */
+    const MAX_STAMPED_PAGES = 64
+
     // `activeId` holds whichever id the open options provide: a viewer-asset
     // UUID or a package node id. `idParamName` tracks which it is so the
     // WebSocket URL uses the matching query param.
@@ -301,6 +316,7 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
     const close = async (): Promise<void> => {
         // The catalog belongs to the connection that produced it.
         lastChannelDetails = null
+        requestedWidths.clear()
 
         if (websocket) {
             const ws = websocket
@@ -482,9 +498,9 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
                     lastUsed: segment.lastUsed,
                     unit: segment.unit,
                     samplePeriod: segment.samplePeriod,
-                    // Zero when the server leaves the field unset; the viewer treats a
-                    // non-positive value as unknown and accepts the block.
-                    requestedSamplePeriod: segment.requestedSamplePeriod,
+                    // Zero for a page this transport has no record of asking for; the
+                    // viewer treats a non-positive value as unknown and accepts the block.
+                    requestedSamplePeriod: requestedWidths.get(segment.pageStart) ?? 0,
                     pageStart: segment.pageStart,
                     pageEnd: segment.pageEnd,
                     startTs: startTs,
@@ -648,6 +664,14 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
         }
 
         websocket.send(JSON.stringify(payload))
+
+        if (requestedWidths.size >= MAX_STAMPED_PAGES) {
+            const oldest = requestedWidths.keys().next()
+            if (!oldest.done) {
+                requestedWidths.delete(oldest.value)
+            }
+        }
+        requestedWidths.set(req.startTime, req.pixelWidth)
         return true
     }
 
@@ -673,6 +697,8 @@ export function createWebsocketTransport(deps: WebsocketTransportDeps = {}): Tim
                 requestType: 'DumpBufferRequest',
             }
             websocket.send(JSON.stringify(message))
+            // The dump discards every outstanding page, so nothing is left to stamp.
+            requestedWidths.clear()
             return true
         }
         console.warn('Cannot send dump buffer request: WebSocket not connected')

@@ -4,7 +4,7 @@
 // one protobuf-encoded TimeSeriesMessage frame per channel. Lives in the dom
 // project because the transport decodes binary frames through FileReader and
 // Blob, which the node environment does not provide.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import protobuf from 'protobufjs'
 import { runTransportConformance } from './transportConformance'
 import type { TransportHarness } from './transportConformance'
@@ -61,6 +61,7 @@ function encodeSegmentFrame(
     channel: { id: string; name: string },
     req: DataRequestMessage,
     totalResponses: number,
+    reportedSamplePeriod = req.pixelWidth,
 ): Blob {
     const message = timeSeriesMessageType.create({
         segment: {
@@ -69,7 +70,7 @@ function encodeSegmentFrame(
             lastUsed: 0,
             unit: 'uV',
             samplePeriod: 1000,
-            requestedSamplePeriod: req.pixelWidth,
+            requestedSamplePeriod: reportedSamplePeriod,
             pageStart: req.startTime,
             isMinMax: req.minMax,
             unitM: 1,
@@ -95,7 +96,11 @@ class FakeServerSocket {
     sent: string[] = []
     private pendingFrames: Array<ReturnType<typeof setTimeout>> = []
 
-    constructor(public readonly url: string) {
+    /**
+     * @param reportedSamplePeriod What the server puts in `Segment.requestedSamplePeriod`.
+     *   Defaults to the request's pixelWidth.
+     */
+    constructor(public readonly url: string, private readonly reportedSamplePeriod?: number) {
         setTimeout(() => {
             if (this.readyState !== 0) {
                 return
@@ -131,7 +136,7 @@ class FakeServerSocket {
             const req = message as unknown as DataRequestMessage
             const withData = req.virtualChannels.filter((channel) => channel.id !== emptyChannel.id)
             for (const channel of withData) {
-                const frame = encodeSegmentFrame(channel, req, withData.length)
+                const frame = encodeSegmentFrame(channel, req, withData.length, this.reportedSamplePeriod)
                 const timer = setTimeout(() => {
                     this.dispatch(frame)
                 }, 0)
@@ -185,6 +190,44 @@ function makeHarness(): Promise<TransportHarness> {
 }
 
 runTransportConformance('websocket', makeHarness)
+
+describe('websocket transport block resolution stamp', () => {
+    const openTransport = async (reportedSamplePeriod?: number) => {
+        const transport = createWebsocketTransport({
+            createSocket: (url: string) =>
+                new FakeServerSocket(url, reportedSamplePeriod) as unknown as WebSocket,
+        })
+        const blocks: Array<{ requestedSamplePeriod?: number }> = []
+        transport.on('segment', (envelope) => {
+            blocks.push(envelope.data as { requestedSamplePeriod?: number })
+        })
+        await transport.open(makeOpenOptions())
+        return { transport, blocks }
+    }
+
+    const requestOnePage = (transport: ReturnType<typeof createWebsocketTransport>, pixelWidth: number) =>
+        transport.requestPage({
+            startTime: PAGE_START,
+            endTime: PAGE_END,
+            pixelWidth,
+            minMax: true,
+            channels,
+        })
+
+    it('stamps a block with the pixelWidth of the request that produced it', async () => {
+        // The streaming service owns this field and answers with a period of its own.
+        const { transport, blocks } = await openTransport(3)
+        requestOnePage(transport, PIXEL_WIDTH)
+
+        await vi.waitFor(() => {
+            expect(blocks).toHaveLength(channels.length)
+        })
+        for (const block of blocks) {
+            expect(block.requestedSamplePeriod).toBe(PIXEL_WIDTH)
+        }
+        await transport.close()
+    })
+})
 
 describe('websocket transport dataSpans', () => {
     const makeFetchStub = (responses: Array<Array<[number, number]>>) => {
