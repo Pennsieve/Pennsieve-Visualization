@@ -194,10 +194,17 @@ const staleDataCounter = ref(0)
  */
 const stalePageStarts = new Set<number>()
 
-const noteStaleBlock = (pageStart: number) => {
+const noteStaleBlock = (pageStart: number, blockSamplePeriod: number | undefined) => {
   if (!stalePageStarts.has(pageStart)) {
     stalePageStarts.add(pageStart)
     staleDataCounter.value++
+    // A dropped block leaves its page pending and the row blank. Without this the
+    // only report is the sweeper's, ten seconds later, naming no cause.
+    console.warn('TSPlotCanvas: dropped a block read at another resolution', {
+      pageStart,
+      blockSamplePeriod,
+      currentSamplePeriod: currentRequestedSamplePeriod.value
+    })
   }
 }
 
@@ -624,6 +631,9 @@ watch(() => viewerMontageScheme.value, (newScheme) => {
 
 
 // Transport event handlers, registered on each transport initPlotCanvas creates
+/** The block fields both arrival handlers read off an envelope. */
+type ArrivedBlock = { requestedSamplePeriod?: number }
+
 const handleSegment = (segmentData: TransportSegmentEnvelope) => {
   const isOutsideViewport = segmentData.pageStart >= (props.start + props.duration)
 
@@ -639,8 +649,9 @@ const handleSegment = (segmentData: TransportSegmentEnvelope) => {
   // A block requested before the last resolution change must not enter the cache: the
   // request pass would treat its page as fulfilled and never fetch it at the current
   // resolution. Its page entry was already cleared when the resolution changed.
-  if (!isDataCurrentForViewport(segmentData.data as { requestedSamplePeriod?: number })) {
-    noteStaleBlock(segmentData.pageStart)
+  const block = segmentData.data as ArrivedBlock
+  if (!isDataCurrentForViewport(block)) {
+    noteStaleBlock(segmentData.pageStart, block.requestedSamplePeriod)
     return
   }
   clearStaleBlocks()
@@ -654,8 +665,9 @@ const handleSegment = (segmentData: TransportSegmentEnvelope) => {
 }
 
 const handleEvent = (eventData: TransportSegmentEnvelope) => {
-  if (!isDataCurrentForViewport(eventData.data as { requestedSamplePeriod?: number })) {
-    noteStaleBlock(eventData.pageStart)
+  const block = eventData.data as ArrivedBlock
+  if (!isDataCurrentForViewport(block)) {
+    noteStaleBlock(eventData.pageStart, block.requestedSamplePeriod)
     return
   }
 
