@@ -1,6 +1,24 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EventChannelInfo, EventRecord } from '@pennsieve/timeseries-zarr-reader'
-import { bodyToDescription, eventToAnnotation, isBundleLayerId } from './useBundleAnnotations'
+
+// The reader client the functions under test read through.
+const bundle = vi.hoisted(() => ({ client: undefined as unknown }))
+
+vi.mock('./streaming/clientRegistry', () => ({
+    getClient: () => (bundle.client ? { client: bundle.client } : undefined)
+}))
+
+const {
+    bodyToDescription,
+    eventToAnnotation,
+    isBundleLayerId,
+    loadBundleDescription,
+    loadBundleLayers
+} = await import('./useBundleAnnotations')
+
+afterEach(() => {
+    bundle.client = undefined
+})
 
 const channel: EventChannelInfo = {
     id: 'marks',
@@ -16,7 +34,7 @@ const event = (over: Partial<EventRecord> = {}): EventRecord => ({
     timeUs: 1000,
     durationUs: 0,
     label: 'spike',
-    body: '{"description":"RC1-3","ts_annotation_id":"38411834"}',
+    body: '{"description":"left temporal spikes","source_id":"7"}',
     channels: [],
     ...over
 })
@@ -30,7 +48,7 @@ describe('useBundleAnnotations', () => {
     })
 
     it('shows a JSON body by its description and anything else as stored', () => {
-        expect(bodyToDescription('{"description":"RC1-3"}', 'application/json')).toBe('RC1-3')
+        expect(bodyToDescription('{"description":"left temporal spikes"}', 'application/json')).toBe('left temporal spikes')
         expect(bodyToDescription('{"other":1}', 'application/json')).toBe('{"other":1}')
         expect(bodyToDescription('not json', 'application/json')).toBe('not json')
         expect(bodyToDescription('{"description":"x"}', 'text/plain')).toBe('{"description":"x"}')
@@ -41,7 +59,7 @@ describe('useBundleAnnotations', () => {
         expect(eventToAnnotation(event({ durationUs: 500 }), channel, 'bundle:marks', 2)).toMatchObject({
             id: 'bundle:marks:4',
             label: 'spike',
-            description: 'RC1-3',
+            description: 'left temporal spikes',
             start: 1000,
             duration: 500,
             end: 1500,
@@ -58,5 +76,40 @@ describe('useBundleAnnotations', () => {
 
     it('falls back to the channel name for an unlabeled event', () => {
         expect(eventToAnnotation(event({ label: undefined }), channel, 'bundle:marks', 2).label).toBe('Clinical marks')
+    })
+
+    it('lists the bundle\'s layers without reading any annotations', async () => {
+        const queryEvents = vi.fn()
+        bundle.client = { eventChannels: async () => [channel], queryEvents }
+
+        const layers = await loadBundleLayers('viewer-1')
+
+        expect(layers.map((l) => [l.id, l.name, l.annotations])).toEqual([
+            ['bundle:marks', 'Clinical marks', []]
+        ])
+        expect(queryEvents).not.toHaveBeenCalled()
+    })
+
+    it('has no layers when the viewer has no bundle open', async () => {
+        expect(await loadBundleLayers('viewer-1')).toEqual([])
+    })
+
+    it('reads one annotation\'s description by the event it came from', async () => {
+        const eventBody = vi.fn(async () => '{"description":"left temporal spikes"}')
+        bundle.client = { eventChannels: async () => [channel], eventBody }
+        const annotation = eventToAnnotation(event({ body: undefined }), channel, 'bundle:marks', 2)
+
+        expect(annotation.description).toBeUndefined()
+        expect(await loadBundleDescription('viewer-1', annotation)).toBe('left temporal spikes')
+        expect(eventBody).toHaveBeenCalledWith({ channel: 'marks', index: 4 })
+    })
+
+    it('reads no description for an annotation from the API', async () => {
+        const eventBody = vi.fn()
+        bundle.client = { eventChannels: async () => [channel], eventBody }
+        const annotation = { ...eventToAnnotation(event(), channel, 'bundle:marks', 2), layer_id: 12 }
+
+        expect(await loadBundleDescription('viewer-1', annotation)).toBeUndefined()
+        expect(eventBody).not.toHaveBeenCalled()
     })
 })

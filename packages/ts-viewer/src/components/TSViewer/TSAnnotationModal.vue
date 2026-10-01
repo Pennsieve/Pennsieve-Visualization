@@ -108,6 +108,7 @@ import { ref, computed, watch, defineAsyncComponent, inject } from 'vue'
 import { createViewerStore } from '../../stores/tsviewer'
 import { storeToRefs } from 'pinia'
 import type { Annotation } from '@/utils/annotationUtils'
+import { isBundleLayerId, loadBundleDescription } from '@/composables/useBundleAnnotations'
 import IconSelection from "../icons/IconSelection.vue"
 
 // Async component imports
@@ -144,7 +145,36 @@ watch(() => props.visible, (newValue) => {
     hasRangeValue.value = true
     selectedRange.value = [startMs, endMs]
   }
+
+  showBundleDescription()
 }, { immediate: true })
+
+/**
+ * Fills in a bundle annotation's description, which its window arrived without.
+ *
+ * Kept on the annotation itself, so opening it again reads nothing.
+ */
+const showBundleDescription = async () => {
+  const annotation = activeAnnotation.value as Annotation
+  if (!isBundleLayerId(annotation.layer_id) || annotation.description !== undefined) {
+    return
+  }
+  try {
+    const description = await loadBundleDescription(viewerStore.$id, annotation)
+    // The dialog may have moved on to another annotation while the body was read.
+    if (activeAnnotation.value.id !== annotation.id) {
+      return
+    }
+    activeAnnotation.value.description = description ?? ''
+    const layer = viewerAnnotations.value.find((l) => l.id === annotation.layer_id)
+    const stored = layer?.annotations.find((a) => a.id === annotation.id)
+    if (stored) {
+      stored.description = activeAnnotation.value.description
+    }
+  } catch (err) {
+    console.warn('Could not read the annotation body from the bundle:', err)
+  }
+}
 
 
 // Define emits

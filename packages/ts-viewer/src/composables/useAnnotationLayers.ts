@@ -241,9 +241,10 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
             return null
         }
 
-        // 1. Layers carried in the bundle's event channels. Read-only, and read before the
-        // API so they show whether or not the API answers.
-        const bundleLayers = await loadBundleLayers(viewerStore.$id, viewerStore.viewerChannels.length)
+        // 1. Layers carried in the bundle's event channels. Read-only, and listed before
+        // the API is asked so they show whether or not it answers. Their annotations
+        // arrive by window, with the API's.
+        const bundleLayers = await loadBundleLayers(viewerStore.$id)
             .catch((error: unknown) => {
                 console.warn('Could not read annotation channels from the bundle:', error)
                 return []
