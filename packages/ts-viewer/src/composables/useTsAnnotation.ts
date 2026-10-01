@@ -7,6 +7,7 @@ import { useHandleXhrError } from '@/mixins/request/request_composable'
 import { useToken } from '@/composables/useToken'
 import { createViewerStore, type ViewerStore } from '../stores/tsviewer'
 import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
+import { isBundleLayerId } from '@/composables/useBundleAnnotations'
 
 interface ViewerChannel {
     id?: string
@@ -32,6 +33,16 @@ interface AnnotationApiResult {
 const rejectFailedResponse = (response: Response) => {
     if (!response.ok) {
         throw response
+    }
+}
+
+/**
+ * Refuses a write to a layer read from the bundle. It has no row in the API, so the
+ * request would fail, or worse, reach a real layer whose id happened to match.
+ */
+const requireWritableLayer = (layerId: number | string | undefined) => {
+    if (isBundleLayerId(layerId)) {
+        throw new Error(`Layer ${layerId} comes from the recording bundle and is read-only`)
     }
 }
 
@@ -69,6 +80,8 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
             // @ts-expect-error lib ES2020 omits the TypeError options parameter
             throw new TypeError("Missing annotation data or layer_id", annotationData)
         }
+
+        requireWritableLayer(annotationData.layer_id)
 
         // Assert that we only call this function on annotations without an existing ID
         if (annotationData.id) {
@@ -210,6 +223,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
             // @ts-expect-error lib ES2020 omits the TypeError options parameter
             throw new TypeError("Missing layer_id for annotation update", annotationData)
         }
+        requireWritableLayer(annotationData.layer_id)
 
         let start = annotationData.start
         let duration = annotationData.duration || (annotationData.end! - annotationData.start!)
@@ -284,6 +298,7 @@ export function useTsAnnotation(storeInstance: ViewerStore | null = null) {
             // @ts-expect-error lib ES2020 omits the TypeError options parameter
             throw new TypeError("Missing layer_id for annotation deletion", annotation)
         }
+        requireWritableLayer(annLayerId)
 
         const timeseriesId = viewerStore.activeViewer.content!.id
         const url = `${viewerStore.config.apiUrl}/timeseries/${timeseriesId}/layers/${annLayerId}/annotations/${annotation.id}`
