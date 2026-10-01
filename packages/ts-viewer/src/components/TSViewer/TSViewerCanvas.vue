@@ -371,6 +371,9 @@ const onAnnLayersInitialized = () => {
   if (viewerActiveTool.value === 'annotate') {
     ensureActiveAnnotationLayer()
   }
+  // Bundle layers arrive already holding their annotations, and no later
+  // annotationsReceived would draw them.
+  repaint()
   emit('annLayersInitialized')
 }
 

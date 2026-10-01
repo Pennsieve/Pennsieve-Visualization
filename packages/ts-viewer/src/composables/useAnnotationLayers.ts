@@ -5,6 +5,7 @@ import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import { useViewerEmitter } from '@/events/emitter'
 import { hexToRgbA } from '@/utils/annotationUtils'
+import { isBundleLayerId, loadBundleLayers } from '@/composables/useBundleAnnotations'
 import type { AnnotationLayer } from '@/utils/annotationUtils'
 
 interface ActiveViewer {
@@ -240,19 +241,51 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
             return null
         }
 
+        // 1. Layers carried in the bundle's event channels. Read-only, and read before the
+        // API so they show whether or not the API answers.
+        const bundleLayers = await loadBundleLayers(viewerStore.$id, viewerStore.viewerChannels.length)
+            .catch((error: unknown) => {
+                console.warn('Could not read annotation channels from the bundle:', error)
+                return []
+            })
+
+        // Bundle layers go after the API's, so the API's first layer stays the one selected
+        // for new annotations. Earlier bundle layers are replaced, not added to: this runs
+        // on mount and again on every viewer change.
+        const showBundleLayers = () => {
+            if (bundleLayers.length === 0) {
+                return
+            }
+            const apiLayers = viewerStore.viewerAnnotations.filter((layer) => !isBundleLayerId(layer.id))
+            viewerStore.setAnnotations([...apiLayers, ...bundleLayers])
+            emit('annLayersInitialized')
+        }
+
+        // 2. Layers from the API.
         let response: LayersResponse
         try {
             const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers?api_key=${token}`
             response = await useSendXhr(url) as LayersResponse
         } catch (error) {
+            // A bundle opened without the platform behind it (a local dev server, a public
+            // bundle) has no API to answer. Its own layers still show.
+            if (bundleLayers.length > 0) {
+                showBundleLayers()
+                return null
+            }
             useHandleXhrError(error)
             throw error
         }
 
         // Deliberately outside the catch above. A default-layer creation reports its
-        // own failure, and one failure must not raise two messages.
-        await initializeLayers(response, activeViewer, emit)
+        // own failure, and one failure must not raise two messages. The bundle's layers
+        // show even when that creation fails, since they depend on none of it.
+        try {
+            await initializeLayers(response, activeViewer, emit)
+        } finally {
+            showBundleLayers()
+        }
         return response
     }
 
