@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError } from "@/mixins/request/request_composable"
 import { annIndexOf } from '@/utils/annotationUtils'
+import { isBundleLayerId } from '@/composables/useBundleAnnotations'
 import type { Annotation, AnnotationLayer, LinkedPackageDTO } from '@/utils/annotationUtils'
 
 interface ViewerChannel {
@@ -125,6 +126,10 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
                 for (const curLayer of viewerAnnotations.value) {
                     if (!curLayer.id) {
                         console.warn('Layer ID is undefined, skipping annotation request for layer:', curLayer)
+                        continue
+                    }
+                    // Bundle layers arrive whole when the viewer opens; the API has no such layer.
+                    if (isBundleLayerId(curLayer.id)) {
                         continue
                     }
 
