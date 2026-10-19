@@ -6,6 +6,9 @@ export { useGetToken } from './composables/useGetToken'
 export { useViewerStyle, type ViewerStyleOverrides } from './composables/useViewerStyle'
 export { default as EditIcon } from './icons/EditIcon.vue'
 
+// Viewer assets: fetch + keep CloudFront credentials alive (public or private data)
+export * from './viewer-assets'
+
 // DuckDB interface (app provides the store via provide/inject)
 export type { DuckDBStoreInterface } from './duckdb'
 
