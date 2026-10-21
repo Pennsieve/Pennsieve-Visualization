@@ -9,8 +9,9 @@ export { default as EditIcon } from './icons/EditIcon.vue'
 // Viewer assets: fetch + keep CloudFront credentials alive (public or private data)
 export * from './viewer-assets'
 
-// DuckDB interface (app provides the store via provide/inject)
-export type { DuckDBStoreInterface } from './duckdb'
+// DuckDB: one shared instance per page, plus the 'duckdb' store DataExplorer/UMAP inject.
+// Core never imports @duckdb/duckdb-wasm itself; callers pass it in.
+export * from './duckdb'
 
 // Direct exports from component modules
 export * from './csv-viewer'

@@ -23,7 +23,7 @@ The following peer dependencies must be installed by the host application:
 
 ## DuckDB Setup
 
-`@pennsieve-viz/core` does **not** bundle or initialize DuckDB. The host application owns the DuckDB lifecycle and provides a store instance via Vue's `provide/inject`.
+`@pennsieve-viz/core` does **not** bundle DuckDB; you pass `@duckdb/duckdb-wasm` in (usually as a lazy `import()`), so apps that don't use DuckDB never load it. DataExplorer and UMAP get their store via Vue's `provide/inject`.
 
 ### 1. Install DuckDB
 
@@ -31,7 +31,33 @@ The following peer dependencies must be installed by the host application:
 npm install @duckdb/duckdb-wasm
 ```
 
-### 2. Create a DuckDB store
+### 2. Use the shared store (recommended)
+
+Core ships a store backed by **one DuckDB instance per page**, shared by every component and
+widget library that uses it:
+
+```js
+import { getSharedDuckDBStore } from '@pennsieve-viz/core'
+
+app.provide('duckdb', getSharedDuckDBStore(() => import('@duckdb/duckdb-wasm')))
+```
+
+Code that needs DuckDB directly (e.g. a widget library's data layer) can use the same instance:
+
+```js
+import { getSharedDuckDB } from '@pennsieve-viz/core'
+
+const db = await getSharedDuckDB(() => import('@duckdb/duckdb-wasm'))
+const conn = await db.connect()
+// Files are visible to all users of the instance: use a unique prefix and dropFile() when done
+await db.registerFileBuffer('my-lib/dataset-1/cells.parquet', bytes)
+```
+
+Calling `getSharedDuckDB` early starts DuckDB in the background (~1 s to download and compile).
+
+### Or bring your own store
+
+Your store must implement the `DuckDBStoreInterface` exported by this package:
 
 Your store must implement the `DuckDBStoreInterface` exported by this package:
 
@@ -53,7 +79,7 @@ The interface requires:
 | `sharedVersion` | Reactive number — incremented on each publish |
 | `formatIdFromUrl(srcUrl)` | Pure utility to derive a stable ID from a URL |
 
-### 3. Provide the store at the app root
+Provide it at the app root:
 
 ```js
 import { createApp } from 'vue'
