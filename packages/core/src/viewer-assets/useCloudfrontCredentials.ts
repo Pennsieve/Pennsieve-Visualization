@@ -15,8 +15,27 @@ export function readSource<T>(source: Source<T>): T {
 /** Renew this far ahead of a signature's expiry. CloudFront policies here last an hour. */
 const REFRESH_MARGIN_MS = 5 * 60 * 1000
 
-/** Wait this long before trying again after a failed renewal. */
+/** First retry after a failed renewal; doubles per consecutive failure up to MAX_RETRY_MS. */
 const RETRY_MS = 30 * 1000
+const MAX_RETRY_MS = 10 * 60 * 1000
+
+/**
+ * Never renew again sooner than this after a renewal, even if the new policy is already
+ * near expiry (a client clock far ahead, or a backend reusing a policy). Without it the
+ * next renewal would be scheduled immediately, over and over.
+ */
+const MIN_RENEW_INTERVAL_MS = 60 * 1000
+
+/** setTimeout fires immediately for delays longer than this (~24.8 days). */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1
+
+/** HTTP statuses a retry won't fix: the asset is gone or access has changed. */
+const PERMANENT_STATUSES = [401, 403, 404]
+
+function isPermanentFailure(e: unknown): boolean {
+  const { status, permanent } = (e ?? {}) as { status?: number; permanent?: boolean }
+  return permanent === true || (status !== undefined && PERMANENT_STATUSES.includes(status))
+}
 
 export interface UseCloudfrontCredentialsOptions {
   /** Credentials the asset was loaded with. A change resets the schedule. */
@@ -36,6 +55,11 @@ export interface UseCloudfrontCredentialsOptions {
  * hidden, so a laptop that slept past the expiry would otherwise wait for its next tick).
  * Credentials with no readable expiry, or none at all for a public bucket, are never renewed.
  *
+ * A failed renewal is retried with backoff (30 s doubling to 10 min). Failures a retry won't
+ * fix -- 401/403/404, or a renewal that comes back with no credentials -- stop the schedule;
+ * the next attempt is when the tab becomes visible again, `refresh()` is called, or new
+ * credentials arrive from outside.
+ *
  * Each renewal assigns a new object, so `watch`ers on `cloudfront` -- such as
  * `OrthogonalFrame`'s, which forwards it to the embedded viewer -- see the change.
  */
@@ -49,6 +73,7 @@ export function useCloudfrontCredentials({ initial, renew }: UseCloudfrontCreden
   // in flight for the previous asset cannot overwrite them.
   let generation = 0
   let inFlight: Promise<void> | null = null
+  let failures = 0
 
   function clearTimer() {
     if (timer !== undefined) clearTimeout(timer)
@@ -57,16 +82,16 @@ export function useCloudfrontCredentials({ initial, renew }: UseCloudfrontCreden
 
   function scheduleIn(delayMs: number) {
     clearTimer()
-    timer = setTimeout(refresh, Math.max(0, delayMs))
+    timer = setTimeout(refresh, Math.min(Math.max(0, delayMs), MAX_TIMEOUT_MS))
   }
 
-  function scheduleFromExpiry() {
+  function scheduleFromExpiry(minDelayMs = 0) {
     const expiresAt = cloudfrontExpiryMs(cloudfront.value)
     if (expiresAt === null) {
       clearTimer()
       return
     }
-    scheduleIn(expiresAt - REFRESH_MARGIN_MS - Date.now())
+    scheduleIn(Math.max(expiresAt - REFRESH_MARGIN_MS - Date.now(), minDelayMs))
   }
 
   function isExpiring() {
@@ -85,15 +110,28 @@ export function useCloudfrontCredentials({ initial, renew }: UseCloudfrontCreden
         const next = await renew()
         if (gen !== generation) return
         if (!hasCloudfrontCredentials(next)) {
-          throw new Error('Renewal returned no CloudFront credentials')
+          // Public data has nothing to renew
+          if (!hasCloudfrontCredentials(cloudfront.value)) {
+            clearTimer()
+            return
+          }
+          throw Object.assign(new Error('Renewal returned no CloudFront credentials'), {
+            permanent: true,
+          })
         }
         cloudfront.value = { ...next }
         error.value = null
-        scheduleFromExpiry()
+        failures = 0
+        scheduleFromExpiry(MIN_RENEW_INTERVAL_MS)
       } catch (e) {
         if (gen !== generation) return
         error.value = `Credential refresh failed: ${e instanceof Error ? e.message : String(e)}`
-        scheduleIn(RETRY_MS)
+        if (isPermanentFailure(e)) {
+          clearTimer()
+          return
+        }
+        failures++
+        scheduleIn(Math.min(RETRY_MS * 2 ** (failures - 1), MAX_RETRY_MS))
       } finally {
         if (inFlight === run) {
           inFlight = null
@@ -114,6 +152,7 @@ export function useCloudfrontCredentials({ initial, renew }: UseCloudfrontCreden
     (next) => {
       generation++
       inFlight = null
+      failures = 0
       refreshing.value = false
       error.value = null
       cloudfront.value = next ?? null
