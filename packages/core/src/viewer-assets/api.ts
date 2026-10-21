@@ -36,6 +36,17 @@ export interface FetchViewerAssetsOptions {
   datasetId?: string
 }
 
+/** A viewer-asset request that failed with an HTTP error. */
+export class ViewerAssetRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+    this.name = 'ViewerAssetRequestError'
+  }
+}
+
 async function getJson(url: string, getToken?: GetToken): Promise<any | null> {
   const headers: Record<string, string> = {}
   if (getToken) {
@@ -46,7 +57,10 @@ async function getJson(url: string, getToken?: GetToken): Promise<any | null> {
   // 404 means the package has no viewer assets -- an expected case, not an error.
   if (response.status === 404) return null
   if (!response.ok) {
-    throw new Error(`Viewer asset request failed: ${response.status} ${response.statusText}`)
+    throw new ViewerAssetRequestError(
+      `Viewer asset request failed: ${response.status} ${response.statusText}`,
+      response.status,
+    )
   }
   return response.json()
 }
