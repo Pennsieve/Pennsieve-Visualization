@@ -89,8 +89,16 @@ onMounted(() => {
   }, 500)
 })
 
+// Messages carry signing params and the source to load, so take them only
+// from the page framing this one (frame-ancestors limits which that can be),
+// never from a page that merely opened it.
+function fromParent(event: MessageEvent) {
+  return window.parent !== window && event.source === window.parent
+}
+
 // Listen for messages from parent window
 window.addEventListener('message', async (event) => {
+  if (!fromParent(event)) return
   const { type, payload } = event.data || {}
 
   if (type) console.log('[EmbedApp] received message:', type, type === 'set-cloudfront-params' ? `(payload length: ${payload?.length})` : '')
