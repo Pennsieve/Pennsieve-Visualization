@@ -62,6 +62,7 @@ const annLabelArea = ref<HTMLCanvasElement | null>(null)
 
 // Composables
 const {
+  cachedAnnRange,
   checkAnnotationRange,
   findNextAnnotation,
   findPreviousAnnotation
@@ -136,40 +137,44 @@ const createLayer = async (newLayer: NewLayer) => {
   }
 }
 
-// Watch for activeViewer changes
-watch(
-  () => props.activeViewer,
-  async (newValue) => {
-    try {
-      await loadLayers(newValue as LayersViewer, emit)
-      await checkAnnotationRange(
-        props.start!,
-        props.start! + props.duration!,
-        props as DataProps,
-        newValue as DataViewer,
-        emit
-      )
-    } catch (error) {
-      console.error('Error loading annotations for new viewer:', error)
-    }
-  }
-)
-
-// Lifecycle
-onMounted(async () => {
+/**
+ * Loads a viewer's layers, then the annotations in view.
+ *
+ * The annotations are fetched even when layer setup fails part way, such as the API
+ * refusing to create a default layer: the layers that did load, the bundle's among
+ * them, still need their annotations.
+ */
+const loadAnnotations = async (viewer: unknown) => {
   try {
-    await loadLayers(props.activeViewer as LayersViewer, emit)
+    await loadLayers(viewer as LayersViewer, emit)
+  } catch (error) {
+    console.warn('Error initializing annotation layers:', error)
+  }
+
+  // loadLayers replaced every layer with an empty one, so nothing fetched for a
+  // previous viewer is still held. Without this the cache would skip those spans.
+  cachedAnnRange.value = []
+  try {
     await checkAnnotationRange(
       props.start!,
       props.start! + props.duration!,
       props as DataProps,
-      props.activeViewer as DataViewer,
+      viewer as DataViewer,
       emit
     )
   } catch (error) {
-    console.warn('Error initializing annotations:', error)
+    console.warn('Error loading annotations:', error)
   }
-})
+}
+
+// Watch for activeViewer changes
+watch(
+  () => props.activeViewer,
+  (newValue) => loadAnnotations(newValue)
+)
+
+// Lifecycle
+onMounted(() => loadAnnotations(props.activeViewer))
 
 // Expose methods for parent component
 defineExpose({
