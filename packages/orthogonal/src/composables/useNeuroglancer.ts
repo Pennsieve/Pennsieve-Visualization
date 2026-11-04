@@ -399,6 +399,12 @@ export function useNeuroglancer() {
               name: ch.label || `Channel ${i}`,
               shader: buildColorShader(rgb),
               shaderControls: { normalized: { range } },
+              // Add channels at full strength, like a fluorescence overlay.
+              // Neuroglancer's defaults (opacity 0.5, alpha blending) draw each
+              // layer at half strength over the previous ones, so with 4 channels
+              // the first one contributes only ~6%.
+              opacity: 1,
+              blend: 'additive',
               visible: ch.active !== false,
               ...volumeDefaults,
               localDimensions: { "c'": [1, ''] },
