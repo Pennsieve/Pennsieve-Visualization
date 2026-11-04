@@ -399,8 +399,21 @@ export function useNeuroglancer() {
               name: ch.label || `Channel ${i}`,
               shader: buildColorShader(rgb),
               shaderControls: { normalized: { range } },
+              // Add channels at full strength, like a fluorescence overlay.
+              // Neuroglancer's defaults (opacity 0.5, alpha blending) draw each
+              // layer at half strength over the previous ones, so with 4 channels
+              // the first one contributes only ~6%.
+              opacity: 1,
+              blend: 'additive',
               visible: ch.active !== false,
               ...volumeDefaults,
+              // Fluorescence is bright signal on a black background, so the 3D view
+              // uses a maximum intensity projection. Neuroglancer reads the mode from
+              // "volumeRendering" ("off" | "on" | "max" | "min"); "volumeRenderingMode"
+              // is not a state key and is ignored. With the shared default ("on",
+              // gain -5) each voxel is drawn at ~0.7% opacity and the volume looks empty.
+              volumeRendering: 'max',
+              volumeRenderingGain: 0,
               localDimensions: { "c'": [1, ''] },
               localPosition: [i],
             }
