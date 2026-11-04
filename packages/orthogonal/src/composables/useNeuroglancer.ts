@@ -407,6 +407,13 @@ export function useNeuroglancer() {
               blend: 'additive',
               visible: ch.active !== false,
               ...volumeDefaults,
+              // Fluorescence is bright signal on a black background, so the 3D view
+              // uses a maximum intensity projection. Neuroglancer reads the mode from
+              // "volumeRendering" ("off" | "on" | "max" | "min"); "volumeRenderingMode"
+              // is not a state key and is ignored. With the shared default ("on",
+              // gain -5) each voxel is drawn at ~0.7% opacity and the volume looks empty.
+              volumeRendering: 'max',
+              volumeRenderingGain: 0,
               localDimensions: { "c'": [1, ''] },
               localPosition: [i],
             }
