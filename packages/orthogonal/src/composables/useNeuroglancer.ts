@@ -264,8 +264,14 @@ export function useNeuroglancer() {
       if (allValues.length === 0) return null
 
       allValues.sort((a, b) => a - b)
-      const p01 = allValues[0]
-      const p99 = allValues[allValues.length - 1]
+      const last = allValues.length - 1
+      let p01 = allValues[Math.floor(last * 0.01)]
+      let p99 = allValues[Math.ceil(last * 0.99)]
+      if (p99 <= p01) {
+        // Mostly one value (e.g. empty background): fall back to the full min/max
+        p01 = allValues[0]
+        p99 = allValues[last]
+      }
       console.log(`[useNeuroglancer] computed data range from ${allValues.length} values: [${p01}, ${p99}]`)
       return [p01, p99]
     } catch (e) {
@@ -373,9 +379,12 @@ export function useNeuroglancer() {
       }
 
       if (omeroChannels && omeroChannels.length > 0) {
-        // Multi-channel (fluorescence): one layer per channel, each pinned to a channel index
+        // Multi-channel (fluorescence): one layer per channel, each pinned to a channel index.
+        // Each layer starts with its own omero window (or the computed range when it has
+        // none), so dataRange is not returned: applying one shared range afterwards would
+        // overwrite the per-channel windows the converter measured.
         return {
-          dataRange,
+          dataRange: null,
           isVolumetric,
           layers: omeroChannels.map((ch, i) => {
             const colorHex = ch.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length].replace('#', '')
