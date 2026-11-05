@@ -7,11 +7,12 @@
 // Bundle layers are read-only. They have no row in the API, so their ids are prefixed
 // with BUNDLE_LAYER_PREFIX and every path that writes to the API skips them.
 //
-// Annotations arrive a window at a time, like the API's, and without bodies: drawing a
-// mark needs none, and bodies are most of a channel's bytes. A body is read when an
-// annotation is opened.
-import type { EventChannelInfo, EventRecord } from '@pennsieve/timeseries-zarr-reader'
+// Annotations arrive a window at a time, like the API's. Each window carries every
+// column the channel stores, text included; a TS-Zarr 1.0 text column is one array
+// read beside the times.
+import type { EventChannelInfo, EventWindow } from '@pennsieve/timeseries-zarr-reader'
 import { getClient } from './streaming/clientRegistry'
+import { isAnnotationChannel } from './streaming/channelDetails'
 import { hexToRgbA } from '@/utils/annotationUtils'
 import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
 
@@ -31,17 +32,17 @@ function eventChannelId(layerId: string): string {
 }
 
 /**
- * The text to show for an event body.
+ * The text to show for an event.
  *
- * A JSON body shows its `description` field when it has one. Anything else, including
- * JSON that does not parse, shows as stored.
+ * An extractor that writes JSON bodies puts the note under `description`; that is shown
+ * on its own. Anything else, including JSON without one, shows as stored.
  */
-export function bodyToDescription(body: string | undefined, mediaType: string): string | undefined {
-    if (body === undefined || mediaType !== 'application/json') {
-        return body
+export function textToDescription(text: string | undefined): string | undefined {
+    if (text === undefined || !text.startsWith('{')) {
+        return text
     }
     try {
-        const parsed: unknown = JSON.parse(body)
+        const parsed: unknown = JSON.parse(text)
         const description = (parsed as { description?: unknown } | null)?.description
         if (typeof description === 'string') {
             return description
@@ -49,44 +50,59 @@ export function bodyToDescription(body: string | undefined, mediaType: string): 
     } catch {
         // Not JSON after all; fall through and show it raw.
     }
-    return body
+    return text
 }
 
 /**
- * Converts one bundle event into the viewer's annotation shape.
+ * Converts one window of a bundle event channel into the viewer's annotation shape.
  *
- * An event with no channel refs applies to the whole recording, as does one naming
- * every channel on screen.
+ * An annotation's id is its layer and onset time, so the same event read in two
+ * overlapping windows dedupes; events sharing an onset are numbered. An event with no
+ * channel scope applies to the whole recording, as does one naming every channel on
+ * screen.
  */
-export function eventToAnnotation(
-    event: EventRecord,
+export function windowToAnnotations(
+    window: EventWindow,
     channel: EventChannelInfo,
     layerId: string,
     channelCount: number
-): Annotation {
-    return {
-        id: `${layerId}:${event.index}`,
-        name: '',
-        label: event.label ?? channel.name,
-        description: bodyToDescription(event.body, channel.bodyMediaType),
-        start: event.timeUs,
-        duration: event.durationUs,
-        end: event.timeUs + event.durationUs,
-        cStart: null,
-        cEnd: null,
-        selected: false,
-        channelIds: [...event.channels],
-        allChannels: event.channels.length === 0 || event.channels.length >= channelCount,
-        layer_id: layerId
+): Annotation[] {
+    const annotations: Annotation[] = []
+    let previousTime = Number.NaN
+    let tie = 0
+    for (let i = 0; i < window.times.length; i++) {
+        const timeUs = window.times[i]
+        tie = timeUs === previousTime ? tie + 1 : 0
+        previousTime = timeUs
+        const duration = window.durations?.[i] ?? 0
+        const labelIndex = window.labels?.[i]
+        const label = labelIndex === undefined ? undefined : channel.labelNames?.[labelIndex]
+        const channels = window.channels?.[i] ?? []
+        annotations.push({
+            id: tie === 0 ? `${layerId}:${timeUs}` : `${layerId}:${timeUs}:${tie}`,
+            name: '',
+            label: label ?? channel.name,
+            description: textToDescription(window.text?.[i]),
+            start: timeUs,
+            duration,
+            end: timeUs + duration,
+            cStart: null,
+            cEnd: null,
+            selected: false,
+            channelIds: [...channels],
+            allChannels: channels.length === 0 || channels.length >= channelCount,
+            layer_id: layerId
+        })
     }
+    return annotations
 }
 
 /**
- * Lists the viewer's open bundle's event channels as empty, read-only annotation layers.
+ * Lists the viewer's open bundle's annotation channels as empty, read-only layers.
  *
  * Reads only the catalog the client already holds. The annotations themselves arrive
- * through queryBundleLayer as the viewer moves. Returns no layers when the viewer has no
- * bundle open.
+ * through queryBundleLayer as the viewer moves. Spike channels are rows, not layers,
+ * and are left out. Returns no layers when the viewer has no bundle open.
  *
  * @param storeId The viewer store's id, which is also its reader client's registry key.
  */
@@ -96,7 +112,7 @@ export async function loadBundleLayers(storeId: string): Promise<AnnotationLayer
         return []
     }
 
-    const channels = await entry.client.eventChannels()
+    const channels = (await entry.client.channelInfo()).filter(isAnnotationChannel)
     return channels.map((channel, i) => {
         const hexColor = BUNDLE_COLORS[i % BUNDLE_COLORS.length]
         return {
@@ -117,14 +133,17 @@ export async function loadBundleLayers(storeId: string): Promise<AnnotationLayer
 /** One window of a bundle layer's annotations. */
 export interface BundleLayerWindow {
     annotations: Annotation[]
-    /** Every annotation before this time is in the window; a limit can stop it short. */
+    /** Every annotation before this time is in the window. */
     endUs: number
 }
 
 /**
- * Reads up to `limit` of a bundle layer's annotations in [startUs, endUs), without bodies.
+ * Reads a bundle layer's annotations in [startUs, endUs), including intervals that
+ * opened before the window and are still running.
  *
- * Returns null when the viewer no longer has a bundle open.
+ * The reader has no fetch limit, so `limit` is accepted for the API path's sake and
+ * the whole window is read. Returns null when the viewer no longer has a bundle open
+ * or the layer's channel is gone.
  */
 export async function queryBundleLayer(
     storeId: string,
@@ -140,39 +159,36 @@ export async function queryBundleLayer(
     }
 
     const channelId = eventChannelId(layerId)
-    const [channels, window] = await Promise.all([
-        entry.client.eventChannels(),
-        entry.client.queryEvents({ channel: channelId, startUs, endUs, limit, bodies: false })
-    ])
-    const channel = channels.find((c) => c.id === channelId)
+    const channel = (await entry.client.channelInfo())
+        .find((c): c is EventChannelInfo => c.kind === 'event' && c.id === channelId)
     if (!channel) {
         return null
     }
-    return {
-        annotations: window.events.map((event) => eventToAnnotation(event, channel, layerId, channelCount)),
-        endUs: window.endUs
+
+    for await (const window of entry.client.queryEvents({
+        channels: [channelId],
+        startUs,
+        endUs,
+        columns: ['durations', 'labels', 'text', 'channels']
+    })) {
+        return {
+            annotations: windowToAnnotations(window, channel, layerId, channelCount),
+            endUs: window.endUs
+        }
     }
+    return null
 }
 
 /**
- * Reads the description of one bundle annotation, which windows arrive without.
+ * The description of one bundle annotation.
  *
- * Undefined when the annotation's channel stores no bodies or the bundle is gone.
+ * Kept for the annotation dialog, which asks when a description is missing. A window
+ * carries its text, so there is nothing further to read: an annotation without a
+ * description comes from a channel that stores no text.
  */
 export async function loadBundleDescription(storeId: string, annotation: Annotation): Promise<string | undefined> {
-    const entry = getClient(storeId)
-    const layerId = annotation.layer_id
-    if (!entry || !isBundleLayerId(layerId)) {
+    if (!getClient(storeId) || !isBundleLayerId(annotation.layer_id)) {
         return undefined
     }
-
-    // eventToAnnotation builds the id as `${layerId}:${index}`.
-    const index = Number(String(annotation.id).slice(layerId.length + 1))
-    const channelId = eventChannelId(layerId)
-    const [channels, body] = await Promise.all([
-        entry.client.eventChannels(),
-        entry.client.eventBody({ channel: channelId, index })
-    ])
-    const mediaType = channels.find((c) => c.id === channelId)?.bodyMediaType ?? 'text/plain'
-    return bodyToDescription(body, mediaType)
+    return annotation.description
 }

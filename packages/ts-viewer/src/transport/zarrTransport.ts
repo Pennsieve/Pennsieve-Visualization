@@ -424,25 +424,27 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
         const delivered = new Set<TraceIdentity>()
         let completed = false
         try {
+            // The raster draws event times alone, so no per-event column is read.
             const options = {
                 channels: traces.map((trace) => trace.chId),
                 startUs: req.startTime,
                 endUs: req.endTime,
                 pixelWidthUs: req.pixelWidth,
+                columns: [],
                 signal
             }
             let index = 0
-            for await (const batch of activeEntry.client.queryUnits(options)) {
+            for await (const window of activeEntry.client.queryEvents(options)) {
                 const identity = traces[index]
                 index++
                 if (!identity || gen !== generation || signal.aborted) {
                     continue
                 }
                 delivered.add(identity)
-                // Emitted even when the batch is empty; unlike the legacy path,
+                // Emitted even when the window is empty; unlike the legacy path,
                 // which dropped empty event frames, the transport must respond
                 // or the page never completes.
-                emitEvent(buildNeuralSegm(batch, identity, req), req)
+                emitEvent(buildNeuralSegm(window, identity, req), req)
             }
             completed = true
         } catch (error) {
@@ -691,6 +693,10 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
                 continue
             }
 
+            if (resolved.info.kind !== 'continuous') {
+                reportError({ error: `Filter not applied to ${resolved.label}: an event channel has no samples to filter` })
+                continue
+            }
             // A montaged pair has equal rates by construction, so the lead's
             // native rate stands in for the pair.
             const check: SpecValidation = validateSpecForRate(parsed.spec, resolved.info.rateHz)
@@ -712,14 +718,14 @@ export function createZarrTransport(deps: ZarrTransportDeps): TimeseriesTranspor
 
     /**
      * Availability spans from the bundle's coarsest pyramid level, matching the
-     * scrubber's Zarr branch: a montaged id resolves to its lead channel, and a
-     * unit channel answers no spans because it has no pyramid and would make
+     * scrubber's Zarr branch: a montaged id resolves to its lead channel, and an
+     * event channel answers no spans because it has no pyramid and would make
      * the reader throw.
      */
     const dataSpans = async (query: DataSpanQuery): Promise<Array<[number, number]>> => {
         const activeEntry = entry
         const resolved = resolveClientChannel(query.channel)
-        if (!activeEntry || !resolved || resolved.info.kind === 'unit') {
+        if (!activeEntry || !resolved || resolved.info.kind !== 'continuous') {
             return []
         }
         return await activeEntry.client.dataSpans({

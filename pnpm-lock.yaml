@@ -235,8 +235,8 @@ importers:
   packages/ts-viewer:
     dependencies:
       '@pennsieve/timeseries-zarr-reader':
-        specifier: 0.7.0-alpha.0
-        version: 0.7.0-alpha.0
+        specifier: 1.0.0-beta.0
+        version: 1.0.0-beta.0
       protobufjs:
         specifier: ^7.6.3
         version: 7.6.5
@@ -1085,8 +1085,8 @@ packages:
     resolution: {integrity: sha512-dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg==}
     engines: {node: '>= 10.0.0'}
 
-  '@pennsieve/timeseries-zarr-reader@0.7.0-alpha.0':
-    resolution: {integrity: sha512-G9LpCfgtOMNQw5D+yoAmzirkrmMCQD6paHf8Gs5ouV8++NsvQjGOkp0mhAATmneRvIDbxLPTnW63znVl4zo56g==}
+  '@pennsieve/timeseries-zarr-reader@1.0.0-beta.0':
+    resolution: {integrity: sha512-Frcd/1t+3IjoaBofy1208lkcENp3v5Y3TOv9pQJzXp24YEAPLlUwdMaifb1fXyLeSIOdeVeIXIKPTU64n2YHFg==}
     engines: {node: '>=20'}
 
   '@petamoriken/float16@3.9.3':
@@ -3988,8 +3988,8 @@ packages:
     resolution: {integrity: sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==}
     engines: {node: '>=10'}
 
-  p-limit@7.3.1:
-    resolution: {integrity: sha512-0trZaiG7Y7kN/Egy9a8j47t9osC0Tch4PaIWd9yGF6bvmlk7muExRvGNYb8sXBwEKMoNKsbNN9P8EefuQekE4Q==}
+  p-limit@7.3.3:
+    resolution: {integrity: sha512-SKgVvDU5TNIxQ4r30U75BNLC6a+6GOEjngrk/ysM5+Zu3oJuk1SC5ApzIzY/7PjCEjoVPMWJ0zho/4QUiEB7TQ==}
     engines: {node: '>=20'}
 
   p-locate@4.1.0:
@@ -5305,8 +5305,8 @@ packages:
   zarrita@0.5.4:
     resolution: {integrity: sha512-i88iN2+HqIQ+uiCEWLfhjbYNXAJD7IrM4h3lFwFclfqEOOhxp10amRWtqmgN5jbuy3+h0LwdyLVVzk4y9rTLgg==}
 
-  zarrita@0.7.4:
-    resolution: {integrity: sha512-NChufj86SceFj45z4CYjndmI98dphaG7hU8Wj0UGpMyT21o0V3HTY6zo87aSobYWts1tNFivSXzH2AR1AkaWjA==}
+  zarrita@0.7.5:
+    resolution: {integrity: sha512-ZriOSEne+Wf2iuM0yjDZvUKpHNlug3dO7qJ6mAxXoOgsYV18DPOkAkwB9e0rf21bHcKcOffFuwoZwn5g6pvUeA==}
 
   zod-to-json-schema@3.25.1:
     resolution: {integrity: sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==}
@@ -6294,11 +6294,11 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.1
     optional: true
 
-  '@pennsieve/timeseries-zarr-reader@0.7.0-alpha.0':
+  '@pennsieve/timeseries-zarr-reader@1.0.0-beta.0':
     dependencies:
       fili: 2.0.3
-      p-limit: 7.3.1
-      zarrita: 0.7.4
+      p-limit: 7.3.3
+      zarrita: 0.7.5
 
   '@petamoriken/float16@3.9.3': {}
 
@@ -9551,7 +9551,7 @@ snapshots:
     dependencies:
       yocto-queue: 0.1.0
 
-  p-limit@7.3.1:
+  p-limit@7.3.3:
     dependencies:
       yocto-queue: 1.2.2
 
@@ -10910,7 +10910,7 @@ snapshots:
       '@zarrita/storage': 0.1.4
       numcodecs: 0.3.2
 
-  zarrita@0.7.4:
+  zarrita@0.7.5:
     dependencies:
       '@zarrita/storage': 0.2.0
       numcodecs: 0.3.2
