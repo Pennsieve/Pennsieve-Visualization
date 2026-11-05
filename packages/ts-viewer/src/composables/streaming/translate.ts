@@ -1,7 +1,7 @@
 // @/composables/streaming/translate.ts
 
 import { specSignature } from './filters'
-import type { ChannelInfo, FilterSpec, MontagePair } from '@pennsieve/timeseries-zarr-reader'
+import type { ContinuousChannelInfo, FilterSpec, MontagePair } from '@pennsieve/timeseries-zarr-reader'
 import type { CatalogIndex } from './channelDetails'
 
 /** Separator the viewer puts between a montage pair's two channel NAMES. */
@@ -190,8 +190,8 @@ export function isMontageLabel(
 export interface ResolvedMontagePair {
     ok: true
     pair: MontagePair
-    leadInfo: ChannelInfo
-    secondaryInfo: ChannelInfo
+    leadInfo: ContinuousChannelInfo
+    secondaryInfo: ContinuousChannelInfo
 }
 
 export interface RejectedMontagePair {
@@ -240,12 +240,12 @@ export function resolveMontagePair(
         return { ok: false, reason: `Unknown montage secondary channel name "${secondaryName}"` }
     }
 
-    if (leadInfo.kind === 'unit' || secondaryInfo.kind === 'unit') {
-        const units = [
-            leadInfo.kind === 'unit' ? leadName : null,
-            secondaryInfo.kind === 'unit' ? secondaryName : null
+    if (leadInfo.kind !== 'continuous' || secondaryInfo.kind !== 'continuous') {
+        const events = [
+            leadInfo.kind !== 'continuous' ? leadName : null,
+            secondaryInfo.kind !== 'continuous' ? secondaryName : null
         ].filter(Boolean)
-        return { ok: false, reason: `Cannot montage unit channel(s): ${units.join(', ')}` }
+        return { ok: false, reason: `Cannot montage event channel(s): ${events.join(', ')}` }
     }
 
     if (leadInfo.rateHz !== secondaryInfo.rateHz) {
@@ -277,7 +277,7 @@ export function resolveMontagePair(
  * against its pending channels on serverId plus label, and a compound key matches nothing.
  * A montaged trace takes its unit from the lead channel.
  *
- * Unit channels go to `unitTraces` for a separate `queryUnits` call. Anything the catalog
+ * Event channels go to `unitTraces` for a separate `queryEvents` call. Anything the catalog
  * does not know, and any montage pair that cannot be resolved, goes to `invalid`; the caller
  * must still emit one gap per invalid trace or the page's response counter never drains.
  *
@@ -364,8 +364,8 @@ export function partitionRequest(
             continue
         }
 
-        if (info.kind === 'unit') {
-            unitTraces.push(identityFor(vc, clientId, info.unit))
+        if (info.kind === 'event') {
+            unitTraces.push(identityFor(vc, clientId, info.unit ?? ''))
             continue
         }
 
