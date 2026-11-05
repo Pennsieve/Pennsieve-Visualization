@@ -6,6 +6,9 @@ import type {
   NeuroglancerStateJSON,
 } from '../types'
 
+// Brightness slider range, in stops (each stop doubles or halves brightness)
+export const BRIGHTNESS_MAX_STOPS = 2
+
 // Default colors for channels when none detected
 const DEFAULT_COLORS = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff']
 
@@ -46,11 +49,14 @@ function buildColorShader(rgb: [number, number, number]): string {
 
 /**
  * Build a shader that composites 3 bundled channels as RGB.
+ * RGB has no invlerp range, so the brightness slider scales it through the
+ * "brightness" control instead.
  */
 function buildRGBShader(): string {
   return [
+    `#uicontrol float brightness slider(min=${2 ** -BRIGHTNESS_MAX_STOPS}, max=${2 ** BRIGHTNESS_MAX_STOPS}, default=1)`,
     'void main() {',
-    '  emitRGB(vec3(',
+    '  emitRGB(brightness * vec3(',
     '    toNormalized(getDataValue(0)),',
     '    toNormalized(getDataValue(1)),',
     '    toNormalized(getDataValue(2))',
@@ -75,6 +81,11 @@ export function useNeuroglancer() {
   const position = ref<[number, number, number]>([0, 0, 0])
   const channels = ref<ChannelConfig[]>([])
   const layout = ref<LayoutMode>('4panel')
+  // Brightness in stops: 0 = the range the viewer opened with, +1 = twice as bright
+  const brightness = ref(0)
+  // Each layer's invlerp range before any brightness change, by layer name.
+  // Keyed by name because restoreState (layout/visibility changes) can rebuild layers.
+  let baseRanges = new Map<string, [number, number]>()
 
   let rafId: number | null = null
 
@@ -498,6 +509,8 @@ export function useNeuroglancer() {
     container.value = el
     isLoading.value = true
     error.value = null
+    brightness.value = 0
+    baseRanges = new Map()
 
     try {
       // Clear URL hash so stale neuroglancer state from a previous
@@ -540,6 +553,42 @@ export function useNeuroglancer() {
       error.value = e instanceof Error ? e : new Error(String(e))
       isLoading.value = false
       throw error.value
+    }
+  }
+
+  /**
+   * Brighten or darken every layer. For invlerp layers (grayscale and colored
+   * channels) the top of the display range moves: brighter lowers it, so more of
+   * the data reaches full intensity; darker raises it, bringing back detail in
+   * saturated areas. The bottom of the range stays put. RGB layers are scaled by
+   * their "brightness" shader control instead.
+   */
+  function setBrightness(stops: number) {
+    brightness.value = stops
+    const v = viewer.value
+    const managedLayers = v?.layerManager?.managedLayers
+    if (!managedLayers) return
+    const gain = Math.pow(2, stops)
+
+    for (const ml of managedLayers) {
+      const controls = ml.layer?.shaderControlState?.state
+      if (!controls) continue
+
+      const normalized = controls.get('normalized')?.trackable
+      if (normalized?.value?.range) {
+        const name = ml.name as string
+        if (!baseRanges.has(name)) {
+          baseRanges.set(name, [Number(normalized.value.range[0]), Number(normalized.value.range[1])])
+        }
+        const [lo, hi] = baseRanges.get(name)!
+        let end = lo + (hi - lo) / gain
+        // Integer data: keep whole-number bounds, and never collapse the range
+        if (Number.isInteger(lo) && Number.isInteger(hi)) end = Math.max(lo + 1, Math.round(end))
+        normalized.value = { ...normalized.value, range: [lo, end] }
+      }
+
+      const rgbBrightness = controls.get('brightness')?.trackable
+      if (rgbBrightness) rgbBrightness.value = gain
     }
   }
 
@@ -613,6 +662,7 @@ export function useNeuroglancer() {
     position,
     channels,
     layout,
+    brightness,
 
     // Actions
     init,
@@ -620,6 +670,7 @@ export function useNeuroglancer() {
     setChannelVisibility,
     setLayout,
     setPosition,
+    setBrightness,
     getState,
   }
 }

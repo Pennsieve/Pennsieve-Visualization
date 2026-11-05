@@ -45,6 +45,32 @@
         </div>
       </div>
 
+      <!-- Brightness -->
+      <div class="ortho-controls__section">
+        <div class="ortho-controls__label-row">
+          <span class="ortho-controls__label">Brightness</span>
+          <button
+            v-if="brightness !== 0"
+            class="ortho-controls__reset"
+            @click="$emit('set-brightness', 0)"
+            title="Back to the default brightness"
+          >
+            Reset
+          </button>
+        </div>
+        <input
+          class="ortho-controls__slider"
+          type="range"
+          :min="-BRIGHTNESS_MAX_STOPS"
+          :max="BRIGHTNESS_MAX_STOPS"
+          step="0.05"
+          :value="brightness"
+          @input="$emit('set-brightness', Number(($event.target as HTMLInputElement).value))"
+          @dblclick="$emit('set-brightness', 0)"
+          title="Drag left to darken, right to brighten (double-click to reset)"
+        />
+      </div>
+
       <!-- Position display -->
       <div class="ortho-controls__section">
         <div class="ortho-controls__label">Position</div>
@@ -84,16 +110,19 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { ChannelConfig, LayoutMode } from '../types'
+import { BRIGHTNESS_MAX_STOPS } from '../composables/useNeuroglancer'
 
 defineProps<{
   channels: ChannelConfig[]
   position: [number, number, number]
   layout: LayoutMode
+  brightness: number
 }>()
 
 defineEmits<{
   'toggle-channel': [index: number, visible: boolean]
   'set-layout': [mode: LayoutMode]
+  'set-brightness': [stops: number]
 }>()
 
 const collapsed = ref(false)
@@ -174,6 +203,32 @@ const layoutModes = [
   background: rgba(100, 160, 255, 0.3);
   border-color: rgba(100, 160, 255, 0.5);
   color: #fff;
+}
+
+.ortho-controls__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ortho-controls__reset {
+  padding: 0 4px;
+  background: none;
+  border: none;
+  color: #64a0ff;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.ortho-controls__reset:hover {
+  color: #fff;
+}
+
+.ortho-controls__slider {
+  width: 100%;
+  margin: 0;
+  accent-color: #64a0ff;
+  cursor: pointer;
 }
 
 .ortho-controls__position {
