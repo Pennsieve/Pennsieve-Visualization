@@ -20,8 +20,10 @@
       :channels="channels"
       :position="position"
       :layout="layout"
+      :brightness="brightness"
       @toggle-channel="onToggleChannel"
       @set-layout="onSetLayout"
+      @set-brightness="ng.setBrightness"
     />
   </div>
 </template>
@@ -45,7 +47,7 @@ const emit = defineEmits<{
 const ngContainer = ref<HTMLElement>()
 
 const ng = useNeuroglancer()
-const { isLoading, error, channels, position, layout } = ng
+const { isLoading, error, channels, position, layout, brightness } = ng
 
 onMounted(async () => {
   if (!ngContainer.value) return
@@ -85,6 +87,7 @@ defineExpose({
   setPosition: ng.setPosition,
   setLayout: ng.setLayout,
   setChannelVisibility: ng.setChannelVisibility,
+  setBrightness: ng.setBrightness,
 })
 </script>
 
