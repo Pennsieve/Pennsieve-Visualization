@@ -7,8 +7,8 @@
  *   node scripts/serve-timeseries-zarr.mjs ../../timeseries-zarr-py/data/output/large_test.zarr 9095
  *   TS_ZARR_ROOT=/path/to/bundle.zarr pnpm dev
  *
- * Defaults: rootDir = TS_ZARR_ROOT from the environment when set, otherwise
- * test-data/sample-timeseries.zarr (relative to this repo); port = 9091. A lone numeric
+ * Defaults: rootDir = TS_ZARR_ROOT from the environment when set, otherwise the
+ * reader's own fixture bundle, fetched by scripts/reader-fixture.mjs; port = 9091. A lone numeric
  * argument is read as the port, so either argument may be given alone. The environment
  * variable exists for `pnpm dev`, which starts this server with no arguments: it points
  * the playground at any bundle without editing a script or regenerating the fixture,
@@ -24,9 +24,9 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { join, normalize, resolve, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { ensureFixture, fixtureRoot } from './reader-fixture.mjs'
 
-const DEFAULT_ROOT = fileURLToPath(new URL('../test-data/sample-timeseries.zarr', import.meta.url))
+const DEFAULT_ROOT = fixtureRoot()
 const DEFAULT_PORT = 9091
 
 /** `bytes=-<n>`: the last n bytes. The form zarrita uses to read a shard index. */
@@ -136,6 +136,9 @@ function sendStatus(response, status, headers = {}) {
 }
 
 const { root, port } = parseArgs(process.argv.slice(2))
+if (root === DEFAULT_ROOT) {
+    await ensureFixture()
+}
 const quiet = process.env.QUIET === '1'
 
 try {

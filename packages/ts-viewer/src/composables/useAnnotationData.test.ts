@@ -14,10 +14,14 @@ vi.mock('@/composables/useChannelDataRequest', () => ({
     useChannelDataRequest: () => ({ openConnection: async () => ({ res: [], status: 'ok' }) })
 }))
 
+// The reader client a bundle layer is read through, when a test opens one.
+const bundle = vi.hoisted(() => ({ client: undefined as unknown }))
+
 vi.mock('@/composables/streaming/clientRegistry', () => ({
     acquireClient: async () => ({ url: '' }),
     ensureCatalog: async () => ({ details: [] }),
-    disposeClient: () => undefined
+    disposeClient: () => undefined,
+    getClient: () => (bundle.client ? { client: bundle.client } : undefined)
 }))
 
 const { useAnnotationData } = await import('@/composables/useAnnotationData')
@@ -114,6 +118,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+    bundle.client = undefined
 })
 
 describe('checkAnnotationRange requests', () => {
@@ -459,6 +464,103 @@ describe('checkAnnotationRange failures', () => {
 
         expect(requests.map(request => request.url)).toEqual([annotationUrl(1, 0, 1000)])
         expect(cachedAnnRange.value).toEqual([{ start: 0, end: 1000 }])
+    })
+})
+
+describe('checkAnnotationRange bundle layers', () => {
+    const MARKS = {
+        kind: 'event',
+        index: 3,
+        id: 'marks',
+        name: 'Clinical marks',
+        eventCount: 3,
+        columns: ['labels'],
+        labelNames: ['spike'],
+        hasWaveformMean: false,
+        countLevels: 0
+    }
+    const bundleLayer = (): AnnotationLayer => ({
+        id: 'bundle:marks',
+        name: 'Clinical marks',
+        annotations: [],
+        selected: false
+    })
+
+    // A bundle of marks that answers each window with every mark inside it, the way the
+    // reader does: the whole window, with no fetch limit.
+    const openBundle = (times: number[]) => {
+        const queries: Record<string, unknown>[] = []
+        bundle.client = {
+            channelInfo: async () => [MARKS],
+            queryEvents: async function* (params: { startUs: number; endUs: number }) {
+                queries.push(params)
+                const inWindow = times.filter((t) => t >= params.startUs && t < params.endUs)
+                yield {
+                    channel: 'marks',
+                    startUs: params.startUs,
+                    endUs: params.endUs,
+                    times: Float64Array.from(inWindow),
+                    labels: Uint16Array.from(inWindow.map(() => 0))
+                }
+            }
+        }
+        return queries
+    }
+
+    it('reads a bundle layer from the bundle, a window at a time', async () => {
+        const queries = openBundle([10, 20])
+        const store = freshStore([bundleLayer()])
+        const { checkAnnotationRange } = useAnnotationData(store)
+
+        await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
+
+        expect(requests).toEqual([])
+        expect(queries).toEqual([
+            { channels: ['marks'], startUs: 0, endUs: 1000, columns: ['durations', 'labels', 'text', 'channels'] }
+        ])
+        expect(store.viewerAnnotations[0].annotations.map((a) => a.start)).toEqual([10, 20])
+        expect(store.viewerAnnotations[0].annotations.map((a) => a.label)).toEqual(['spike', 'spike'])
+        expect(emit).toHaveBeenCalledWith('annotationsReceived')
+    })
+
+    it('caches the whole window the bundle answered, however many marks it held', async () => {
+        const times = Array.from({ length: 600 }, (_, i) => i)
+        const queries = openBundle(times)
+        const store = freshStore([bundleLayer()])
+        const { checkAnnotationRange, cachedAnnRange } = useAnnotationData(store)
+
+        await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
+
+        expect(queries).toHaveLength(1)
+        expect(cachedAnnRange.value).toEqual([{ start: 0, end: 1000 }])
+        expect(store.viewerAnnotations[0].annotations).toHaveLength(600)
+    })
+
+    it('keeps one copy of an annotation two windows both return', async () => {
+        openBundle([10, 20])
+        const store = freshStore([bundleLayer()])
+        const { checkAnnotationRange, cachedAnnRange } = useAnnotationData(store)
+
+        await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
+        cachedAnnRange.value = []
+        emit.mockClear()
+        await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
+
+        expect(store.viewerAnnotations[0].annotations).toHaveLength(2)
+        expect(emit).not.toHaveBeenCalled()
+    })
+
+    it('caches no span when the bundle read fails, so it is tried again', async () => {
+        bundle.client = {
+            channelInfo: async () => [MARKS],
+            queryEvents: async function* () { yield* []; throw new Error('offline') }
+        }
+        const store = freshStore([bundleLayer()])
+        const { checkAnnotationRange, cachedAnnRange } = useAnnotationData(store)
+
+        await checkAnnotationRange(0, 100, props(1000), activeViewer, emit)
+
+        expect(cachedAnnRange.value).toEqual([])
     })
 })
 

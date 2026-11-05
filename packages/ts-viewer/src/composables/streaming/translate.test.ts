@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ChannelInfo, FilterSpec } from '@pennsieve/timeseries-zarr-reader'
+import type { ChannelInfo, ContinuousChannelInfo, FilterSpec } from '@pennsieve/timeseries-zarr-reader'
 import { buildCatalogIndex } from './channelDetails'
 import { parseRequest, reconstructClientId, resolveMontagePair, partitionRequest, filterKey } from './translate'
 import type { QueryGroup, RejectedMontagePair, ResolvedMontagePair } from './translate'
@@ -8,14 +8,16 @@ const START_US = 1704067200000000
 
 // Pennsieve node ids carry both colons and underscores, which is what makes the
 // viewer's `${id}_${name}` client id unsplittable.
-const chan = (id: string, name: string, over: Partial<ChannelInfo> = {}): ChannelInfo => ({
+const chan = (id: string, name: string, over: Partial<ContinuousChannelInfo> = {}): ChannelInfo => ({
+    kind: 'continuous',
+    index: 0,
     id,
     name,
     unit: 'uV',
     rateHz: 1000,
     startUs: START_US,
     endUs: START_US + 30000000,
-    kind: 'continuous',
+    runs: 1,
     ...over
 })
 
@@ -30,7 +32,10 @@ const catalog = buildCatalogIndex([
     chan(C4, 'C4', { unit: 'mV' }),
     chan(CZ, 'Cz'),
     chan(PZ, 'Pz', { rateHz: 500 }),
-    chan(SPIKES, 'SpikesA', { kind: 'unit', endUs: START_US })
+    {
+        kind: 'event', index: 4, id: SPIKES, name: 'SpikesA', unit: 'uV', eventCount: 200,
+        columns: ['labels', 'waveforms'], hasWaveformMean: false, countLevels: 0
+    }
 ])
 
 // Shape built by useDataRequests.js before JSON.stringify.
@@ -180,12 +185,12 @@ describe('resolveMontagePair', () => {
         expect(out).toEqual({ ok: false, reason: 'Unknown montage secondary channel name "Nope"' })
     })
 
-    it('rejects a unit channel on either side', () => {
+    it('rejects an event channel on either side', () => {
         const asLead = resolveMontagePair({ id: SPIKES, name: 'SpikesA<->C3' }, catalog)
-        expect(asLead).toEqual({ ok: false, reason: 'Cannot montage unit channel(s): SpikesA' })
+        expect(asLead).toEqual({ ok: false, reason: 'Cannot montage event channel(s): SpikesA' })
 
         const asSecondary = resolveMontagePair({ id: C3, name: 'C3<->SpikesA' }, catalog)
-        expect(asSecondary).toEqual({ ok: false, reason: 'Cannot montage unit channel(s): SpikesA' })
+        expect(asSecondary).toEqual({ ok: false, reason: 'Cannot montage event channel(s): SpikesA' })
     })
 
     it('rejects a rate mismatch', () => {
