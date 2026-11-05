@@ -1,6 +1,6 @@
 // @/composables/streaming/channelDetails.ts
 
-import type { ChannelInfo } from '@pennsieve/timeseries-zarr-reader'
+import type { ChannelInfo, EventChannelInfo } from '@pennsieve/timeseries-zarr-reader'
 
 /** One flat channel object, as `toChannelDetails` emits it. */
 export interface ChannelDetail {
@@ -14,6 +14,22 @@ export interface ChannelDetail {
     properties: unknown[]
     /** Never present: `createVirtualChannel` builds the `{content}` envelope from the flat fields. */
     content?: undefined
+}
+
+/**
+ * Whether an event channel is drawn as a spike raster row.
+ *
+ * A bundle's event channels cover both sorted spikes and annotations, and the format
+ * tells them apart only by what they store: spikes carry waveforms, or a mean waveform
+ * per unit. Those become UNIT rows. Every other event channel is an annotation layer.
+ */
+export function isUnitChannel(info: ChannelInfo): info is EventChannelInfo {
+    return info.kind === 'event' && (info.columns.includes('waveforms') || info.hasWaveformMean)
+}
+
+/** Whether an event channel is shown as an annotation layer rather than a row. */
+export function isAnnotationChannel(info: ChannelInfo): info is EventChannelInfo {
+    return info.kind === 'event' && !isUnitChannel(info)
 }
 
 /**
@@ -33,21 +49,55 @@ export interface ChannelDetail {
  * plots nothing for anything else. 'Neural' names a segment block type elsewhere in
  * the viewer and is not a valid `channelType`.
  *
- * Invariant inherited from the reader: a unit channel reports `endUs === startUs`,
- * so its `end === start` here. A bundle containing only unit channels therefore
- * yields a degenerate viewport (ts_start === ts_end) in `initTimeRange`.
+ * Continuous channels carry their own extent and rate. An event channel has neither
+ * in the bundle, so a UNIT row takes the recording's: the span of every continuous
+ * channel, and the finest continuous rate, which the renderer divides by. Annotation
+ * channels are layers, not rows, and are left out; a bundle holding only event
+ * channels therefore yields no rows and a degenerate viewport in `initTimeRange`.
  */
 export function toChannelDetails(infos: readonly ChannelInfo[]): ChannelDetail[] {
-    return infos.map((info) => ({
-        id: info.id,
-        name: info.name,
-        channelType: info.kind === 'unit' ? 'UNIT' : 'CONTINUOUS',
-        rate: info.rateHz,
-        unit: info.unit,
-        start: info.startUs,
-        end: info.endUs,
-        properties: []
-    }))
+    let start = Number.POSITIVE_INFINITY
+    let end = Number.NEGATIVE_INFINITY
+    let rate = 0
+    for (const info of infos) {
+        if (info.kind === 'continuous') {
+            start = Math.min(start, info.startUs)
+            end = Math.max(end, info.endUs)
+            rate = Math.max(rate, info.rateHz)
+        }
+    }
+    if (!(start <= end)) {
+        start = 0
+        end = 0
+    }
+
+    const details: ChannelDetail[] = []
+    for (const info of infos) {
+        if (info.kind === 'continuous') {
+            details.push({
+                id: info.id,
+                name: info.name,
+                channelType: 'CONTINUOUS',
+                rate: info.rateHz,
+                unit: info.unit,
+                start: info.startUs,
+                end: info.endUs,
+                properties: []
+            })
+        } else if (isUnitChannel(info)) {
+            details.push({
+                id: info.id,
+                name: info.name,
+                channelType: 'UNIT',
+                rate,
+                unit: info.unit ?? '',
+                start,
+                end,
+                properties: []
+            })
+        }
+    }
+    return details
 }
 
 export interface CatalogIndex {
@@ -111,7 +161,7 @@ export interface DroppedMontagePair {
  * reader's own montaged `Segment.channel` key.
  *
  * A pair is dropped, with its reason recorded, when either name is unknown to
- * the catalog, either channel is a unit channel, or the two native rates differ:
+ * the catalog, either channel is an event channel, or the two native rates differ:
  * the reader throws on all three rather than returning a segment.
  *
  * @param montageMap name pairs from the montage payload
@@ -151,13 +201,13 @@ export function synthesizeMontageDetails(
             continue
         }
 
-        if (lead.kind === 'unit' || secondary.kind === 'unit') {
+        if (lead.kind !== 'continuous' || secondary.kind !== 'continuous') {
             dropped.push({
                 pair,
                 reason: 'unit-channel',
-                message: `Cannot montage unit channel(s): ${[
-                    lead.kind === 'unit' ? leadName : null,
-                    secondary.kind === 'unit' ? secondaryName : null
+                message: `Cannot montage event channel(s): ${[
+                    lead.kind !== 'continuous' ? leadName : null,
+                    secondary.kind !== 'continuous' ? secondaryName : null
                 ].filter(Boolean).join(', ')}`
             })
             continue

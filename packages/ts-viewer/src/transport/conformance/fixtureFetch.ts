@@ -1,11 +1,11 @@
-// Serves the committed fixture bundle to an injected fetch, so a transport test
+// Serves the reader's fixture bundle to an injected fetch, so a transport test
 // runs the real reader with no network.
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
+import { fixtureRoot } from '../../../../../scripts/reader-fixture.mjs'
 import { join, normalize, sep } from 'node:path'
 
-const BUNDLE_ROOT = fileURLToPath(new URL('../../../../../test-data/sample-timeseries.zarr', import.meta.url))
+const BUNDLE_ROOT = fixtureRoot()
 
 // The store only speaks http(s). The query string routes createStoreForUrl onto
 // its intercepted-fetch path, the same one a signed production URL takes; the
@@ -20,14 +20,14 @@ export const SECOND = 1000000
 
 /**
  * Request pathname prefix of one channel's objects. Channel groups are named by index,
- * so the path of a channel is found through the `id` attribute in the root metadata.
+ * so the path of a channel is found through the `tsz.id` attribute in the root metadata.
  */
 export function channelPathPrefix(channelId: string): string {
     const root = JSON.parse(readFileSync(join(BUNDLE_ROOT, 'zarr.json'), 'utf8')) as {
-        consolidated_metadata: { metadata: Record<string, { attributes?: { id?: string } }> }
+        consolidated_metadata: { metadata: Record<string, { attributes?: { tsz?: { id?: string } } }> }
     }
     for (const [key, node] of Object.entries(root.consolidated_metadata.metadata)) {
-        if (!key.includes('/') && node.attributes?.id === channelId) {
+        if (!key.includes('/') && node.attributes?.tsz?.id === channelId) {
             return `${BUNDLE_PATH_PREFIX}${key}/`
         }
     }

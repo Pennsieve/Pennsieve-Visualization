@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { EventBatch, Segment } from '@pennsieve/timeseries-zarr-reader'
+import type { EventWindow, Segment } from '@pennsieve/timeseries-zarr-reader'
 import { buildContinuousSegm, buildGapNotice, buildGapSegm, buildNeuralSegm } from './segments'
 
 const CONTINUOUS_KEYS = [
@@ -369,15 +369,12 @@ describe('buildGapSegm', () => {
 })
 
 describe('buildNeuralSegm', () => {
-    const batch = (times: number[]): EventBatch => ({
+    const batch = (times: number[]): EventWindow => ({
         channel: 'unitA',
         startUs: 0,
         endUs: 10000,
-        samplePeriodUs: 25,
-        pointsPerEvent: 0,
-        isResampled: false,
         times: Float64Array.from(times),
-        data: new Float64Array(0)
+        waveforms: { pointsPerEvent: 0, periodUs: 25, eventSample: 0, data: new Float64Array(0) }
     })
 
     const unitIdentity = { chId: 'unitA', label: 'unitA', clientId: 'unitA', unit: 'uV' }
@@ -423,9 +420,10 @@ describe('buildNeuralSegm', () => {
         expect(segm.startTs).toBe(request.startTime)
     })
 
-    it('echoes isResampled into isMinMax', () => {
-        const resampled = { ...batch([1, 2]), isResampled: true }
-        expect(buildNeuralSegm(resampled, unitIdentity, req(0, 10000)).isMinMax).toBe(true)
+    it('takes the sample period from the request when the window carries no waveforms', () => {
+        const { waveforms: _waveforms, ...bare } = batch([1, 2])
+        const request = { startTime: 0, endTime: 10000, pixelWidth: 4000 }
+        expect(buildNeuralSegm(bare, unitIdentity, request).samplePeriod).toBe(4000)
     })
 
     it('still emits a block for an empty batch so the page can drain', () => {
@@ -467,7 +465,7 @@ describe('regression pins found by adversarial review', () => {
         expect(segm.cData[2][0]).toBe(0)
 
         const neural = buildNeuralSegm(
-            { samplePeriodUs: 33, isResampled: false, times: Float64Array.from([10, 20]) },
+            { times: Float64Array.from([10, 20]) },
             identity,
             req(0, 1000)
         )

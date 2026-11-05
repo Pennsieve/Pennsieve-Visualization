@@ -24,15 +24,15 @@ async function makeHarness(): Promise<TransportHarness> {
             { id: 'sineA', name: 'Sine A' },
             { id: 'sineB', name: 'Sine B' }
         ],
-        // The fixture's unitA places its last spike at START + 27.4 s, so this
+        // The fixture's unitA places its first spike at START + 137 ms, so this
         // page holds continuous data for the sine channels and no events for
         // unitA. The transport answers the eventless unit page with exactly one
         // zero-point envelope, which is the drain the suite asserts.
         emptyChannel: { id: 'unitA', name: 'Unit A' },
         drainsEmptyChannel: true,
         page: {
-            startTime: START + 28 * SECOND,
-            endTime: START + 30 * SECOND,
+            startTime: START + 10_000,
+            endTime: START + 110_000,
             pixelWidth: 4000
         },
         async dispose() {

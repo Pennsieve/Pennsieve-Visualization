@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { fileURLToPath } from 'node:url'
+import { fixtureRoot } from '../../../../../scripts/reader-fixture.mjs'
 import { StreamingClient } from '@pennsieve/timeseries-zarr-reader'
 import type { QueryOptions } from '@pennsieve/timeseries-zarr-reader'
 import { FileStore } from '@pennsieve/timeseries-zarr-reader/node'
+import { anchorClient } from './anchoredClient'
+import type { AnchoredClient } from './anchoredClient'
 import { buildCatalogIndex } from './channelDetails'
 import type { CatalogIndex } from './channelDetails'
 import { parseRequest, partitionRequest } from './translate'
@@ -18,13 +20,14 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] }
  *
  * Reads through FileStore because the suite runs in Node; the store is the only piece
  * swapped out relative to the browser, and store parity is covered by the reader's own tests.
+ * The client is anchored as the registry anchors it, so every time here is epoch time.
  */
-const BUNDLE = fileURLToPath(new URL('../../../../../test-data/sample-timeseries.zarr', import.meta.url))
+const BUNDLE = fixtureRoot()
 const START = 1704067200000000
 const SECOND = 1000000
 
 /** Drives one page through the pipeline exactly as the shim does. */
-async function runPage(client: StreamingClient, catalogIndex: CatalogIndex, wire: unknown) {
+async function runPage(client: AnchoredClient, catalogIndex: CatalogIndex, wire: unknown) {
     const req = parseRequest(wire)
     const { groups, unitTraces, invalid } = partitionRequest(req, catalogIndex, new Map())
     const blocks: SegmentBlock[] = []
@@ -53,13 +56,14 @@ async function runPage(client: StreamingClient, catalogIndex: CatalogIndex, wire
     }
 
     for (const trace of unitTraces) {
-        for await (const batch of client.queryUnits({
+        for await (const window of client.queryEvents({
             channels: [trace.chId],
             startUs: req.startTime,
             endUs: req.endTime,
             pixelWidthUs: req.pixelWidth,
+            columns: [],
         })) {
-            blocks.push(buildNeuralSegm(batch, trace, req))
+            blocks.push(buildNeuralSegm(window, trace, req))
         }
     }
 
@@ -67,21 +71,24 @@ async function runPage(client: StreamingClient, catalogIndex: CatalogIndex, wire
 }
 
 describe('adapter pipeline against the committed bundle', () => {
-    let client: StreamingClient
+    let client: AnchoredClient
     let catalogIndex: CatalogIndex
 
     beforeAll(async () => {
-        client = new StreamingClient({ store: new FileStore(BUNDLE) })
+        client = anchorClient(new StreamingClient({ store: new FileStore(BUNDLE) }))
         catalogIndex = buildCatalogIndex(await client.channelInfo())
     })
 
-    it('maps the bundle catalog to flat viewer channel details', () => {
+    it('maps the bundle catalog to flat viewer channel details on the epoch clock', () => {
+        // The annotation channel "marks" is a layer, not a row, so it is absent here.
         expect(catalogIndex.details).toEqual([
             { id: 'sineA', name: 'Sine A', channelType: 'CONTINUOUS', rate: 1000, unit: 'uV', start: START, end: START + 30 * SECOND, properties: [] },
-            { id: 'sineB', name: 'Sine B', channelType: 'CONTINUOUS', rate: 1000, unit: 'uV', start: START, end: START + 30 * SECOND, properties: [] },
+            { id: 'sineB', name: 'Sine B', channelType: 'CONTINUOUS', rate: 1000, unit: 'uV', start: START + 2 * SECOND, end: START + 32 * SECOND, properties: [] },
             { id: 'noise', name: 'Noise', channelType: 'CONTINUOUS', rate: 1000, unit: 'uV', start: START, end: START + 30 * SECOND, properties: [] },
-            { id: 'unitA', name: 'Unit A', channelType: 'UNIT', rate: 30000, unit: 'uV', start: START, end: START, properties: [] },
+            { id: 'pausedA', name: 'Paused A', channelType: 'CONTINUOUS', rate: 1000, unit: 'uV', start: START, end: START + 22 * SECOND + 400, properties: [] },
+            { id: 'unitA', name: 'Unit A', channelType: 'UNIT', rate: 1000, unit: '', start: START, end: START + 32 * SECOND, properties: [] },
         ])
+        expect(catalogIndex.byId.get('marks')?.kind).toBe('event')
     })
 
     it('emits exactly one block per requested trace, keyed to the page', async () => {
@@ -110,12 +117,12 @@ describe('adapter pipeline against the committed bundle', () => {
         // dataCallback matches on serverId AND label, so both must echo the request.
         expect(blocks.map((b) => b.label)).toEqual(['Sine A', 'Sine B', 'Unit A'])
         expect(blocks[2].type).toBe('Neural')
-        // The fixture places 200 spikes at start + (i+1)*137 ms, so a 15 s page holds 109.
+        // The fixture places spikes at start + (i+1)*137 ms, so a 15 s page holds 109.
         expect(blocks[2].nrPoints).toBe(109)
         expect(blocks[2].parsedData[0][0]).toBe(START + 137000)
     })
 
-    it('returns every spike when the window covers the whole recording', async () => {
+    it('returns every spike in a window on the epoch clock', async () => {
         const { blocks } = await runPage(client, catalogIndex, {
             minMax: true,
             startTime: START,
@@ -124,7 +131,8 @@ describe('adapter pipeline against the committed bundle', () => {
             virtualChannels: [{ id: 'unitA', name: 'Unit A' }],
         })
 
-        expect(blocks[0].nrPoints).toBe(200)
+        // (i+1) * 137 ms < 30 s for i + 1 up to 218.
+        expect(blocks[0].nrPoints).toBe(218)
         expect(blocks[0].unit).toBe('uV')
         expect(blocks[0].startTs).toBe(START)
     })
@@ -183,8 +191,8 @@ describe('adapter pipeline against the committed bundle', () => {
     it('routes a montaged request through the reader and echoes the viewer identity', async () => {
         const { blocks, invalid } = await runPage(client, catalogIndex, {
             minMax: true,
-            startTime: START,
-            endTime: START + SECOND,
+            startTime: START + 2 * SECOND,
+            endTime: START + 3 * SECOND,
             pixelWidth: 4000,
             virtualChannels: [{ id: 'sineA', name: 'Sine A<->Sine B' }],
         })

@@ -1,6 +1,6 @@
 // @/composables/streaming/segments.ts
 
-import type { EventBatch, Segment } from '@pennsieve/timeseries-zarr-reader'
+import type { EventWindow, Segment } from '@pennsieve/timeseries-zarr-reader'
 import type { ParsedRequest, TraceIdentity } from './translate'
 
 export type PageRequest = Pick<ParsedRequest, 'startTime' | 'endTime' | 'pixelWidth'>
@@ -257,42 +257,45 @@ export function buildGapNotice(identity: TraceIdentity, req: PageRequest): GapNo
 }
 
 /**
- * Translates one reader EventBatch into the legacy Neural block.
+ * Translates one reader EventWindow into the legacy Neural block.
  *
  * The legacy wire carried interleaved time pairs and split them across two rows; the
  * reader gives one timestamp per event, so `nrPoints` is the full length of
- * `batch.times`. The renderer's UNIT path reads only `parsedData[0]` (plus `nrPoints`)
+ * `window.times`. The renderer's UNIT path reads only `parsedData[0]` (plus `nrPoints`)
  * and writes the spike extents into `cData`, so row 1 is a duplicate kept solely to
  * preserve the legacy two-row shape.
+ *
+ * `samplePeriod` is the waveform sample period when the window carries snippets, and
+ * the requested pixel width otherwise; the raster reads neither.
  *
  * `name` and `label` are absent from the legacy Neural block: a required deviation, since
  * the viewer matches responses on chId AND label, and every unit-channel response would
  * otherwise be discarded as stale.
  *
- * @param batch - Reader event batch.
+ * @param window - Reader event window.
  * @param identity - Trace identity echoing the request.
  * @param req - Parsed page request.
  * @returns Legacy Neural block.
  */
 export function buildNeuralSegm(
-    batch: Pick<EventBatch, 'samplePeriodUs' | 'isResampled' | 'times'>,
+    window: Pick<EventWindow, 'times' | 'waveforms'>,
     identity: TraceIdentity,
     req: PageRequest
 ): NeuralSegmentBlock {
-    const nrVal = batch.times.length
-    const times = Float64Array.from(batch.times)
-    const parsedData = [times, Float64Array.from(batch.times)]
+    const nrVal = window.times.length
+    const times = Float64Array.from(window.times)
+    const parsedData = [times, Float64Array.from(window.times)]
 
     return {
         chId: identity.chId,
         lastUsed: 0,
         unit: 'uV',
-        samplePeriod: batch.samplePeriodUs,
+        samplePeriod: window.waveforms?.periodUs ?? req.pixelWidth,
         requestedSamplePeriod: req.pixelWidth,
         pageStart: req.startTime,
         pageEnd: req.endTime,
         startTs: req.startTime,
-        isMinMax: batch.isResampled,
+        isMinMax: false,
         unitM: 1,
         type: 'Neural',
         nrPoints: nrVal,

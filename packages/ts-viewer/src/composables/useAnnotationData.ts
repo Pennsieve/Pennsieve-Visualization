@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError } from "@/mixins/request/request_composable"
 import { annIndexOf } from '@/utils/annotationUtils'
+import { isBundleLayerId, queryBundleLayer } from '@/composables/useBundleAnnotations'
 import type { Annotation, AnnotationLayer, LinkedPackageDTO } from '@/utils/annotationUtils'
 
 interface ViewerChannel {
@@ -117,14 +118,40 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
         // Request annotations from server
         if (reqRange.length > 0) {
             const channelIds = viewerChannels.value.map(channel => getChannelId(channel))
+            let bundleAdded = false
 
             for (const curRange of reqRange) {
                 let answered = 0
                 let failed = 0
+                // Where a bundle layer's limit stopped its read. Only the span before it is
+                // complete for every layer, so only that much is cached.
+                let coveredEnd = curRange.end
 
                 for (const curLayer of viewerAnnotations.value) {
                     if (!curLayer.id) {
                         console.warn('Layer ID is undefined, skipping annotation request for layer:', curLayer)
+                        continue
+                    }
+                    // Bundle layers are read from the bundle, not the API.
+                    if (isBundleLayerId(curLayer.id)) {
+                        try {
+                            const window = await queryBundleLayer(
+                                viewerStore.$id,
+                                curLayer.id,
+                                Math.floor(curRange.start),
+                                Math.floor(curRange.end),
+                                props.constants.LIMITANNFETCH,
+                                viewerChannels.value.length
+                            )
+                            if (window) {
+                                bundleAdded = addBundleAnnotations(curLayer, window.annotations) || bundleAdded
+                                coveredEnd = Math.min(coveredEnd, window.endUs)
+                            }
+                            answered++
+                        } catch (err) {
+                            console.warn('Could not read annotations from the bundle:', err)
+                            failed++
+                        }
                         continue
                     }
 
@@ -168,7 +195,7 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
                 if (answered > 0 && failed === 0) {
                     cachedAnnRange.value.push({
                         start: Math.floor(curRange.start),
-                        end: Math.floor(curRange.end)
+                        end: Math.floor(coveredEnd)
                     })
                 }
             }
@@ -179,7 +206,30 @@ export function useAnnotationData(storeInstance: ViewerStore | null = null) {
                 if (a.start > b.start) return 1
                 return 0
             })
+
+            // The API's responses announce themselves; the bundle's would otherwise go
+            // undrawn until something else repainted.
+            if (bundleAdded) {
+                emit('annotationsReceived')
+            }
         }
+    }
+
+    /**
+     * Adds a window of bundle annotations to their layer, skipping any already there.
+     *
+     * Windows can share an annotation: a long one that started in an earlier window is
+     * returned again by every later window it runs into. Returns whether any were new.
+     */
+    const addBundleAnnotations = (layer: AnnotationLayer, annotations: Annotation[]): boolean => {
+        const known = new Set(layer.annotations.map((ann) => ann.id))
+        const added = annotations.filter((ann) => !known.has(ann.id))
+        if (added.length === 0) {
+            return false
+        }
+        layer.annotations = layer.annotations.concat(added).sort((a, b) => a.start - b.start)
+        viewerStore.updateLayer(layer)
+        return true
     }
 
     const processAnnotationResponse = async (response: AnnotationsResponse, emit: DataEmit) => {

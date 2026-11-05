@@ -1,6 +1,7 @@
-import type { FilterSpec, StreamingClient } from '@pennsieve/timeseries-zarr-reader'
+import type { FilterSpec } from '@pennsieve/timeseries-zarr-reader'
 import { createStoreForUrl, splitSignedUrl, type CreateStoreOptions } from './createStore'
 import { buildCatalogIndex, type CatalogIndex } from './channelDetails'
+import { anchorClient, type AnchoredClient } from './anchoredClient'
 import { loadReader } from './loadReader'
 
 /**
@@ -43,7 +44,8 @@ export interface StreamingClientEntry {
     url: string
     /** The renewal callback baked into this client's store. */
     onUrlExpired: CreateStoreOptions['onUrlExpired'] | null
-    client: StreamingClient
+    /** The reader, with every time already on the viewer's epoch clock. */
+    client: AnchoredClient
     /**
      * Bumped whenever a client is replaced; late async work compares against it to detect
      * that it is stale.
@@ -122,14 +124,14 @@ export async function acquireClient(
         storeId,
         url: base,
         onUrlExpired: options.onUrlExpired ?? null,
-        client: new StreamingClient({
+        client: anchorClient(new StreamingClient({
             store,
             maxRawBytes: options.maxRawBytes ?? DEFAULT_MAX_RAW_BYTES,
             // The cache holds compressed chunk bytes. The scrubber reads availability for
             // the whole recording through this same client, and at the reader's 64 MB
             // default those reads evict the pages the viewport is drawing.
             maxCacheBytes: newClientCacheBytes(),
-        }),
+        })),
         generation: nextGeneration++,
         filterRegistry: new Map(),
         inflight: new Set(),

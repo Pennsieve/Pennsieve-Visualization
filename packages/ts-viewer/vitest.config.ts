@@ -19,6 +19,8 @@ const alias = { "@": resolve(__dirname, "src") };
 // vite.config.ts minus the build-only pieces (lib mode, externals, dts).
 export default defineConfig({
   test: {
+    // Fetches the reader's fixture bundle once, before any project runs.
+    globalSetup: ["src/test/fetch-fixture.ts"],
     coverage: {
       provider: "v8",
       // Both projects contribute; run the whole suite to get real numbers.
