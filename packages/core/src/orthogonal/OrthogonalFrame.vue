@@ -58,13 +58,16 @@ const iframeSrc = computed(() => {
   return `${base}?${params.toString()}`
 })
 
+// Messages, the signing params among them, go only to the embed's origin.
+const embedOrigin = computed(() => new URL(iframeSrc.value, window.location.href).origin)
+
 function sendCloudfrontParams() {
   if (!props.cloudfront || !iframeRef.value?.contentWindow) return
   const cf = props.cloudfront
   const params = `Policy=${cf.policy}&Signature=${cf.signature}&Key-Pair-Id=${cf.key_pair_id}`
   iframeRef.value.contentWindow.postMessage(
     { type: 'set-cloudfront-params', payload: params },
-    '*'
+    embedOrigin.value
   )
 }
 
@@ -76,6 +79,7 @@ function onIframeLoad() {
 function onMessage(event: MessageEvent) {
   // Only accept messages from our iframe
   if (iframeRef.value && event.source !== iframeRef.value.contentWindow) return
+  if (event.origin !== embedOrigin.value) return
 
   const { type, payload } = event.data || {}
   switch (type) {
@@ -96,14 +100,14 @@ function onMessage(event: MessageEvent) {
 watch(() => props.source, (newSource) => {
   iframeRef.value?.contentWindow?.postMessage(
     { type: 'set-source', payload: newSource },
-    '*'
+    embedOrigin.value
   )
 })
 
 watch(() => props.layout, (newLayout) => {
   iframeRef.value?.contentWindow?.postMessage(
     { type: 'set-layout', payload: newLayout },
-    '*'
+    embedOrigin.value
   )
 })
 
