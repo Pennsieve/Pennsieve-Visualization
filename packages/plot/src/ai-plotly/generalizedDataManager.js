@@ -33,7 +33,6 @@ export class GeneralDataManager {
       await this.conn.query(`LOAD httpfs`);
 
       this.initialized = true;
-      console.log("✓ GeneralDataManager initialized");
     } catch (error) {
       console.error("Failed to initialize GeneralDataManager:", error);
       throw error;
@@ -84,8 +83,6 @@ export class GeneralDataManager {
 
   // Catalog all parquet files in a folder
   async catalogFolder(folderUrl, fileList) {
-    console.log(`Cataloging ${fileList.length} files from manifest...`);
-
     const catalog = {
       folderUrl,
       files: [],
@@ -95,8 +92,6 @@ export class GeneralDataManager {
       const fileUrl = `${folderUrl}/${fileName}`;
 
       try {
-        console.log(`Scanning schema: ${fileName}`);
-
         // Direct query - fileUrl is from trusted manifest, not user input
         const schemaResult = await this.conn.query(`
         SELECT * FROM parquet_scan('${fileUrl}') LIMIT 0
@@ -120,8 +115,6 @@ export class GeneralDataManager {
           columns: schema,
           sampleRow: sample,
         });
-
-        console.log(`✓ ${fileName}: ${schema.length} columns`);
       } catch (error) {
         console.warn(`Failed to scan ${fileName}:`, error.message);
         // Continue with other files

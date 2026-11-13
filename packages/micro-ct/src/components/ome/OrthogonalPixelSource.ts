@@ -41,15 +41,6 @@ export function createOrthogonalPixelSource(
   const chunkShape = zarrArray?.meta?.chunks || [256, 256, 256];
   const chunkZ = chunkShape[0];
 
-  console.log(`OrthogonalPixelSource created for ${orientation}:`, {
-    virtualWidth,
-    virtualHeight,
-    chunkShape,
-    sizeX,
-    sizeY,
-    sizeZ,
-  });
-
   // Cache for raster slices
   const sliceCache = new Map<number, any>();
   const MAX_CACHE_SIZE = 50;
@@ -135,15 +126,6 @@ export function createOrthogonalPixelSource(
     }): Promise<RasterResult> {
       const slicePos =
         orientation === "XZ" ? selection.y || 0 : selection.x || 0;
-
-      console.log(`getRaster for ${orientation} at position ${slicePos}`, {
-        DOWNSAMPLE_Z,
-        DOWNSAMPLE_XY,
-        sampledZCount,
-        sampledWidth,
-        originalZ: sizeZ,
-        originalWidth: virtualWidth,
-      });
 
       const TypedArrayConstructor = getTypedArrayConstructor(source.dtype);
       const outputData = new TypedArrayConstructor(sampledWidth * sampledZCount);

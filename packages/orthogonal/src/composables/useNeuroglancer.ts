@@ -283,7 +283,6 @@ export function useNeuroglancer() {
         p01 = allValues[0]
         p99 = allValues[last]
       }
-      console.log(`[useNeuroglancer] computed data range from ${allValues.length} values: [${p01}, ${p99}]`)
       return [p01, p99]
     } catch (e) {
       console.warn('[useNeuroglancer] fetchDataRange failed:', e)

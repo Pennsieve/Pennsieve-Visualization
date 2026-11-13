@@ -22,14 +22,10 @@ let lastX = 0;
 let lastY = 0;
 
 async function loadAndRender() {
-  console.log("TiffViewer: loadAndRender called", { source: props.source });
-
   if (!props.source) {
-    console.log("TiffViewer: No source provided");
     return;
   }
   if (!canvasRef.value || !containerRef.value) {
-    console.log("TiffViewer: No canvas or container ref");
     return;
   }
 
@@ -38,7 +34,6 @@ async function loadAndRender() {
 
   try {
     // Fetch and load TIFF
-    console.log("TiffViewer: Fetching TIFF...");
     let tiff;
     if (typeof props.source === "string") {
       const response = await fetch(props.source);
@@ -46,19 +41,16 @@ async function loadAndRender() {
         throw new Error(`Failed to fetch TIFF: ${response.status}`);
       }
       const blob = await response.blob();
-      console.log("TiffViewer: Fetched blob", blob.size, "bytes");
       tiff = await GeoTIFF.fromBlob(blob);
     } else {
       tiff = await GeoTIFF.fromBlob(props.source);
     }
-    console.log("TiffViewer: GeoTIFF parsed");
 
     const image = await tiff.getImage(0);
     const width = image.getWidth();
     const height = image.getHeight();
     const samplesPerPixel = image.getSamplesPerPixel();
     const bitsPerSample = image.getBitsPerSample()[0];
-    console.log("TiffViewer: Image info", { width, height, samplesPerPixel, bitsPerSample });
 
     // Check if image is too large (max ~50 million pixels to avoid browser crash)
     const maxPixels = 50_000_000;
@@ -68,9 +60,7 @@ async function loadAndRender() {
     }
 
     // Read raster data
-    console.log("TiffViewer: Reading raster data...");
     const rasters = await image.readRasters();
-    console.log("TiffViewer: Raster data loaded");
 
     // Set canvas size
     const canvas = canvasRef.value;
@@ -127,13 +117,10 @@ async function loadAndRender() {
       }
     }
 
-    console.log("TiffViewer: Putting image data to canvas...");
     ctx.putImageData(imageData, 0, 0);
-    console.log("TiffViewer: Canvas rendered");
 
     // Fit image to container
     fitToContainer();
-    console.log("TiffViewer: Done");
   } catch (e) {
     error.value = e instanceof Error ? e : new Error("Failed to load TIFF");
     console.error("TiffViewer: TIFF load error:", e);

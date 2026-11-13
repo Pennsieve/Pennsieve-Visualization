@@ -68,7 +68,6 @@ async function loadData() {
     // Check if single file or folder
     if (dataUrl.value.endsWith(".parquet")) {
       // SINGLE FILE MODE
-      console.log("Single file mode");
       const schemaSql = `SELECT * FROM parquet_scan('${dataUrl.value}') LIMIT 10`;
       const sample = await dataManager.value.executeQuery(schemaSql);
 
@@ -81,7 +80,6 @@ async function loadData() {
       }
     } else {
       // FOLDER MODE - look for manifest
-      // console.log("Folder mode - looking for manifest.json");
       // const manifestUrl = `${dataUrl.value}/manifest.json`;
       // const manifestResponse = await fetch(manifestUrl);
 
@@ -411,9 +409,6 @@ function isNumericColumn(data, columnName) {
 function mapColumns(data, config) {
   const actualColumns = Object.keys(data[0]);
 
-  console.log("Actual columns from query:", actualColumns);
-  console.log("Config columns:", { xAxis: config.xAxis, yAxis: config.yAxis });
-
   let xColumn = null;
   let yColumn = null;
 
@@ -469,8 +464,6 @@ function mapColumns(data, config) {
       }
     }
   }
-
-  console.log("Mapped columns:", { xColumn, yColumn });
 
   return { xColumn, yColumn, actualColumns };
 }
