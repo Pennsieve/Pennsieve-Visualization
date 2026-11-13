@@ -139,7 +139,6 @@ function parseDelimitedText(text: string, delimiter: string): { columns: string[
 }
 
 const loadCSVFile = async () => {
-  console.log('[CSVViewer] loadCSVFile called, url:', props.url);
   if (!props.url) {
     error.value = "No URL provided";
     return;
@@ -150,15 +149,12 @@ const loadCSVFile = async () => {
     error.value = "";
 
     const response = await fetch(props.url);
-    console.log('[CSVViewer] fetch response:', response.status);
     if (!response.ok) {
       throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
     }
 
     const text = await response.text();
-    console.log('[CSVViewer] fetched text length:', text.length, 'first 200 chars:', text.substring(0, 200));
     const parsed = parseDelimitedText(text, props.delimiter);
-    console.log('[CSVViewer] parsed columns:', parsed.columns, 'rows:', parsed.rows.length);
 
     columns.value = parsed.columns;
     rows.value = parsed.rows;
@@ -194,11 +190,8 @@ watch(
 );
 
 onMounted(async () => {
-  console.log('[CSVViewer] mounted, url:', props.url, 'autoLoad:', props.autoLoad);
   if (props.autoLoad && props.url) {
     await loadCSVFile();
-  } else {
-    console.log('[CSVViewer] skipped loading — autoLoad:', props.autoLoad, 'url:', props.url);
   }
 });
 </script>

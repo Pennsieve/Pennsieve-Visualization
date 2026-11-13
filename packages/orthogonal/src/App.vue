@@ -37,7 +37,6 @@ function loadSource() {
 }
 
 function onReady() {
-  console.log('[OrthogonalViewer] Ready')
 }
 
 function onError(err: Error) {
