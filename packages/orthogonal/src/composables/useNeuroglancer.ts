@@ -662,12 +662,11 @@ export function useNeuroglancer() {
    */
   function setChannelVisibility(index: number, visible: boolean) {
     if (!viewer.value) return
-    const state = viewer.value.state.toJSON() as NeuroglancerStateJSON
-    const layers = state.layers as Array<Record<string, unknown>> | undefined
-    if (layers && layers[index]) {
-      layers[index].visible = visible
-      viewer.value.state.restoreState(state)
-    }
+    // Change only this layer. Exporting the whole state and restoring it
+    // rebuilds every layer, and the global dimensions come back in the file's
+    // order (z, y, x) while the position stays in x, y, z order, so the view
+    // lands outside the data (a gray screen).
+    viewer.value.layerManager?.managedLayers?.[index]?.setVisible(visible)
   }
 
   /**
@@ -675,9 +674,9 @@ export function useNeuroglancer() {
    */
   function setLayout(mode: LayoutMode) {
     if (!viewer.value) return
-    const state = viewer.value.state.toJSON() as NeuroglancerStateJSON
-    state.layout = mode
-    viewer.value.state.restoreState(state)
+    // Change only the layout (see setChannelVisibility for why not a full restore).
+    viewer.value.layout.restoreState(mode)
+    layout.value = mode
   }
 
   /**
@@ -685,9 +684,14 @@ export function useNeuroglancer() {
    */
   function setPosition(pos: [number, number, number]) {
     if (!viewer.value) return
-    const state = viewer.value.state.toJSON() as NeuroglancerStateJSON
-    state.position = [...pos]
-    viewer.value.state.restoreState(state)
+    // pos is [x, y, z]; neuroglancer's position follows its global dimension
+    // order, so place each value by axis name.
+    const names: string[] = viewer.value.coordinateSpace?.value?.names ?? []
+    const current: Float32Array | undefined = viewer.value.position?.value
+    if (!current || current.length !== names.length) return
+    const byName: Record<string, number> = { x: pos[0], y: pos[1], z: pos[2] }
+    viewer.value.position.value = Float32Array.from(
+      names.map((n, i) => byName[n.toLowerCase()] ?? current[i]))
   }
 
   /**
