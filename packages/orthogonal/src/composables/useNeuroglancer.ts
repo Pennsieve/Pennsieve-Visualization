@@ -17,6 +17,14 @@ function unitToMeters(unit?: string): number {
   }
 }
 
+/**
+ * Spatial axis test. "type" is recommended but optional in OME-Zarr 0.4, so an
+ * axis without one counts as spatial when it is named x, y or z.
+ */
+function isSpatialAxis(a: { name: string; type?: string }): boolean {
+  return a.type ? a.type === 'space' : ['x', 'y', 'z'].includes(a.name.toLowerCase())
+}
+
 // Brightness slider range, in stops (each stop doubles or halves brightness)
 export const BRIGHTNESS_MAX_STOPS = 2
 
@@ -345,8 +353,11 @@ export function useNeuroglancer() {
       // OME-Zarr stores axes slowest-first (c, z, y, x), and neuroglancer takes the
       // first spatial dimensions as its display order, so without this the panel
       // labeled "xy" shows the Z-Y plane and "yz" shows the real X-Y plane.
-      const spatialNames = (axes ?? []).filter(a => a.type === 'space').map(a => a.name)
-      const displayDimensions = ['x', 'y', 'z'].filter(n => spatialNames.includes(n))
+      // Matched by name, case-insensitively, wherever the axes sit in the file.
+      const spatialAxes = (axes ?? []).filter(isSpatialAxis)
+      const displayDimensions = ['x', 'y', 'z']
+        .map(n => spatialAxes.find(a => a.name.toLowerCase() === n)?.name)
+        .filter((n): n is string => !!n)
 
       // Detect RGB: 3 channels with color model
       const isRGB = colorModel === 'color' && omeroChannels?.length === 3
@@ -390,7 +401,7 @@ export function useNeuroglancer() {
             Array<{ type: string; scale?: number[] }> | undefined
           const scale = level0?.find(t => t.type === 'scale')?.scale
           axes.forEach((a: { name: string; type?: string; unit?: string }, i: number) => {
-            if (a.type !== 'space') return
+            if (!isSpatialAxis(a)) return
             const s = typeof scale?.[i] === 'number' && scale[i] > 0 ? scale[i] : 1
             outputDimensions[a.name] = [s * unitToMeters(a.unit), 'm']
           })
