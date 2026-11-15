@@ -321,7 +321,7 @@ export function useNeuroglancer() {
    * Fetch OME-Zarr metadata and build layer configs for each channel.
    * Falls back to a single grayscale layer if metadata is unavailable.
    */
-  async function fetchChannelMetadata(source: string): Promise<{ layers: any[], isVolumetric: boolean, dataRange: [number, number] | null, displayDimensions?: string[] }> {
+  async function fetchChannelMetadata(source: string): Promise<{ layers: any[], isVolumetric: boolean, dataRange: [number, number] | null, displayDimensions?: string[], dimensions?: Record<string, [number, string]> }> {
     try {
       // Try Zarr v2 (.zattrs) first, fall back to Zarr v3 (zarr.json)
       let zattrs: Record<string, any> | undefined
@@ -366,6 +366,22 @@ export function useNeuroglancer() {
       const displayDimensions = ['x', 'y', 'z']
         .map(n => spatialAxes.find(a => a.name.toLowerCase() === n)?.name)
         .filter((n): n is string => !!n)
+      // displayDimensions alone is dropped: restoreState applies it before the
+      // zarr source has loaded, when the global coordinate space has no names
+      // yet, and neuroglancer falls back to the default order. Declaring the
+      // global dimensions (restored first) in x, y, z order with the level-0
+      // voxel size makes the names exist up front, and orders them too.
+      const level0Scale = (multiscales?.[0]?.datasets?.[0]?.coordinateTransformations as
+        Array<{ type: string; scale?: number[] }> | undefined)?.find(t => t.type === 'scale')?.scale
+      const dimensions: Record<string, [number, string]> = {}
+      for (const name of displayDimensions) {
+        const i = (axes ?? []).findIndex(a => a.name === name)
+        const sc = level0Scale?.[i]
+        dimensions[name] = [
+          (typeof sc === 'number' && sc > 0 ? sc : 1) * unitToMeters((axes ?? [])[i]?.unit),
+          'm',
+        ]
+      }
 
       // Detect RGB: 3 channels with color model
       const isRGB = colorModel === 'color' && omeroChannels?.length === 3
@@ -418,6 +434,7 @@ export function useNeuroglancer() {
           dataRange,
           isVolumetric,
           displayDimensions,
+          dimensions,
           layers: [{
             type: 'image',
             source: {
@@ -441,6 +458,7 @@ export function useNeuroglancer() {
           dataRange: null,
           isVolumetric,
           displayDimensions,
+          dimensions,
           layers: omeroChannels.map((ch, i) => {
             const colorHex = ch.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length].replace('#', '')
             const rgb = hexToFloats(colorHex)
@@ -481,6 +499,7 @@ export function useNeuroglancer() {
         dataRange,
         isVolumetric,
         displayDimensions,
+        dimensions,
         layers: [{
           type: 'image',
           source: `zarr://${source}`,
@@ -577,10 +596,10 @@ export function useNeuroglancer() {
       viewer.value = v
 
       // Build per-channel layers from OME-Zarr metadata
-      const { layers, isVolumetric, dataRange, displayDimensions } = await fetchChannelMetadata(source)
+      const { layers, isVolumetric, dataRange, displayDimensions, dimensions } = await fetchChannelMetadata(source)
 
       const initialState: NeuroglancerStateJSON = {
-        ...(displayDimensions?.length ? { displayDimensions } : {}),
+        ...(displayDimensions?.length ? { dimensions, displayDimensions } : {}),
         layout: isVolumetric ? initialLayout : 'xy',
         layers,
       }
