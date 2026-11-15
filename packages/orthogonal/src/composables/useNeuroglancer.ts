@@ -6,6 +6,17 @@ import type {
   NeuroglancerStateJSON,
 } from '../types'
 
+/** Meters per OME-Zarr axis unit (OME's default unit is micrometer). */
+function unitToMeters(unit?: string): number {
+  switch ((unit ?? 'micrometer').toLowerCase()) {
+    case 'nanometer': return 1e-9
+    case 'millimeter': return 1e-3
+    case 'centimeter': return 1e-2
+    case 'meter': return 1
+    default: return 1e-6
+  }
+}
+
 // Brightness slider range, in stops (each stop doubles or halves brightness)
 export const BRIGHTNESS_MAX_STOPS = 2
 
@@ -294,7 +305,7 @@ export function useNeuroglancer() {
    * Fetch OME-Zarr metadata and build layer configs for each channel.
    * Falls back to a single grayscale layer if metadata is unavailable.
    */
-  async function fetchChannelMetadata(source: string): Promise<{ layers: any[], isVolumetric: boolean, dataRange: [number, number] | null }> {
+  async function fetchChannelMetadata(source: string): Promise<{ layers: any[], isVolumetric: boolean, dataRange: [number, number] | null, displayDimensions?: string[] }> {
     try {
       // Try Zarr v2 (.zattrs) first, fall back to Zarr v3 (zarr.json)
       let zattrs: Record<string, any> | undefined
@@ -328,8 +339,14 @@ export function useNeuroglancer() {
 
       // Check if the data has a Z axis (volumetric vs 2D)
       const multiscales = zattrs?.multiscales
-      const axes = multiscales?.[0]?.axes as Array<{ name: string; type?: string }> | undefined
+      const axes = multiscales?.[0]?.axes as Array<{ name: string; type?: string; unit?: string }> | undefined
       const isVolumetric = axes ? axes.some(a => a.name === 'z') : false
+
+      // OME-Zarr stores axes slowest-first (c, z, y, x), and neuroglancer takes the
+      // first spatial dimensions as its display order, so without this the panel
+      // labeled "xy" shows the Z-Y plane and "yz" shows the real X-Y plane.
+      const spatialNames = (axes ?? []).filter(a => a.type === 'space').map(a => a.name)
+      const displayDimensions = ['x', 'y', 'z'].filter(n => spatialNames.includes(n))
 
       // Detect RGB: 3 channels with color model
       const isRGB = colorModel === 'color' && omeroChannels?.length === 3
@@ -365,15 +382,23 @@ export function useNeuroglancer() {
       if (isRGB) {
         // RGB brightfield: single layer with c^ channel dimension and RGB shader.
         // Source transform overrides the OME-Zarr parser's default c' → c^.
+        // Spatial dimensions keep the level-0 voxel size from the multiscales, so
+        // Z spacing and the scale bar stay right (a fixed 1 µm made every voxel a cube).
         const outputDimensions: Record<string, [number, string]> = { "c^": [1, ''] }
         if (axes) {
-          for (const a of axes) {
-            if (a.type === 'space') outputDimensions[a.name] = [0.000001, 'm']
-          }
+          const level0 = multiscales?.[0]?.datasets?.[0]?.coordinateTransformations as
+            Array<{ type: string; scale?: number[] }> | undefined
+          const scale = level0?.find(t => t.type === 'scale')?.scale
+          axes.forEach((a: { name: string; type?: string; unit?: string }, i: number) => {
+            if (a.type !== 'space') return
+            const s = typeof scale?.[i] === 'number' && scale[i] > 0 ? scale[i] : 1
+            outputDimensions[a.name] = [s * unitToMeters(a.unit), 'm']
+          })
         }
         return {
           dataRange,
           isVolumetric,
+          displayDimensions,
           layers: [{
             type: 'image',
             source: {
@@ -396,6 +421,7 @@ export function useNeuroglancer() {
         return {
           dataRange: null,
           isVolumetric,
+          displayDimensions,
           layers: omeroChannels.map((ch, i) => {
             const colorHex = ch.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length].replace('#', '')
             const rgb = hexToFloats(colorHex)
@@ -435,6 +461,7 @@ export function useNeuroglancer() {
       return {
         dataRange,
         isVolumetric,
+        displayDimensions,
         layers: [{
           type: 'image',
           source: `zarr://${source}`,
@@ -531,9 +558,10 @@ export function useNeuroglancer() {
       viewer.value = v
 
       // Build per-channel layers from OME-Zarr metadata
-      const { layers, isVolumetric, dataRange } = await fetchChannelMetadata(source)
+      const { layers, isVolumetric, dataRange, displayDimensions } = await fetchChannelMetadata(source)
 
       const initialState: NeuroglancerStateJSON = {
+        ...(displayDimensions?.length ? { displayDimensions } : {}),
         layout: isVolumetric ? initialLayout : 'xy',
         layers,
       }
