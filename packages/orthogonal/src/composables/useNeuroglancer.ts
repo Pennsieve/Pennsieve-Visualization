@@ -117,10 +117,18 @@ export function useNeuroglancer() {
     try {
       const state = viewer.value.state.toJSON() as NeuroglancerStateJSON
 
-      // Extract position (neuroglancer serializes as a plain array)
+      // Extract position (neuroglancer serializes it as a plain array in the order
+      // of state.dimensions, which follows the file: z, y, x for OME-Zarr). Pick
+      // x, y and z by name so the readout isn't swapped.
       const pos = state.position as number[] | undefined
-      if (Array.isArray(pos) && pos.length >= 3) {
-        position.value = [pos[0], pos[1], pos[2]]
+      if (Array.isArray(pos) && pos.length > 0) {
+        const names = Object.keys((state.dimensions as Record<string, unknown> | undefined) ?? {})
+          .map(n => n.toLowerCase())
+        const at = (axis: string, fallback: number) => {
+          const i = names.indexOf(axis)
+          return i >= 0 && i < pos.length ? pos[i] : (names.length ? 0 : pos[fallback] ?? 0)
+        }
+        position.value = [at('x', 0), at('y', 1), at('z', 2)]
       }
 
       // Extract layout
