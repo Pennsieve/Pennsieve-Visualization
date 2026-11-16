@@ -8,6 +8,7 @@ import {
   clearAllViewerStores
 } from './stores/tsviewer';
 import { useViewerControls } from './composables/useViewerControls';
+import { setTokenProvider, type TokenProvider } from './composables/useToken';
 import {
   TIMESERIES_ZARR,
   TIMESERIES_WEBSOCKET,
@@ -22,6 +23,9 @@ export {
   clearAllViewerStores,
   useViewerControls
 };
+
+// Auth: the host app hands over its own token source.
+export { setTokenProvider, type TokenProvider };
 
 // Viewer-asset vocabulary, so the host app matches on the same literals this viewer does
 // rather than duplicating them.

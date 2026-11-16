@@ -360,7 +360,17 @@ The composable:
 
 ```bash
 pnpm add vue pinia element-plus
-pnpm add @aws-amplify/auth  # optional, for authenticated endpoints
+```
+
+### Authentication
+
+The viewer does no auth of its own. For annotations and the streaming path, the host app
+hands over its token source once at start:
+
+```js
+import { setTokenProvider } from '@pennsieve-viz/tsviewer'
+
+setTokenProvider(async () => getMyAccessToken())
 ```
 
 ### Usage
