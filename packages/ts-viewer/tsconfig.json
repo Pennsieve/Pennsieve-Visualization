@@ -9,6 +9,9 @@
     // would only give consumers broken jump-to-definition targets.
     "declarationMap": false,
     "noEmit": false,
+    // The tests read fixtures with node:fs. Named here, not left to arrive through a
+    // dependency's own types the way they once did through Amplify's.
+    "types": ["vite/client", "node"],
     "paths": {
       "@/*": ["./src/*"]
     }
