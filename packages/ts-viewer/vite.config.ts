@@ -58,7 +58,6 @@ export default defineConfig({
         /^pinia($|\/)/,
         /^element-plus($|\/)/,
         /^@element-plus\//,
-        /^@aws-amplify\//,
         /^@pennsieve\/timeseries-zarr-reader($|\/)/,
         /^protobufjs($|\/)/,
       ],

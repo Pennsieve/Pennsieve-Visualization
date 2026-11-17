@@ -35,10 +35,9 @@ const harness = vi.hoisted(() => ({
 }))
 
 // The token is transport-internal now and the transport is mocked whole, but the
-// store still imports useToken, and Amplify is not configured under test.
+// store still imports useToken, and there is no token provider under test.
 vi.mock('@/composables/useToken', () => ({
-    useToken: vi.fn(async () => 'test-token'),
-    useLogout: vi.fn(async () => {})
+    useToken: vi.fn(async () => 'test-token')
 }))
 
 vi.mock('@/transport/createTransport', async () => {

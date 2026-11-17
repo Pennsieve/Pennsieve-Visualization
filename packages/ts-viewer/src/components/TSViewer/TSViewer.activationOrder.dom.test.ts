@@ -20,8 +20,7 @@ const harness = vi.hoisted(() => ({
 }))
 
 vi.mock('@/composables/useToken', () => ({
-    useToken: vi.fn(async () => 'test-token'),
-    useLogout: vi.fn(async () => {})
+    useToken: vi.fn(async () => 'test-token')
 }))
 
 vi.mock('@/transport/createTransport', async () => {

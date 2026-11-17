@@ -31,8 +31,7 @@ vi.mock('element-plus', async (importOriginal) => {
 })
 
 vi.mock('@/composables/useToken', () => ({
-    useToken: vi.fn(async () => 'test-token'),
-    useLogout: vi.fn(async () => {})
+    useToken: vi.fn(async () => 'test-token')
 }))
 
 // One transport per viewer, absorbing everything the tree sends. Only the

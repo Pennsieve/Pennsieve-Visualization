@@ -1,6 +1,6 @@
 {
   "name": "@pennsieve-viz/tsviewer",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -33,7 +33,7 @@
     "protobufjs": "^7.6.3"
   },
   "devDependencies": {
-    "@aws-amplify/auth": "^6.13.0",
+    "@types/node": "^20",
     "@vitejs/plugin-vue": "^5.2.4",
     "@vitest/coverage-v8": "^4.0.0",
     "@vue/test-utils": "^2.4.6",
@@ -49,15 +49,9 @@
     "vue": "^3.5.17"
   },
   "peerDependencies": {
-    "@aws-amplify/auth": "^6.0.0",
     "element-plus": "^2.3.0",
     "pinia": "^2.0.0 || ^3.0.0",
     "vue": "^3.2.0"
-  },
-  "peerDependenciesMeta": {
-    "@aws-amplify/auth": {
-      "optional": true
-    }
   },
   "license": "MIT",
   "repository": {

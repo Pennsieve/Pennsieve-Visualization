@@ -15,9 +15,8 @@ streaming service.
 npm install @pennsieve-viz/tsviewer
 ```
 
-Peer dependencies: `vue` >= 3.2, `pinia`, `element-plus`, and `@aws-amplify/auth`
-(optional, needed only for the streaming path's token). Requires Node 20 or newer to
-build.
+Peer dependencies: `vue` >= 3.2, `pinia`, and `element-plus`. Requires Node 20 or newer
+to build.
 
 Element Plus component styles are not bundled. Load them in the host app:
 
@@ -74,8 +73,10 @@ store and releases the bundle reader.
   repeatedly, and must resolve to a URL or `{ url }`.
 - The Zarr path is bounded only by the recording length. The streaming path caps the
   viewable window at 10 minutes, which is a limit of that service.
-- Tokens for the streaming socket come from Amplify via `@aws-amplify/auth`. Without it
-  installed the Zarr path still works; the streaming path will not authenticate.
+- The viewer does no auth of its own. Pennsieve API requests and the streaming socket
+  take their token from `setTokenProvider`, which the host app calls once at start:
+  `setTokenProvider(async () => getMyAccessToken())`. Without it the Zarr path still works;
+  annotations and the streaming path will not authenticate.
 - `@pennsieve/timeseries-zarr-reader` and `protobufjs` install as dependencies rather
   than being bundled. The reader ships WebAssembly codecs, so a host bundler must serve
   `.wasm` assets from `node_modules` (Vite does by default).

@@ -5,11 +5,10 @@ import type { ActiveViewerContent, ViewerStore } from '@/stores/tsviewer'
 import type { ChannelDetail } from '@/composables/streaming/channelDetails'
 import type { ViewerMessage } from '@/events/emitter'
 
-// The viewer store pulls in Amplify and the streaming client registry on import;
+// The viewer store pulls in the token provider and the streaming client registry on import;
 // neither exists in the node project and neither is exercised here.
 vi.mock('@/composables/useToken', () => ({
-    useToken: async () => 'a.jwt.token',
-    useLogout: async () => undefined
+    useToken: async () => 'a.jwt.token'
 }))
 
 vi.mock('@/composables/useChannelDataRequest', () => ({

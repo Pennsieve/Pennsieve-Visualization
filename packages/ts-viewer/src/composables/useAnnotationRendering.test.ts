@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
-// The store reaches for Amplify, a discovery WebSocket, and the zarr client registry on
+// The store reaches for the token provider, a discovery WebSocket, and the zarr client registry on
 // construction. None of them exists under test. The token mock also stands in for the
 // presigned-url call of the linked-package icon.
 vi.mock('@/composables/useToken', () => ({
-    useToken: vi.fn(async () => 'a.jwt.token'),
-    useLogout: vi.fn()
+    useToken: vi.fn(async () => 'a.jwt.token')
 }))
 
 vi.mock('@/composables/useChannelDataRequest', () => ({

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
-// The store reaches for Amplify and a discovery WebSocket on the legacy path; neither exists
+// The store reaches for the token provider and a discovery WebSocket on the legacy path; neither exists
 // under test, and the point here is only which path gets taken.
 const acquireClient = vi.fn()
 const ensureCatalog = vi.fn()
@@ -9,8 +9,7 @@ const disposeClient = vi.fn()
 const openConnection = vi.fn()
 
 vi.mock('@/composables/useToken', () => ({
-    useToken: vi.fn(async () => 'a.jwt.token'),
-    useLogout: vi.fn()
+    useToken: vi.fn(async () => 'a.jwt.token')
 }))
 
 vi.mock('@/composables/useChannelDataRequest', () => ({

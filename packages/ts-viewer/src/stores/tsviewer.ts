@@ -228,7 +228,7 @@ function defineViewerStore(instanceId: string) {
       };
 
       // Zarr bundle path. The bundle describes its own channels, so this skips both the
-      // discovery WebSocket and the Amplify token -- neither is available for a public or
+      // discovery WebSocket and the host's token -- neither is available for a public or
       // locally served bundle. viewerAssetId keeps its existing meaning and is still
       // carried on `content` for the fallback path.
       if (isZarrAssetType(assetType)) {
