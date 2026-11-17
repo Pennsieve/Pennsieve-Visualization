@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import type { Ref } from 'vue'
 
-// Same isolation as tsviewer.assetType.test.ts: the store reaches for Amplify, a
+// Same isolation as tsviewer.assetType.test.ts: the store reaches for the token provider, a
 // discovery WebSocket and the Zarr client registry, none of which exist under test.
 const acquireClient = vi.fn()
 const ensureCatalog = vi.fn()
@@ -10,8 +10,7 @@ const disposeClient = vi.fn()
 const openConnection = vi.fn()
 
 vi.mock('@/composables/useToken', () => ({
-    useToken: vi.fn(async () => 'a.jwt.token'),
-    useLogout: vi.fn()
+    useToken: vi.fn(async () => 'a.jwt.token')
 }))
 
 vi.mock('@/composables/useChannelDataRequest', () => ({

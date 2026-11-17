@@ -2,11 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
-// The store reaches for Amplify, a discovery WebSocket, and the zarr client registry on
+// The store reaches for the token provider, a discovery WebSocket, and the zarr client registry on
 // construction. None of them exists under test and none is involved in a pointer move.
 vi.mock('@/composables/useToken', () => ({
-    useToken: vi.fn(async () => 'a.jwt.token'),
-    useLogout: vi.fn()
+    useToken: vi.fn(async () => 'a.jwt.token')
 }))
 
 vi.mock('@/composables/useChannelDataRequest', () => ({

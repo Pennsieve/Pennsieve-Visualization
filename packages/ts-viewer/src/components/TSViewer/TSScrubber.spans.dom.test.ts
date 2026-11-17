@@ -10,10 +10,9 @@ import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, shallowRef } from 'vue'
 
-// The legacy url carries a session token, and Amplify is not configured under test.
+// The legacy url carries a session token, and there is no token provider under test.
 vi.mock('@/composables/useToken', () => ({
-    useToken: vi.fn(async () => 'test-token'),
-    useLogout: vi.fn(async () => {})
+    useToken: vi.fn(async () => 'test-token')
 }))
 
 import TSScrubber from '@/components/TSViewer/TSScrubber.vue'
