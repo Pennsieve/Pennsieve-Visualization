@@ -38,6 +38,7 @@ import type { ActiveViewer, ViewerChannel } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import { useViewerTransport } from "@/state/viewerTransportContext"
+import { isBundleLayerId } from "@/composables/useBundleAnnotations"
 
 /** Viewer constants TSViewer passes whole. The transport owns the segment-span walk. */
 interface ScrubberConstants {
@@ -553,7 +554,11 @@ const getAnnotations = async () => {
     return
   }
 
-  if (!viewerStore.viewerAnnotations || viewerStore.viewerAnnotations.length === 0) {
+  const apiLayerIds = (viewerStore.viewerAnnotations ?? [])
+    .map(layer => layer.id)
+    .filter(layerId => !isBundleLayerId(layerId))
+
+  if (apiLayerIds.length === 0) {
     annotations.value = []
     render()
     return
@@ -561,7 +566,7 @@ const getAnnotations = async () => {
 
   try {
     const token = await useToken()
-    const layerIds = viewerStore.viewerAnnotations.map(obj => obj.id)
+    const layerIds = apiLayerIds
     const endTime = props.ts_end
     const baseUrl = `${viewerStore.config.apiUrl}/timeseries/${currentViewerId}/annotations/window`
     let url = baseUrl + `?api_key=${token}&aggregation=count&start=${props.ts_start}&end=${props.ts_end}&period=${period.value}&mergePeriods=true`
