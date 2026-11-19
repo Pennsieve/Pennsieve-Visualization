@@ -90,6 +90,7 @@ vi.mock('@/transport/createTransport', async () => {
     return { createTransport: () => transport }
 })
 
+import TSAnnotationModal from '@/components/TSViewer/TSAnnotationModal.vue'
 import TSPlotCanvas from '@/components/TSViewer/TSPlotCanvas.vue'
 import TSViewer from '@/components/TSViewer/TSViewer.vue'
 import TSViewerCanvas from '@/components/TSViewer/TSViewerCanvas.vue'
@@ -652,6 +653,30 @@ describe('TSViewer mounted against a recorded transport', () => {
         await flushPromises()
 
         expect(canvas.props('start')).toBe(startBefore)
+    })
+
+    // The save path already refuses a bundle layer by throwing. Reaching it would log
+    // that as a failed save and reopen the dialog for a retry that cannot succeed.
+    it('closes the dialog without attempting a save for an annotation read from the data bundle', async () => {
+        await mountViewer('dom-test-bundle-annotation-save')
+        await initializeChannels()
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        const modal = wrapper!.findComponent(TSAnnotationModal)
+
+        modal.vm.$emit('createUpdateAnnotation', {
+            id: 'ann-1',
+            layer_id: 'bundle:annotations',
+            label: 'PAT BIOCAL EEG',
+            start: 0,
+            end: 0,
+            duration: 0
+        })
+        await flushPromises()
+
+        expect(error).not.toHaveBeenCalled()
+        expect(modal.props('visible')).toBe(false)
+
+        error.mockRestore()
     })
 
     it('sends the montage payload through transport setMontage when the montage scheme changes', async () => {

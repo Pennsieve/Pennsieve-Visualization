@@ -2,13 +2,43 @@
   <el-dialog
     class="timeseries-annotation-modal"
     ref="annotation-modal"
-    :title="dialogTitle"
+    :width="readOnly ? '560px' : undefined"
     :modelValue="localVisible"
     @update:modelValue="(value: boolean) => { localVisible = value; if (!value) emit('closeWindow') }"
     @close="close"
     @closed="onClosed">
 
-    <div slot="body">
+    <template #header>
+      <div class="dialog-header">
+        <span class="el-dialog__title">{{ dialogTitle }}</span>
+        <span v-if="readOnly" class="read-only-tag">Read only</span>
+      </div>
+    </template>
+
+    <dl v-if="readOnly" class="annotation-details">
+      <div class="detail">
+        <dt>Time</dt>
+        <dd>{{ timeText }}</dd>
+      </div>
+      <div class="detail">
+        <dt>Duration</dt>
+        <dd>{{ durationText }}</dd>
+      </div>
+      <div class="detail">
+        <dt>Layer</dt>
+        <dd>{{ layerName }}</dd>
+      </div>
+      <div class="detail">
+        <dt>Type</dt>
+        <dd>{{ activeAnnotation.label || '—' }}</dd>
+      </div>
+      <div class="detail detail--wide">
+        <dt>Description</dt>
+        <dd :class="{ 'detail-placeholder': !activeAnnotation.description }">{{ descriptionText }}</dd>
+      </div>
+    </dl>
+
+    <div v-else>
       <div class="select-wrapper">
         <div class="range-type-selector">
           <div class="select-label">
@@ -94,7 +124,7 @@
         </div>
         <div class="buttons">
           <bf-library-button
-            @click="submitForm"
+            @click="readOnly ? close() : submitForm()"
           > {{ actionButtonText }}
           </bf-library-button>
         </div>
@@ -149,12 +179,16 @@ watch(() => props.visible, (newValue) => {
   showBundleDescription()
 }, { immediate: true })
 
+/** Set when a bundle annotation's description could not be read. */
+const descriptionUnavailable = ref(false)
+
 /**
  * Fills in a bundle annotation's description, which its window arrived without.
  *
  * Kept on the annotation itself, so opening it again reads nothing.
  */
 const showBundleDescription = async () => {
+  descriptionUnavailable.value = false
   const annotation = activeAnnotation.value as Annotation
   if (!isBundleLayerId(annotation.layer_id) || annotation.description !== undefined) {
     return
@@ -173,6 +207,9 @@ const showBundleDescription = async () => {
     }
   } catch (err) {
     console.warn('Could not read the annotation body from the bundle:', err)
+    if (activeAnnotation.value.id === annotation.id) {
+      descriptionUnavailable.value = true
+    }
   }
 }
 
@@ -217,13 +254,88 @@ const defaultLabels = ref([
   { value: 'Stop', label: 'Stop' }
 ])
 
+/**
+ * Annotations read from the data bundle cannot be saved back, so they open for viewing
+ * only. Annotations from the Pennsieve API keep the editable form.
+ */
+const readOnly = computed(() => isBundleLayerId(activeAnnotation.value.layer_id))
+
 // Computed properties
 const dialogTitle = computed(() => {
+  if (readOnly.value) {
+    return "Annotation Details"
+  }
   return activeAnnotation.value.id ? "Edit Annotation" : "Create Annotation"
 })
 
 const actionButtonText = computed(() => {
+  if (readOnly.value) {
+    return "Close"
+  }
   return activeAnnotation.value.id ? "Update" : "Create"
+})
+
+/**
+ * A time in microseconds as UTC, matching the plot axis. Milliseconds appear only when
+ * the time has them.
+ */
+const formatUtc = (us: number) => {
+  const iso = new Date(us / 1000).toISOString()
+  const millis = iso.slice(19, 23)
+  return `${iso.slice(0, 10)} ${iso.slice(11, 19)}${millis === '.000' ? '' : millis}`
+}
+
+const timeText = computed(() => {
+  const { start, end, duration } = activeAnnotation.value
+  if (start === undefined) {
+    return '—'
+  }
+  const startText = formatUtc(start)
+  if (!duration || end === undefined) {
+    return `${startText} UTC`
+  }
+  const endText = formatUtc(end)
+  // A range within one day names the date once.
+  const sameDay = startText.slice(0, 10) === endText.slice(0, 10)
+  return `${startText} → ${sameDay ? endText.slice(11) : endText} UTC`
+})
+
+const durationText = computed(() => {
+  const durationUs = activeAnnotation.value.duration ?? 0
+  if (durationUs <= 0) {
+    return 'Single point'
+  }
+  const ms = durationUs / 1000
+  if (ms < 1000) {
+    return `${Math.round(ms)} ms`
+  }
+  const seconds = ms / 1000
+  if (seconds < 60) {
+    return `${Number(seconds.toFixed(1))} s`
+  }
+  const totalSeconds = Math.round(seconds)
+  const parts = [
+    [Math.floor(totalSeconds / 3600), 'h'],
+    [Math.floor((totalSeconds % 3600) / 60), 'min'],
+    [totalSeconds % 60, 's']
+  ] as const
+  return parts.filter(([value]) => value > 0).map(([value, unit]) => `${value} ${unit}`).join(' ')
+})
+
+const layerName = computed(() => {
+  const layerId = activeAnnotation.value.layer_id
+  return viewerAnnotations.value.find((layer) => layer.id === layerId)?.name ?? '—'
+})
+
+const descriptionText = computed(() => {
+  const description = activeAnnotation.value.description
+  if (description) {
+    return description
+  }
+  if (description === undefined && !descriptionUnavailable.value) {
+    return 'Loading…'
+  }
+  return descriptionUnavailable.value ? 'Description unavailable' : 'No description'
 })
 
 const datePickerType = computed(() => {
@@ -231,40 +343,20 @@ const datePickerType = computed(() => {
 })
 
 const channelSelectionStr = computed(() => {
-  let str = ""
+  // A read-only annotation already exists, so the footer says where it applies rather
+  // than where it is being added.
+  const verb = readOnly.value ? "Applies to" : "Adding to"
+  const channelCount = (activeAnnotation.value?.channelIds ?? []).length
   if (activeAnnotation.value.allChannels) {
-    str = "Adding to all channels"
-  } else if ((activeAnnotation.value?.channelIds ?? []).length == 1) {
-    str = "Adding to single channel"
-  } else {
-    str = `Adding to ${(activeAnnotation.value?.channelIds ?? []).length} channels`
+    return `${verb} all channels`
   }
-  return str
+  if (channelCount == 1) {
+    return readOnly.value ? `${verb} 1 channel` : `${verb} single channel`
+  }
+  return `${verb} ${channelCount} channels`
 })
 
 // Watchers
-watch(() => props.visible, (newValue) => {
-  if (!newValue) return
-
-  // Convert microseconds to milliseconds for JavaScript Date
-  // Assuming annotation times are stored in microseconds
-  const startMs = activeAnnotation.value.start! / 1000
-  const endMs = activeAnnotation.value.end! / 1000
-
-  initialTimeRange.value = {
-    start: activeAnnotation.value.start!,
-    end: activeAnnotation.value.end!
-  }
-
-  if (activeAnnotation.value.duration == 0) {
-    hasRangeValue.value = false
-    selectedRange.value = startMs
-  } else {
-    hasRangeValue.value = true
-    selectedRange.value = [startMs, endMs]
-  }
-})
-
 watch(hasRangeValue, (value) => {
   // Convert microseconds to milliseconds for the date picker
   const startMs = activeAnnotation.value.start! / 1000
@@ -334,23 +426,6 @@ const close = () => {
 const onClosed = () => {
   isProcessing.value = false
 }
-
-const getUTCDateString = (d: number) => {
-  if(d > 0) {
-    const date = new Date(d/1000);
-    return ( date.toDateString() );
-  } else {
-    return 'unknown';
-  }
-}
-
-const getUTCTimeString = (d: number) => {
-  if(d > 0) {
-    const date = new Date(d / 1000);
-    return ( ('0' + date.getUTCHours()).slice(-2) + ':' +
-      ('0' + date.getUTCMinutes()).slice(-2) + ':' + ('0' + date.getUTCSeconds()).slice(-2) );
-  }
-}
 </script>
 
 <style lang="scss" scoped>
@@ -359,6 +434,60 @@ const getUTCTimeString = (d: number) => {
 .timeseries-annotation-modal {
   display: block;
   box-sizing: border-box;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.read-only-tag {
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 10px;
+  color: $white;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.annotation-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 24px;
+  margin: 0;
+}
+
+.detail {
+  min-width: 0;
+
+  &--wide {
+    grid-column: 1 / -1;
+  }
+
+  dt {
+    margin-bottom: 4px;
+    color: $gray_4;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  dd {
+    margin: 0;
+    color: $gray_6;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .detail-placeholder {
+    color: $gray_4;
+    font-style: italic;
+  }
 }
 
 .select-wrapper {
@@ -374,9 +503,9 @@ const getUTCTimeString = (d: number) => {
 }
 
 .button-wrapper {
-  min-width: 500px;
   display: flex;
   flex-direction: row;
+  align-items: center;
   justify-content: space-between;
 }
 
