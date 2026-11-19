@@ -549,12 +549,6 @@ const getAnnotations = async () => {
     return
   }
 
-  // Two sources, one shape. API layers are counted by the annotations/window endpoint.
-  // Bundle layers (`bundle:` ids, read from the Zarr bundle's event channels) have no row
-  // in the API: sending one makes it reject the whole request with a 400, so they are
-  // counted from the bundle instead. A bundle can hold several annotation channels, so
-  // both sides are lists. Each returns { layerId: [{ start, end, value }] } and fails on
-  // its own, so the draw code below treats every layer alike.
   const layerIds = (viewerStore.viewerAnnotations ?? []).map(layer => layer.id)
   const apiLayerIds = layerIds.filter(layerId => !isBundleLayerId(layerId))
   const bundleLayerIds = layerIds.filter(isBundleLayerId)
@@ -565,7 +559,6 @@ const getAnnotations = async () => {
     return
   }
 
-  // Each source fails on its own, so one being down still leaves the other's counts
   const [apiCounts, bundleCounts] = await Promise.all([
     getApiAnnotationCounts(currentViewerId, apiLayerIds),
     getBundleAnnotationCounts(bundleLayerIds)
@@ -578,7 +571,6 @@ const getAnnotations = async () => {
   }
 }
 
-// Counts per layer from the API, keyed by layer id
 const getApiAnnotationCounts = async (
   viewerId: string,
   apiLayerIds: Array<number | string | undefined>
@@ -609,7 +601,6 @@ const getApiAnnotationCounts = async (
   }
 }
 
-// Counts per layer read from the Zarr bundle, keyed by layer id
 const getBundleAnnotationCounts = async (bundleLayerIds: string[]) => {
   const countsByLayer: Record<string, AnnotationCountBucket[]> = {}
   await Promise.all(bundleLayerIds.map(async (layerId) => {
@@ -725,7 +716,6 @@ const renderTimelimeLine = () => {
     if (annotationLayers.hasOwnProperty(annotation)) {
       // find color
       for (let i = 0; i < annPanelLayers.length; i++) {
-        // Response keys are strings; API layer ids are numbers, bundle layer ids strings
         if (String(annPanelLayers[i].id) === annotation) {
           annotationIndex = i
           color = annPanelLayers[i].color!

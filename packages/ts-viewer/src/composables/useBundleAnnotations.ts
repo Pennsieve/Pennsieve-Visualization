@@ -179,17 +179,12 @@ export async function queryBundleLayer(
     return null
 }
 
-/** One span of the scrubber's density bar, shaped like a row of the API's annotation-window count. */
 export interface AnnotationCountBucket {
     start: number
     end: number
     value: number
 }
 
-/**
- * Turns per-bucket totals into the scrubber's spans, dropping empty buckets and joining
- * neighbors that hold annotations, as the API's `mergePeriods` does.
- */
 export function totalsToCountBuckets(
     totals: ArrayLike<number>,
     firstStartUs: number,
@@ -213,12 +208,6 @@ export function totalsToCountBuckets(
 }
 
 /**
- * Counts a bundle layer's annotations over [startUs, endUs) in buckets of `periodUs`, for
- * the scrubber, which the API cannot count because the layer has no row there.
- *
- * Reads the event times and counts them here, an interval in every bucket it overlaps.
- * Returns null when the viewer no longer has a bundle open or the layer's channel is gone.
- *
  * Why it counts times rather than reading the format's count levels: a TS-Zarr event
  * channel may store precomputed per-bin counts (`countLevels > 0`, read with the
  * reader's `eventCounts`), but those exist so dense channels can be drawn without
@@ -253,7 +242,6 @@ export async function countBundleLayer(
     const bucketAt = (timeUs: number) =>
         Math.min(bucketCount - 1, Math.max(0, Math.floor((timeUs - startUs) / periodUs)))
 
-    // No extra columns: the times, and the durations a channel with them always reads, suffice.
     for await (const window of entry.client.queryEvents({
         channels: [channelId],
         startUs,
