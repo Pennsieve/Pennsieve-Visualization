@@ -9,11 +9,13 @@ vi.mock('./streaming/clientRegistry', () => ({
 }))
 
 const {
+    countBundleLayer,
     isBundleLayerId,
     loadBundleDescription,
     loadBundleLayers,
     queryBundleLayer,
     textToDescription,
+    totalsToCountBuckets,
     windowToAnnotations
 } = await import('./useBundleAnnotations')
 
@@ -177,5 +179,29 @@ describe('useBundleAnnotations', () => {
         openBundle()
         const annotation = { ...windowToAnnotations(window(), marks, 'bundle:marks', 2)[0], layer_id: 12 }
         expect(await loadBundleDescription('viewer-1', annotation)).toBeUndefined()
+    })
+
+    it('drops empty buckets and joins neighbors into the API\'s merged spans', () => {
+        expect(totalsToCountBuckets([0, 2, 1, 0, 3], 100, 10)).toEqual([
+            { start: 110, end: 130, value: 3 },
+            { start: 140, end: 150, value: 3 }
+        ])
+    })
+
+    it('counts a layer without count levels from its times, an interval in every bucket it overlaps', async () => {
+        const queries = openBundle(window({ durations: Float64Array.from([1500, 0]) }))
+
+        const buckets = await countBundleLayer('viewer-1', 'bundle:marks', 0, 5000, 1000)
+
+        expect(queries).toEqual([
+            { channels: ['marks'], startUs: 0, endUs: 5000, columns: [], priority: 'background' }
+        ])
+        expect(buckets).toEqual([{ start: 1000, end: 3000, value: 3 }])
+    })
+
+    it('counts nothing without a bundle or for a channel the bundle no longer has', async () => {
+        expect(await countBundleLayer('viewer-1', 'bundle:marks', 0, 5000, 1000)).toBeNull()
+        openBundle()
+        expect(await countBundleLayer('viewer-1', 'bundle:gone', 0, 5000, 1000)).toBeNull()
     })
 })

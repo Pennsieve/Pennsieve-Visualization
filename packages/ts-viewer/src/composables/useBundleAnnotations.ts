@@ -179,6 +179,99 @@ export async function queryBundleLayer(
     return null
 }
 
+/** One span of the scrubber's density bar, shaped like a row of the API's annotation-window count. */
+export interface AnnotationCountBucket {
+    start: number
+    end: number
+    value: number
+}
+
+/**
+ * Turns per-bucket totals into the scrubber's spans, dropping empty buckets and joining
+ * neighbors that hold annotations, as the API's `mergePeriods` does.
+ */
+export function totalsToCountBuckets(
+    totals: ArrayLike<number>,
+    firstStartUs: number,
+    periodUs: number
+): AnnotationCountBucket[] {
+    const buckets: AnnotationCountBucket[] = []
+    for (let i = 0; i < totals.length; i++) {
+        if (totals[i] === 0) {
+            continue
+        }
+        const start = firstStartUs + i * periodUs
+        const previous = buckets[buckets.length - 1]
+        if (previous && previous.end === start) {
+            previous.end = start + periodUs
+            previous.value += totals[i]
+        } else {
+            buckets.push({ start, end: start + periodUs, value: totals[i] })
+        }
+    }
+    return buckets
+}
+
+/**
+ * Counts a bundle layer's annotations over [startUs, endUs) in buckets of `periodUs`, for
+ * the scrubber, which the API cannot count because the layer has no row there.
+ *
+ * Reads the event times and counts them here, an interval in every bucket it overlaps.
+ * Returns null when the viewer no longer has a bundle open or the layer's channel is gone.
+ *
+ * Why it counts times rather than reading the format's count levels: a TS-Zarr event
+ * channel may store precomputed per-bin counts (`countLevels > 0`, read with the
+ * reader's `eventCounts`), but those exist so dense channels can be drawn without
+ * reading every event, and dense channels are spike channels, which are rows, not
+ * layers. Annotation channels hold tens to thousands of events, and the bundles seen
+ * so far (EDF+ conversions) store no count level for them, so reading the times is
+ * cheap and is the only path that runs. If a bundle ever carries an annotation channel
+ * too dense for this, use `eventCounts` when `channel.countLevels > 0`, adding it to
+ * AnchoredClient with the same origin shift as `queryEvents`.
+ */
+export async function countBundleLayer(
+    storeId: string,
+    layerId: string,
+    startUs: number,
+    endUs: number,
+    periodUs: number
+): Promise<AnnotationCountBucket[] | null> {
+    const entry = getClient(storeId)
+    if (!entry) {
+        return null
+    }
+
+    const channelId = eventChannelId(layerId)
+    const channel = (await entry.client.channelInfo())
+        .find((c): c is EventChannelInfo => c.kind === 'event' && c.id === channelId)
+    if (!channel) {
+        return null
+    }
+
+    const bucketCount = Math.max(1, Math.ceil((endUs - startUs) / periodUs))
+    const bucketTotals = new Array<number>(bucketCount).fill(0)
+    const bucketAt = (timeUs: number) =>
+        Math.min(bucketCount - 1, Math.max(0, Math.floor((timeUs - startUs) / periodUs)))
+
+    // No extra columns: the times, and the durations a channel with them always reads, suffice.
+    for await (const window of entry.client.queryEvents({
+        channels: [channelId],
+        startUs,
+        endUs,
+        columns: [],
+        priority: 'background'
+    })) {
+        for (let i = 0; i < window.times.length; i++) {
+            const onsetUs = window.times[i]
+            const lastBucket = bucketAt(onsetUs + (window.durations?.[i] ?? 0))
+            for (let bucket = bucketAt(onsetUs); bucket <= lastBucket; bucket++) {
+                bucketTotals[bucket]++
+            }
+        }
+    }
+    return totalsToCountBuckets(bucketTotals, startUs, periodUs)
+}
+
 /**
  * The description of one bundle annotation.
  *
