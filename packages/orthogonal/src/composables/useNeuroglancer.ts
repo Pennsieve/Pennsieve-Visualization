@@ -28,6 +28,56 @@ function isSpatialAxis(a: { name: string; type?: string }): boolean {
 // Brightness slider range, in stops (each stop doubles or halves brightness)
 export const BRIGHTNESS_MAX_STOPS = 2
 
+// Black level slider range, as a share of each layer's opened display range:
+// 0 = the range the viewer opened with, 0.5 = start halfway up, -0.5 = bring
+// back values below the opened start.
+export const BLACK_LEVEL_MIN = -0.5
+export const BLACK_LEVEL_MAX = 0.9
+
+// Values sampled per channel from the smallest pyramid level for the display
+// range and background level; enough for stable percentiles, light on memory.
+const SAMPLE_PER_CHANNEL = 1_000_000
+
+/**
+ * Background (black) level of one channel: its most common non-zero value,
+ * capped at the 5th percentile of non-zero values so at most ~5% of real
+ * pixels can go black. For fluorescence the most common value is the glow of
+ * the mounting medium or the camera offset; showing it black removes the wash
+ * of channel color. Zeros are left out because they are usually stitching
+ * padding. Same rule as the TIFF converter's background_level(), so assets
+ * made before the converter used it look the same as new ones.
+ */
+export function backgroundLevel(values: ArrayLike<number>): number | null {
+  const nz: number[] = []
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i]
+    if (v !== 0 && Number.isFinite(v)) nz.push(v)
+  }
+  if (nz.length === 0) return null
+  nz.sort((a, b) => a - b)
+  const p5 = nz[Math.floor((nz.length - 1) * 0.05)]
+  const lo = nz[0]
+  const hi = nz[nz.length - 1]
+
+  let mode = lo
+  if (nz.every(Number.isInteger) && hi - lo < 1 << 20) {
+    const counts = new Uint32Array(hi - lo + 1)
+    for (const v of nz) counts[v - lo]++
+    let best = 0
+    for (let i = 0; i < counts.length; i++) if (counts[i] > counts[best]) best = i
+    mode = lo + best
+  } else if (hi > lo) {
+    const bins = 1024
+    const counts = new Uint32Array(bins)
+    const w = (hi - lo) / bins
+    for (const v of nz) counts[Math.min(bins - 1, Math.floor((v - lo) / w))]++
+    let best = 0
+    for (let i = 0; i < bins; i++) if (counts[i] > counts[best]) best = i
+    mode = lo + best * w
+  }
+  return Math.min(mode, p5)
+}
+
 // Default colors for channels when none detected
 const DEFAULT_COLORS = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff']
 
@@ -102,7 +152,11 @@ export function useNeuroglancer() {
   const layout = ref<LayoutMode>('4panel')
   // Brightness in stops: 0 = the range the viewer opened with, +1 = twice as bright
   const brightness = ref(0)
-  // Each layer's invlerp range before any brightness change, by layer name.
+  // Black level as a share of each layer's opened range: 0 = as opened
+  const blackLevel = ref(0)
+  // False for RGB images, which have no display range for the black level to move
+  const hasDisplayRange = ref(true)
+  // Each layer's invlerp range before any brightness or black level change, by layer name.
   // Keyed by name because restoreState (layout/visibility changes) can rebuild layers.
   let baseRanges = new Map<string, [number, number]>()
 
@@ -222,21 +276,25 @@ export function useNeuroglancer() {
   }
 
   /**
-   * Fetch the smallest pyramid level's chunks and compute the 1-99% data range.
-   * Returns null if fetching/decoding fails.
+   * Fetch the smallest pyramid level's chunks and compute the 1-99% data range
+   * (all channels together) and each channel's background level.
+   * Returns nulls if fetching/decoding fails.
    */
-  async function fetchDataRange(
+  async function fetchLevelStats(
     source: string,
     dtype: string,
     multiscales: any,
-  ): Promise<[number, number] | null> {
+  ): Promise<{ range: [number, number] | null, background: (number | null)[] }> {
+    const none = { range: null, background: [] as (number | null)[] }
     try {
       const base = source.replace(/\/+$/, '')
       const datasets = multiscales?.[0]?.datasets as Array<{ path: string }> | undefined
-      if (!datasets || datasets.length === 0) return null
+      if (!datasets || datasets.length === 0) return none
 
       // Use the smallest (last) pyramid level
       const smallestPath = datasets[datasets.length - 1].path
+      const axisNames = ((multiscales?.[0]?.axes ?? []) as Array<{ name: string }>).map(a => a.name)
+      const cAxis = axisNames.indexOf('c')
 
       // Fetch array metadata to get chunk layout
       let arrayMeta: any = null
@@ -248,13 +306,13 @@ export function useNeuroglancer() {
       } else if (v3Res?.ok) {
         arrayMeta = await v3Res.json()
       }
-      if (!arrayMeta) return null
+      if (!arrayMeta) return none
 
       // Determine shape and chunk shape
       const shape: number[] = arrayMeta.shape
       const chunkShape: number[] = arrayMeta.chunks
         ?? arrayMeta.chunk_grid?.configuration?.chunk_shape
-      if (!shape || !chunkShape) return null
+      if (!shape || !chunkShape) return none
 
       // Determine chunk key separator
       const separator = arrayMeta.chunk_key_encoding?.configuration?.separator
@@ -268,38 +326,48 @@ export function useNeuroglancer() {
       const numChunks = shape.map((s: number, i: number) => Math.ceil(s / chunkShape[i]))
 
       // Fetch all chunks (smallest level should be small)
-      const allValues: number[] = []
-      const chunkUrls: string[] = []
+      const chunkIndices: number[][] = []
 
-      function buildChunkUrls(dimIndex: number, indices: number[]) {
+      function buildChunkIndices(dimIndex: number, indices: number[]) {
         if (dimIndex === shape.length) {
-          chunkUrls.push(`${base}/${smallestPath}/${chunkPrefix}${indices.join(separator)}`)
+          chunkIndices.push(indices)
           return
         }
         for (let i = 0; i < numChunks[dimIndex]; i++) {
-          buildChunkUrls(dimIndex + 1, [...indices, i])
+          buildChunkIndices(dimIndex + 1, [...indices, i])
         }
       }
-      buildChunkUrls(0, [])
+      buildChunkIndices(0, [])
 
       const chunkResults = await Promise.all(
-        chunkUrls.map(url => fetchAndDecodeChunk(url, dtype))
+        chunkIndices.map(idx =>
+          fetchAndDecodeChunk(`${base}/${smallestPath}/${chunkPrefix}${idx.join(separator)}`, dtype))
       )
 
-      for (const chunk of chunkResults) {
-        if (chunk) {
-          const arr = chunk instanceof Float32Array ? chunk
-            : chunk instanceof Uint16Array ? chunk
-            : chunk instanceof Int16Array ? chunk
-            : chunk instanceof Uint8Array ? chunk
-            : new Float32Array((chunk as any).buffer)
-          for (let i = 0; i < arr.length; i++) {
-            if (Number.isFinite(arr[i])) allValues.push(arr[i])
-          }
-        }
-      }
+      // Sample values per channel. A chunk holds the full chunk shape (edge chunks
+      // are padded with the fill value), so the channel of element k comes from the
+      // chunk's position along "c" plus k's offset along that axis.
+      const nChannels = cAxis >= 0 ? shape[cAxis] : 1
+      const total = shape.reduce((a, b) => a * b, 1)
+      const step = Math.max(1, Math.floor(total / nChannels / SAMPLE_PER_CHANNEL))
+      const perChannel: number[][] = Array.from({ length: nChannels }, () => [])
+      const chunkC = cAxis >= 0 ? chunkShape[cAxis] : 1
+      const strideC = cAxis >= 0 ? chunkShape.slice(cAxis + 1).reduce((a, b) => a * b, 1) : 1
 
-      if (allValues.length === 0) return null
+      chunkResults.forEach((chunk, n) => {
+        if (!chunk) return
+        const arr = chunk as unknown as ArrayLike<number>
+        const c0 = cAxis >= 0 ? chunkIndices[n][cAxis] * chunkC : 0
+        for (let k = 0; k < arr.length; k += step) {
+          const v = arr[k]
+          if (!Number.isFinite(v)) continue
+          const c = cAxis >= 0 ? c0 + (Math.floor(k / strideC) % chunkC) : 0
+          if (c < nChannels) perChannel[c].push(v)
+        }
+      })
+
+      const allValues = perChannel.flat()
+      if (allValues.length === 0) return none
 
       allValues.sort((a, b) => a - b)
       const last = allValues.length - 1
@@ -310,11 +378,20 @@ export function useNeuroglancer() {
         p01 = allValues[0]
         p99 = allValues[last]
       }
-      return [p01, p99]
+      return { range: [p01, p99], background: perChannel.map(backgroundLevel) }
     } catch (e) {
-      console.warn('[useNeuroglancer] fetchDataRange failed:', e)
-      return null
+      console.warn('[useNeuroglancer] fetchLevelStats failed:', e)
+      return none
     }
+  }
+
+  /**
+   * Raise a display range's start to the channel's background level, when that
+   * sits inside the range. Never lowers the start.
+   */
+  function withBackground(range: [number, number], bg: number | null | undefined): [number, number] {
+    if (bg == null || !(bg > range[0] && bg < range[1])) return range
+    return [bg, range[1]]
   }
 
   /**
@@ -386,8 +463,8 @@ export function useNeuroglancer() {
       // Detect RGB: 3 channels with color model
       const isRGB = colorModel === 'color' && omeroChannels?.length === 3
 
-      // Compute actual data range from smallest pyramid level
-      const dataRange = await fetchDataRange(source, dtype, multiscales)
+      // Compute actual data range and per-channel background from the smallest pyramid level
+      const { range: dataRange, background } = await fetchLevelStats(source, dtype, multiscales)
 
       // Determine dtype for fallback range
       let dtypeRange: [number, number] = [0, 10000]
@@ -462,9 +539,12 @@ export function useNeuroglancer() {
           layers: omeroChannels.map((ch, i) => {
             const colorHex = ch.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length].replace('#', '')
             const rgb = hexToFloats(colorHex)
-            const range: [number, number] = ch.window
+            // The background level fixes assets whose window starts below it (made
+            // before the converter set it), e.g. a glowing mounting medium that
+            // otherwise shows as a wash of the channel color.
+            const range = withBackground(ch.window
               ? [ch.window.start ?? 0, ch.window.end ?? displayRange[1]]
-              : displayRange
+              : displayRange, background[i])
 
             return {
               type: 'image',
@@ -496,7 +576,7 @@ export function useNeuroglancer() {
 
       // No OMERO metadata — single grayscale layer
       return {
-        dataRange,
+        dataRange: dataRange ? withBackground(dataRange, background[0]) : null,
         isVolumetric,
         displayDimensions,
         dimensions,
@@ -505,7 +585,7 @@ export function useNeuroglancer() {
           source: `zarr://${source}`,
           name: 'data',
           shader: '#uicontrol invlerp normalized\nvoid main() { emitGrayscale(normalized()); }',
-          shaderControls: { normalized: { range: displayRange } },
+          shaderControls: { normalized: { range: withBackground(displayRange, background[0]) } },
           ...volumeDefaults,
         }],
       }
@@ -574,6 +654,8 @@ export function useNeuroglancer() {
     isLoading.value = true
     error.value = null
     brightness.value = 0
+    blackLevel.value = 0
+    hasDisplayRange.value = true
     baseRanges = new Map()
 
     try {
@@ -605,6 +687,7 @@ export function useNeuroglancer() {
       }
 
       v.state.restoreState(initialState)
+      hasDisplayRange.value = !layers.some((l: any) => typeof l.shader === 'string' && !l.shader.includes('invlerp'))
 
       // If we computed a data range from the actual zarr data, apply it
       // to each layer's invlerp control after restoreState
@@ -622,18 +705,22 @@ export function useNeuroglancer() {
   }
 
   /**
-   * Brighten or darken every layer. For invlerp layers (grayscale and colored
-   * channels) the top of the display range moves: brighter lowers it, so more of
-   * the data reaches full intensity; darker raises it, bringing back detail in
-   * saturated areas. The bottom of the range stays put. RGB layers are scaled by
-   * their "brightness" shader control instead.
+   * Apply the brightness and black level sliders to every layer, from each
+   * layer's opened range. For invlerp layers (grayscale and colored channels):
+   * - brightness moves the top of the range: brighter lowers it, so more of the
+   *   data reaches full intensity; darker raises it, bringing back detail in
+   *   saturated areas.
+   * - black level moves the bottom: up hides more background (it shows black),
+   *   down brings back faint values below the opened start.
+   * RGB layers have no range; brightness scales them through their
+   * "brightness" shader control, and black level does not apply.
    */
-  function setBrightness(stops: number) {
-    brightness.value = stops
+  function applyDisplayAdjustments() {
     const v = viewer.value
     const managedLayers = v?.layerManager?.managedLayers
     if (!managedLayers) return
-    const gain = Math.pow(2, stops)
+    const gain = Math.pow(2, brightness.value)
+    const black = blackLevel.value
 
     for (const ml of managedLayers) {
       const controls = ml.layer?.shaderControlState?.state
@@ -646,15 +733,40 @@ export function useNeuroglancer() {
           baseRanges.set(name, [Number(normalized.value.range[0]), Number(normalized.value.range[1])])
         }
         const [lo, hi] = baseRanges.get(name)!
-        let end = lo + (hi - lo) / gain
-        // Integer data: keep whole-number bounds, and never collapse the range
-        if (Number.isInteger(lo) && Number.isInteger(hi)) end = Math.max(lo + 1, Math.round(end))
-        normalized.value = { ...normalized.value, range: [lo, end] }
+        const span = hi - lo
+        let start = lo + black * span
+        let end = lo + span / gain
+        // Integer data: keep whole-number bounds
+        if (Number.isInteger(lo) && Number.isInteger(hi)) {
+          start = Math.round(start)
+          end = Math.round(end)
+        }
+        // Never collapse or invert the range
+        const minSpan = Number.isInteger(lo) && Number.isInteger(hi) ? 1 : span * 0.01 || 1e-6
+        if (end < start + minSpan) end = start + minSpan
+        normalized.value = { ...normalized.value, range: [start, end] }
       }
 
       const rgbBrightness = controls.get('brightness')?.trackable
       if (rgbBrightness) rgbBrightness.value = gain
     }
+  }
+
+  /**
+   * Brighten or darken every layer, in stops (see applyDisplayAdjustments).
+   */
+  function setBrightness(stops: number) {
+    brightness.value = stops
+    applyDisplayAdjustments()
+  }
+
+  /**
+   * Move every layer's black level, as a share of its opened range (see
+   * applyDisplayAdjustments). 0 = as opened.
+   */
+  function setBlackLevel(share: number) {
+    blackLevel.value = Math.min(BLACK_LEVEL_MAX, Math.max(BLACK_LEVEL_MIN, share))
+    applyDisplayAdjustments()
   }
 
   /**
@@ -732,6 +844,8 @@ export function useNeuroglancer() {
     channels,
     layout,
     brightness,
+    blackLevel,
+    hasDisplayRange,
 
     // Actions
     init,
@@ -740,6 +854,7 @@ export function useNeuroglancer() {
     setLayout,
     setPosition,
     setBrightness,
+    setBlackLevel,
     getState,
   }
 }

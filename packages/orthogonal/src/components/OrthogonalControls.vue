@@ -71,6 +71,32 @@
         />
       </div>
 
+      <!-- Black level -->
+      <div v-if="hasDisplayRange" class="ortho-controls__section">
+        <div class="ortho-controls__label-row">
+          <span class="ortho-controls__label">Black level</span>
+          <button
+            v-if="blackLevel !== 0"
+            class="ortho-controls__reset"
+            @click="$emit('set-black-level', 0)"
+            title="Back to the default black level"
+          >
+            Reset
+          </button>
+        </div>
+        <input
+          class="ortho-controls__slider"
+          type="range"
+          :min="BLACK_LEVEL_MIN"
+          :max="BLACK_LEVEL_MAX"
+          step="0.01"
+          :value="blackLevel"
+          @input="$emit('set-black-level', Number(($event.target as HTMLInputElement).value))"
+          @dblclick="$emit('set-black-level', 0)"
+          title="Drag right to hide more background, left to bring back faint signal (double-click to reset)"
+        />
+      </div>
+
       <!-- Position display -->
       <div class="ortho-controls__section">
         <div class="ortho-controls__label">Position</div>
@@ -110,19 +136,22 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { ChannelConfig, LayoutMode } from '../types'
-import { BRIGHTNESS_MAX_STOPS } from '../composables/useNeuroglancer'
+import { BRIGHTNESS_MAX_STOPS, BLACK_LEVEL_MIN, BLACK_LEVEL_MAX } from '../composables/useNeuroglancer'
 
 defineProps<{
   channels: ChannelConfig[]
   position: [number, number, number]
   layout: LayoutMode
   brightness: number
+  blackLevel: number
+  hasDisplayRange: boolean
 }>()
 
 defineEmits<{
   'toggle-channel': [index: number, visible: boolean]
   'set-layout': [mode: LayoutMode]
   'set-brightness': [stops: number]
+  'set-black-level': [share: number]
 }>()
 
 const collapsed = ref(false)
