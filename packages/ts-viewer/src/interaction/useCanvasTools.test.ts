@@ -332,6 +332,30 @@ describe('pan drag', () => {
         expect(tools.pointerMode.value).toBe('pan')
     })
 
+    it('selects the hovered annotation on a click', () => {
+        const { tools, annotationCanvas } = setup([], { activeTool: 'pan' })
+        annotationCanvas!.onMouseMove.mockReturnValue('annSelect')
+        tools.onMouseMove(mouseEvent(300, CANVAS_TOP + 40))
+
+        tools.onMouseDown(mouseEvent(300, CANVAS_TOP + 40))
+        tools.onMouseUp(mouseEvent(302, CANVAS_TOP + 41))
+
+        expect(annotationCanvas?.selectFocusedAnn).toHaveBeenCalledTimes(1)
+    })
+
+    it('pans without selecting when the drag starts on an annotation', () => {
+        const { tools, annotationCanvas, setStart } = setup([], { activeTool: 'pan' })
+        annotationCanvas!.onMouseMove.mockReturnValue('annSelect')
+        tools.onMouseMove(mouseEvent(300, CANVAS_TOP + 40))
+
+        tools.onMouseDown(mouseEvent(300, CANVAS_TOP + 40))
+        tools.onMouseMove(mouseEvent(400, CANVAS_TOP + 40))
+        tools.onMouseUp(mouseEvent(400, CANVAS_TOP + 40))
+
+        expect(setStart).toHaveBeenCalled()
+        expect(annotationCanvas?.selectFocusedAnn).not.toHaveBeenCalled()
+    })
+
     it('does nothing when a pan drag ends', () => {
         const { tools, ctx, repaint, addAnnotation } = setup([
             { id: 'covered', rowBaseline: 50, selected: false, visible: true }

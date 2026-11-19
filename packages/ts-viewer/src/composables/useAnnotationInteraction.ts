@@ -72,6 +72,7 @@ export function useAnnotationInteraction(focusedAnn: Ref<Annotation | null>, ren
                     return 'annSelect'
                 }
             case 'pointer':
+            case 'pan':
                 return 'annSelect'
             default:
                 return viewerActiveTool

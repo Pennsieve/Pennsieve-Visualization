@@ -170,17 +170,24 @@ describe('pointer mode for a position', () => {
         expect(interaction.determinePointerMode(105, 'annotate', narrow)).toBe('annResize-left')
     })
 
-    it('offers selection only while the pointer tool is active', () => {
+    it('offers selection while the pointer tool is active', () => {
         const { interaction } = setup([])
 
         expect(interaction.determinePointerMode(105, 'pointer', target)).toBe('annSelect')
         expect(interaction.determinePointerMode(295, 'pointer', target)).toBe('annSelect')
     })
 
+    it('offers selection while the pan tool is active', () => {
+        const { interaction } = setup([])
+
+        expect(interaction.determinePointerMode(105, 'pan', target)).toBe('annSelect')
+        expect(interaction.determinePointerMode(295, 'pan', target)).toBe('annSelect')
+    })
+
     it('returns an unknown tool name unchanged', () => {
         const { interaction } = setup([])
 
-        expect(interaction.determinePointerMode(150, 'pan', target)).toBe('pan')
+        expect(interaction.determinePointerMode(150, 'zoom', target)).toBe('zoom')
     })
 })
 
