@@ -125,7 +125,6 @@ import { storeToRefs } from 'pinia'
 import { createViewerStore, clearViewerStore } from "../../stores/tsviewer"
 import type { ActiveViewer, ViewerChannel } from "../../stores/tsviewer"
 import { useTsAnnotation } from '@/composables/useTsAnnotation'
-import { isBundleLayerId } from '@/composables/useBundleAnnotations'
 import { useGlobalMessageHandler } from '@/composables/useGlobalMessageHandler'
 import { createTransport } from '@/transport/createTransport'
 import type { TimeseriesTransport } from '@/transport/TimeseriesTransport'
@@ -588,12 +587,6 @@ const onCreateUpdateAnnotation = async (annotation: Partial<Annotation>) => {
   // Validate required fields
   if (!annotation.layer_id) {
     console.error('TSViewer: annotation.layer_id is missing!', annotation)
-    return
-  }
-
-  // Bundle annotations are read-only; there is nowhere to save them.
-  if (isBundleLayerId(annotation.layer_id)) {
-    annotationWindowOpen.value = false
     return
   }
 
