@@ -66,6 +66,13 @@ const DEFAULT_ANNOTATION_LABELS = ['Event', 'Artifact', 'Seizure', 'Mark', 'Stim
  */
 const MIN_ANNOTATION_DURATION_US = 1000
 
+/**
+ * Under the pan tool, a press on an annotation may be a click or the start of a pan.
+ * Movement up to this many CSS pixels counts as a click, which allows for hand drift;
+ * anything farther is a pan and selects nothing.
+ */
+const CLICK_SLOP_PX = 4
+
 export const useCanvasTools = (options: CanvasToolsOptions) => {
     const { viewerChannels, viewerAnnotations, viewerActiveTool, viewerSelectedChannels } = storeToRefs(options.store)
 
@@ -265,10 +272,15 @@ export const useCanvasTools = (options: CanvasToolsOptions) => {
                 break
             }
 
-            case 'annSelect':
+            case 'annSelect': {
+                const dragDistance = Math.hypot(e.clientX - startDragCoord.x, e.clientY - startDragCoord.y)
+                if (viewerActiveTool.value === 'pan' && dragDistance > CLICK_SLOP_PX) {
+                    break
+                }
                 clearInteractionCanvas()
                 options.annotationCanvas()?.selectFocusedAnn()
                 break
+            }
 
             case 'annotate': {
                 // Ensure we have a selected layer before creating annotation
