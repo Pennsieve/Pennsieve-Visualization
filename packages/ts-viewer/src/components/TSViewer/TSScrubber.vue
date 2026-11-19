@@ -38,6 +38,8 @@ import type { ActiveViewer, ViewerChannel } from '../../stores/tsviewer'
 import { useToken } from "@/composables/useToken"
 import { useHandleXhrError, useSendXhr } from "@/mixins/request/request_composable"
 import { useViewerTransport } from "@/state/viewerTransportContext"
+import { countBundleLayer, isBundleLayerId } from "@/composables/useBundleAnnotations"
+import type { AnnotationCountBucket } from "@/composables/useBundleAnnotations"
 
 /** Viewer constants TSViewer passes whole. The transport owns the segment-span walk. */
 interface ScrubberConstants {
@@ -547,42 +549,71 @@ const getAnnotations = async () => {
     return
   }
 
-  if (!viewerStore.config?.apiUrl) {
-    console.warn('TSScrubber: Cannot get annotations - no API URL configured')
-    annotations.value = []
-    return
-  }
+  const layerIds = (viewerStore.viewerAnnotations ?? []).map(layer => layer.id)
+  const apiLayerIds = layerIds.filter(layerId => !isBundleLayerId(layerId))
+  const bundleLayerIds = layerIds.filter(isBundleLayerId)
 
-  if (!viewerStore.viewerAnnotations || viewerStore.viewerAnnotations.length === 0) {
+  if (apiLayerIds.length === 0 && bundleLayerIds.length === 0) {
     annotations.value = []
     render()
     return
   }
 
+  const [apiCounts, bundleCounts] = await Promise.all([
+    getApiAnnotationCounts(currentViewerId, apiLayerIds),
+    getBundleAnnotationCounts(bundleLayerIds)
+  ])
+
+  // Double-check that we're still on the same viewer (async operations can be overtaken)
+  if (props.activeViewer?.content!.id === currentViewerId) {
+    annotations.value = { ...apiCounts, ...bundleCounts }
+    render()
+  }
+}
+
+const getApiAnnotationCounts = async (
+  viewerId: string,
+  apiLayerIds: Array<number | string | undefined>
+): Promise<Record<string, AnnotationCountBucket[]>> => {
+  if (apiLayerIds.length === 0) {
+    return {}
+  }
+
+  if (!viewerStore.config?.apiUrl) {
+    console.warn('TSScrubber: Cannot get annotations - no API URL configured')
+    return {}
+  }
+
   try {
     const token = await useToken()
-    const layerIds = viewerStore.viewerAnnotations.map(obj => obj.id)
-    const endTime = props.ts_end
-    const baseUrl = `${viewerStore.config.apiUrl}/timeseries/${currentViewerId}/annotations/window`
+    const baseUrl = `${viewerStore.config.apiUrl}/timeseries/${viewerId}/annotations/window`
     let url = baseUrl + `?api_key=${token}&aggregation=count&start=${props.ts_start}&end=${props.ts_end}&period=${period.value}&mergePeriods=true`
 
-    for (let i in layerIds) {
-      url = url + `&layerIds=${layerIds[i as unknown as number]}`
+    for (const layerId of apiLayerIds) {
+      url = url + `&layerIds=${layerId}`
     }
 
-    const resp = await useSendXhr(url)
-
-    // Double-check that we're still on the same viewer (async operations can be overtaken)
-    if (props.activeViewer?.content!.id === currentViewerId) {
-      annotations.value = resp
-      render()
-    }
+    return await useSendXhr(url) as Record<string, AnnotationCountBucket[]>
   } catch (err) {
     console.error('TSScrubber: Error fetching annotations:', err)
-    annotations.value = []
     useHandleXhrError(err)
-    render() // Still render even if annotations failed
+    return {}
   }
+}
+
+const getBundleAnnotationCounts = async (bundleLayerIds: string[]) => {
+  const countsByLayer: Record<string, AnnotationCountBucket[]> = {}
+  await Promise.all(bundleLayerIds.map(async (layerId) => {
+    try {
+      const layerCounts = await countBundleLayer(viewerStore.$id, layerId, props.ts_start!, props.ts_end!, period.value)
+      if (layerCounts) {
+        countsByLayer[layerId] = layerCounts
+      }
+    } catch (err) {
+      console.warn('TSScrubber: Could not count annotations from the bundle:', err)
+    }
+  }))
+  return countsByLayer
 }
 
 // Render Functions
@@ -685,7 +716,7 @@ const renderTimelimeLine = () => {
     if (annotationLayers.hasOwnProperty(annotation)) {
       // find color
       for (let i = 0; i < annPanelLayers.length; i++) {
-        if (annPanelLayers[i].id === parseInt(annotation)) {
+        if (String(annPanelLayers[i].id) === annotation) {
           annotationIndex = i
           color = annPanelLayers[i].color!
           break

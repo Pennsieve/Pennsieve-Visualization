@@ -179,6 +179,87 @@ export async function queryBundleLayer(
     return null
 }
 
+export interface AnnotationCountBucket {
+    start: number
+    end: number
+    value: number
+}
+
+export function totalsToCountBuckets(
+    totals: ArrayLike<number>,
+    firstStartUs: number,
+    periodUs: number
+): AnnotationCountBucket[] {
+    const buckets: AnnotationCountBucket[] = []
+    for (let i = 0; i < totals.length; i++) {
+        if (totals[i] === 0) {
+            continue
+        }
+        const start = firstStartUs + i * periodUs
+        const previous = buckets[buckets.length - 1]
+        if (previous && previous.end === start) {
+            previous.end = start + periodUs
+            previous.value += totals[i]
+        } else {
+            buckets.push({ start, end: start + periodUs, value: totals[i] })
+        }
+    }
+    return buckets
+}
+
+/**
+ * Why it counts times rather than reading the format's count levels: a TS-Zarr event
+ * channel may store precomputed per-bin counts (`countLevels > 0`, read with the
+ * reader's `eventCounts`), but those exist so dense channels can be drawn without
+ * reading every event, and dense channels are spike channels, which are rows, not
+ * layers. Annotation channels hold tens to thousands of events, and the bundles seen
+ * so far (EDF+ conversions) store no count level for them, so reading the times is
+ * cheap and is the only path that runs. If a bundle ever carries an annotation channel
+ * too dense for this, use `eventCounts` when `channel.countLevels > 0`, adding it to
+ * AnchoredClient with the same origin shift as `queryEvents`.
+ */
+export async function countBundleLayer(
+    storeId: string,
+    layerId: string,
+    startUs: number,
+    endUs: number,
+    periodUs: number
+): Promise<AnnotationCountBucket[] | null> {
+    const entry = getClient(storeId)
+    if (!entry) {
+        return null
+    }
+
+    const channelId = eventChannelId(layerId)
+    const channel = (await entry.client.channelInfo())
+        .find((c): c is EventChannelInfo => c.kind === 'event' && c.id === channelId)
+    if (!channel) {
+        return null
+    }
+
+    const bucketCount = Math.max(1, Math.ceil((endUs - startUs) / periodUs))
+    const bucketTotals = new Array<number>(bucketCount).fill(0)
+    const bucketAt = (timeUs: number) =>
+        Math.min(bucketCount - 1, Math.max(0, Math.floor((timeUs - startUs) / periodUs)))
+
+    for await (const window of entry.client.queryEvents({
+        channels: [channelId],
+        startUs,
+        endUs,
+        columns: [],
+        priority: 'background'
+    })) {
+        for (let i = 0; i < window.times.length; i++) {
+            const onsetUs = window.times[i]
+            const lastBucket = bucketAt(onsetUs + (window.durations?.[i] ?? 0))
+            for (let bucket = bucketAt(onsetUs); bucket <= lastBucket; bucket++) {
+                bucketTotals[bucket]++
+            }
+        }
+    }
+    return totalsToCountBuckets(bucketTotals, startUs, periodUs)
+}
+
 /**
  * The description of one bundle annotation.
  *
