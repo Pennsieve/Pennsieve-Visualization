@@ -111,6 +111,7 @@ import { createViewerStore } from "../../stores/tsviewer"
 import type { ActiveViewer } from "../../stores/tsviewer"
 import type { RendererConstants } from '@/composables/useCanvasRenderer'
 import type { Annotation, AnnotationLayer } from '@/utils/annotationUtils'
+import { plotHeightFor } from '@/utils/plotGeometry'
 
 // Import TimeseriesAnnotationCanvas properly
 const TimeseriesAnnotationCanvas = defineAsyncComponent(() =>
@@ -204,7 +205,7 @@ const nrVisibleChannels = computed(() => {
   return viewerChannels.value.filter(channel => channel.visible).length
 })
 
-const pHeight = computed(() => props.cHeight - 20)
+const pHeight = computed(() => plotHeightFor(props.cHeight))
 
 const cursorWidth = computed(() => props.cWidth + props.constants['CURSOROFFSET'])
 

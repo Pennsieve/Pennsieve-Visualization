@@ -18,6 +18,7 @@ import { useAnnotationLayers } from '@/composables/useAnnotationLayers'
 import { canvasScaler } from '@/utils/annotationUtils'
 import type { Annotation } from '@/utils/annotationUtils'
 import type { ActiveViewer } from '@/stores/tsviewer'
+import { plotHeightFor } from '@/utils/plotGeometry'
 
 interface CanvasConstants {
   ANNOTATIONLABELHEIGHT: number
@@ -98,7 +99,7 @@ type LayersViewer = Parameters<typeof loadLayers>[0]
 type NewLayer = Parameters<typeof createAnnotationLayer>[0]
 
 // Computed properties
-const pHeight = computed(() => props.cHeight! - 20)
+const pHeight = computed(() => plotHeightFor(props.cHeight!))
 
 const canvasStyle = computed(() => ({
   width: props.cWidth + 'px',

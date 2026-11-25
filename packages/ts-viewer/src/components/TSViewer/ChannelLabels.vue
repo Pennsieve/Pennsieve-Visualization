@@ -33,6 +33,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { ViewerChannel } from '../../stores/tsviewer'
+import { plotHeightFor } from '../../utils/plotGeometry'
 
 /** Keys of the viewer constants object the label column reads. */
 interface ChannelLabelsConstants {
@@ -69,7 +70,7 @@ const MIN_LABEL_ROW_HEIGHT = 14
  * gives a row, so a name sits on its own trace. Not finite until the plot area
  * has been measured.
  */
-const rowHeight = computed(() => props.cHeight / props.channels.length)
+const rowHeight = computed(() => plotHeightFor(props.cHeight) / props.channels.length)
 
 const rowsAreMeasured = computed(() => Number.isFinite(rowHeight.value) && rowHeight.value > 0)
 
