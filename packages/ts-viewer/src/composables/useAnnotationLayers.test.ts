@@ -5,9 +5,19 @@ import type { ActiveViewerContent, ViewerStore } from '@/stores/tsviewer'
 import type { ViewerMessage } from '@/events/emitter'
 
 // The viewer store pulls in the token provider and the streaming client registry on import;
-// neither exists in the node project and neither is exercised here.
+// neither exists in the node project. The token and the bundle's layers are set per test.
+const mocked = vi.hoisted(() => ({
+    token: 'a.jwt.token' as string | null,
+    bundleLayers: [] as AnnotationLayer[]
+}))
+
 vi.mock('@/composables/useToken', () => ({
-    useToken: async () => 'a.jwt.token'
+    useToken: async () => mocked.token
+}))
+
+vi.mock('@/composables/useBundleAnnotations', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@/composables/useBundleAnnotations')>(),
+    loadBundleLayers: async () => mocked.bundleLayers
 }))
 
 vi.mock('@/composables/useChannelDataRequest', () => ({
@@ -91,6 +101,8 @@ beforeEach(() => {
     toasts = []
     ajaxErrors = []
     emit.mockClear()
+    mocked.token = 'a.jwt.token'
+    mocked.bundleLayers = []
     respond = () => jsonResponse({})
     unsubscribes = [
         unscopedViewerEmitter.on('toast', message => toasts.push(message)),
@@ -257,6 +269,34 @@ describe('loadLayers', () => {
         expect(store.viewerAnnotations).toEqual([])
         expect(ajaxErrors).toHaveLength(1)
         expect(ajaxErrors[0].detail?.msg).toBe('Session expired. Sign in again to continue.')
+    })
+
+    it('asks the API nothing and raises no message without a token', async () => {
+        mocked.token = null
+        const store = freshStore()
+        const { loadLayers } = useAnnotationLayers(store)
+
+        await expect(loadLayers(activeViewer, emit)).resolves.toBeNull()
+
+        expect(requests).toHaveLength(0)
+        expect(store.viewerAnnotations).toEqual([])
+        expect(ajaxErrors).toEqual([])
+        expect(toasts).toEqual([])
+        expect(emit).not.toHaveBeenCalled()
+    })
+
+    it("shows the bundle's own layers without a token", async () => {
+        mocked.token = null
+        mocked.bundleLayers = [{ ...layer(1), id: 'bundle:events', selected: false }]
+        const store = freshStore()
+        const { loadLayers } = useAnnotationLayers(store)
+
+        await expect(loadLayers(activeViewer, emit)).resolves.toBeNull()
+
+        expect(requests).toHaveLength(0)
+        expect(store.viewerAnnotations.map(l => l.id)).toEqual(['bundle:events'])
+        expect(ajaxErrors).toEqual([])
+        expect(emit.mock.calls).toEqual([['annLayersInitialized']])
     })
 })
 
