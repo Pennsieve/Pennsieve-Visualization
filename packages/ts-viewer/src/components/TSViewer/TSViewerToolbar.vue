@@ -92,10 +92,15 @@
       </el-tooltip>
     </div>
     <div id="right-controls">
-      <IconStopwatch
-        class="playback-speed-icon"
-        :height="20"
-        :width="22"/>
+      <el-tooltip
+        placement="top-end"
+        content="Playback speed: how fast Automatic Forward moves through the recording">
+        <span class="playback-speed-icon">
+          <IconStopwatch
+            :height="20"
+            :width="22"/>
+        </span>
+      </el-tooltip>
 
       <el-select
         v-model="selectedPlaySpeed"
@@ -351,6 +356,7 @@ onBeforeUnmount(() => {
 }
 
 .playback-speed-icon {
+  display: inline-flex;
   color: $gray_4;
 }
 
