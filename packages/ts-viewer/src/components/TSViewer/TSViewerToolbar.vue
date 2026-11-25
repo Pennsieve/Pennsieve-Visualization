@@ -4,7 +4,6 @@
 
       <el-input-number
         v-model="durationInSeconds"
-        v-if="showTimeZoom"
         :precision="durationPrecision"
         :step="durationStep"
         :min="0.01"
@@ -51,19 +50,20 @@
           class="btn-icon"
           @click="previousAnnotation()">
           <IconNextAnnotationLeftFacing
-            :height="12"
-            :width="18"/>
+            :height="18"
+            :width="24"/>
         </button>
       </el-tooltip>
       <el-tooltip
         placement="top-end"
         content="Automatic Forward">
         <button
-          class="btn-icon"
+          class="btn-icon btn-play"
+          :class="{ 'is-paused': !isPlaying }"
           name="playback-toggle"
           @click="togglePlayback()">
-          <component :is="iconPlay" :height="12"
-                     :width="18"/>
+          <component :is="iconPlay" :height="14"
+                     :width="12"/>
         </button>
       </el-tooltip>
       <el-tooltip
@@ -74,8 +74,8 @@
           @click="nextAnnotation()">
           <IconNextAnnotationRightFacing
             name="next-annotation-right-facing"
-            :height="12"
-            :width="18"/>
+            :height="18"
+            :width="21"/>
         </button>
       </el-tooltip>
       <el-tooltip
@@ -87,29 +87,18 @@
           <IconNextPage
             name="icon-next-page"
             :height="12"
-            :width="18"/>
+            :width="12"/>
         </button>
       </el-tooltip>
     </div>
     <div id="right-controls">
-
-      <el-tooltip
-        placement="top-end"
-        content="Toggle Play Back Speed Controls">
-        <button
-          class="btn-icon"
-          @click="togglePlaybackSpeed()">
-          <IconStopwatch
-            :height="20"
-            :width="22"/>
-        </button>
-      </el-tooltip>
+      <IconStopwatch
+        class="playback-speed-icon"
+        :height="20"
+        :width="22"/>
 
       <el-select
         v-model="selectedPlaySpeed"
-        v-if="showPlaybackSpeed"
-        placeholder="Select"
-        size="small"
         class="playSelect">
         <el-option
           v-for="item in playSpeedOptions"
@@ -119,15 +108,11 @@
         </el-option>
       </el-select>
     </div>
-    <div>
-
-    </div>
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import IconPreviousPage from "../icons/IconPreviousPage.vue"
 import IconNextAnnotationLeftFacing from "../icons/IconNextAnnotationLeftFacing.vue"
 import IconNextAnnotationRightFacing from "@/components/icons/IconNextAnnotationRightFacing.vue"
@@ -171,10 +156,8 @@ const emit = defineEmits<{
 
 
 // Reactive data
-const showTimeZoom = ref(true)
-const showPlaybackSpeed = ref(true)
 const isPlaying = ref(false)
-const selectedPlaySpeed = ref<number | null>(null)
+const selectedPlaySpeed = ref(1)
 const intervalTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
 const playSpeedOptions = [
@@ -229,14 +212,6 @@ const durationStep = computed(() => durationStepFor(durationInSeconds.value))
 const durationPrecision = computed(() => durationPrecisionFor(durationInSeconds.value))
 
 
-const toggleTimeZoom = () => {
-  showTimeZoom.value = !showTimeZoom.value
-}
-
-const togglePlaybackSpeed = () => {
-  showPlaybackSpeed.value = !showPlaybackSpeed.value
-}
-
 const togglePlayback = () => {
   if (isPlaying.value === false) {
     startPlay()
@@ -251,14 +226,6 @@ const pageBack = () => {
 
 const pageForward = () => {
   emit('pageForward')
-}
-
-const incrementZoom = () => {
-  emit('incrementZoom')
-}
-
-const decrementZoom = () => {
-  emit('decrementZoom')
 }
 
 const nextAnnotation = () => {
@@ -303,11 +270,6 @@ const stopPlay = () => {
   }
 }
 
-// Lifecycle
-onMounted(() => {
-  selectedPlaySpeed.value = 1
-})
-
 // A timer outliving the toolbar keeps moving the viewport of a viewer that is gone.
 onBeforeUnmount(() => {
   stopPlay()
@@ -318,55 +280,112 @@ onBeforeUnmount(() => {
 @import '../../assets/tsviewerVariables.scss';
 
 .el-input-number {
-  width: 180px;
-  margin: 0 8px
+  width: 200px;
 }
 
+// Equal side columns keep the transport buttons centred whatever the side widths are.
 .timeseries-viewer-toolbar {
   border-top: 1px solid #DADADA;
   background: #F7F7F7;
-  display: flex;
-  padding: 8px 0;
-  width: 100%;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  padding: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#left-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+}
+
+#center-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .btn-icon {
-  color: $gray_4;
-  margin-left: 8px;
-  margin-right: 2px;
-  &:last-child {
-    margin-right: 8px;
-  }
-  &.selected, &:hover, &[focused] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: $gray_2;
+  color: $gray_5;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  &.selected, &:hover {
+    background: $purple_tint;
     color: $app-primary-color;
   }
+  &:focus-visible {
+    outline: 2px solid $purple_1;
+    outline-offset: 2px;
+  }
   &[disabled] {
-    color: $gray_2;
+    background: $gray_1;
+    color: $gray_3;
+    cursor: not-allowed;
   }
 }
 
+// Play is the main action, so it is filled.
+.btn-play {
+  background: $app-primary-color;
+  color: $white;
+  &:hover {
+    background: $purple_2;
+    color: $white;
+  }
+  // A triangle centred by its box looks left-heavy; nudge it to the optical centre.
+  &.is-paused svg {
+    margin-left: 2px;
+  }
+}
+
+.playback-speed-icon {
+  color: $gray_4;
+}
+
 .playSelect {
-  width: 70px;
-  margin-right: 8px;
+  width: 80px;
 }
 
 #right-controls {
   display: flex;
   align-items: center;
+  gap: 8px;
+  justify-self: end;
   height: 42px;
 }
 </style>
 
 <style lang="scss">
-.playSelect .el-input__inner {
-  padding: 8px 4px;
+// Match the 40px height the host app gives the number inputs.
+.playSelect .el-select__wrapper {
+  min-height: 40px;
 }
 
 .timeseries-viewer-toolbar .el-input-number.is-controls-right {
+  // Host apps can make the input taller than Element Plus assumes, so split the
+  // height instead of a fixed size that leaves a gap between the arrows.
   .el-input-number__decrease, .el-input-number__increase {
-    height: 16px; // since el-input__inner has height of 40px from _el-input.scss
+    height: calc(50% - 1px);
+    line-height: normal;
+  }
+  .el-input__wrapper {
+    padding-left: 12px;
+  }
+  // Centred text clips long values like "1636.52" against the suffix.
+  .el-input__inner {
+    text-align: left;
   }
 }
 </style>
