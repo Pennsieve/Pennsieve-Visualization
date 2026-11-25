@@ -262,10 +262,17 @@ export function useAnnotationLayers(storeInstance: ViewerStore | null = null) {
             emit('annLayersInitialized')
         }
 
-        // 2. Layers from the API.
+        // 2. Layers from the API, which answers only a signed-in user. Without a token (an
+        // anonymous visitor to a public bundle) the request could only fail and raise a
+        // session-expired message, so the bundle's own layers are all there is to show.
+        const token = await useToken()
+        if (!token) {
+            showBundleLayers()
+            return null
+        }
+
         let response: LayersResponse
         try {
-            const token = await useToken()
             const url = `${viewerStore.config.apiUrl}/timeseries/${activeViewer.content.id}/layers?api_key=${token}`
             response = await useSendXhr(url) as LayersResponse
         } catch (error) {

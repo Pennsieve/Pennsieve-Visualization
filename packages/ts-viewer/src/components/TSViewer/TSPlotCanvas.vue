@@ -47,6 +47,7 @@ import type { VirtualChannel } from '@/composables/useChannelProcessing'
 import type { ChannelDetail } from '@/composables/streaming/channelDetails'
 import type { LegacyFilterMessage } from '@/composables/streaming/filters'
 import { createThrottle } from '@/utils/throttle'
+import { plotHeightFor } from '@/utils/plotGeometry'
 
 /** Keys of the viewer constants object this component reads or forwards. */
 interface PlotCanvasConstants extends RendererConstants {
@@ -214,7 +215,7 @@ const clearStaleBlocks = () => {
 }
 
 // Computed properties (from original) - moved after composable initialization
-const pHeight = computed(() => props.cHeight - 20)
+const pHeight = computed(() => plotHeightFor(props.cHeight))
 
 // The backing store matches the CSS box the canvas is drawn into. A backing height of
 // cHeight against a CSS height of pHeight makes the compositor rescale every frame by a
